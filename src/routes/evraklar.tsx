@@ -1,28 +1,36 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { FileText } from "lucide-react";
-import { EmptyState } from "@/components/EmptyState";
+import { ManagementPage } from "@/components/management/ManagementPage";
+import { caseOptions, clientOptions, documents, findCase, findClient } from "@/lib/erp-data";
+import { documentFormFields } from "@/lib/management-form-config";
 
-export const Route = createFileRoute("/evraklar")({
-  head: () => ({
-    meta: [
-      { title: "Evraklar — Lex Yönetim" },
-      { name: "description", content: "Evraklar bölümü — Lex Yönetim hukuk büro yönetim paneli." },
-      { property: "og:title", content: "Evraklar — Lex Yönetim" },
-      { property: "og:description", content: "Evraklar bölümü yakında kullanıma açılacak." },
-    ],
-  }),
-  component: Page,
-});
-
+export const Route = createFileRoute("/evraklar")({ component: Page });
 function Page() {
   return (
-    <div className="mx-auto max-w-3xl py-10">
-      <EmptyState
-        icon={FileText}
-        title="Evraklar yakında"
-        description="Bu bölüm hazırlanıyor. Kısa süre içinde büronuza özel Evraklar deneyimi burada olacak."
-        actionLabel="Dashboard'a dön"
-      />
-    </div>
+    <ManagementPage
+      title="Evrak Merkezi"
+      description="PDF, görsel ve ofis belgelerini güvenle saklayın; dosya ve müvekkillerle ilişkilendirin."
+      singular="evrak"
+      icon={FileText}
+      accent="blue"
+      filterOptions={["Tümü", "İmzalandı", "İnceleniyor", "Taslak"]}
+      formFields={documentFormFields}
+      allowRowExport
+      rowExportLabel="Dilekçeyi dışa aktar"
+      stats={[
+        { label: "Toplam evrak", value: "1.248", note: "+36 bu ay" },
+        { label: "Bu hafta yüklenen", value: "18", note: "5 dosyada" },
+        { label: "İnceleme bekleyen", value: "7", note: "Öncelikli" },
+      ]}
+      rows={documents.map((document) => {
+        const item = findCase(document.caseId);
+        return {
+          title: document.name,
+          subtitle: `${document.type} • ${document.size} • ${item.no}`,
+          meta: `${findClient(item.clientId).name} • ${document.date}`,
+          status: document.status,
+        };
+      })}
+    />
   );
 }

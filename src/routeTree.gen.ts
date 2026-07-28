@@ -9,55 +9,34 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as TahsilatlarRouteImport } from './routes/tahsilatlar'
-import { Route as RaporlarRouteImport } from './routes/raporlar'
-import { Route as MuvekkillerRouteImport } from './routes/muvekkiller'
-import { Route as MasraflarRouteImport } from './routes/masraflar'
-import { Route as HatirlatmalarRouteImport } from './routes/hatirlatmalar'
-import { Route as EvraklarRouteImport } from './routes/evraklar'
-import { Route as DosyalarRouteImport } from './routes/dosyalar'
-import { Route as BildirimlerRouteImport } from './routes/bildirimler'
-import { Route as AyarlarRouteImport } from './routes/ayarlar'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AktiviteRouteImport } from './routes/aktivite'
+import { Route as AramaRouteImport } from './routes/arama'
+import { Route as AyarlarRouteImport } from './routes/ayarlar'
+import { Route as BildirimlerRouteImport } from './routes/bildirimler'
+import { Route as CariHesapRouteImport } from './routes/cari-hesap'
+import { Route as DosyalarRouteImport } from './routes/dosyalar'
+import { Route as EvraklarRouteImport } from './routes/evraklar'
+import { Route as GirisRouteImport } from './routes/giris'
+import { Route as HatirlatmalarRouteImport } from './routes/hatirlatmalar'
+import { Route as MasraflarRouteImport } from './routes/masraflar'
+import { Route as MuvekkillerRouteImport } from './routes/muvekkiller'
+import { Route as RaporlarRouteImport } from './routes/raporlar'
+import { Route as TahsilatlarRouteImport } from './routes/tahsilatlar'
 
-const TahsilatlarRoute = TahsilatlarRouteImport.update({
-  id: '/tahsilatlar',
-  path: '/tahsilatlar',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const RaporlarRoute = RaporlarRouteImport.update({
-  id: '/raporlar',
-  path: '/raporlar',
+const AktiviteRoute = AktiviteRouteImport.update({
+  id: '/aktivite',
+  path: '/aktivite',
   getParentRoute: () => rootRouteImport,
 } as any)
-const MuvekkillerRoute = MuvekkillerRouteImport.update({
-  id: '/muvekkiller',
-  path: '/muvekkiller',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const MasraflarRoute = MasraflarRouteImport.update({
-  id: '/masraflar',
-  path: '/masraflar',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const HatirlatmalarRoute = HatirlatmalarRouteImport.update({
-  id: '/hatirlatmalar',
-  path: '/hatirlatmalar',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const EvraklarRoute = EvraklarRouteImport.update({
-  id: '/evraklar',
-  path: '/evraklar',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DosyalarRoute = DosyalarRouteImport.update({
-  id: '/dosyalar',
-  path: '/dosyalar',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const BildirimlerRoute = BildirimlerRouteImport.update({
-  id: '/bildirimler',
-  path: '/bildirimler',
+const AramaRoute = AramaRouteImport.update({
+  id: '/arama',
+  path: '/arama',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AyarlarRoute = AyarlarRouteImport.update({
@@ -65,18 +44,67 @@ const AyarlarRoute = AyarlarRouteImport.update({
   path: '/ayarlar',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const BildirimlerRoute = BildirimlerRouteImport.update({
+  id: '/bildirimler',
+  path: '/bildirimler',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CariHesapRoute = CariHesapRouteImport.update({
+  id: '/cari-hesap',
+  path: '/cari-hesap',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DosyalarRoute = DosyalarRouteImport.update({
+  id: '/dosyalar',
+  path: '/dosyalar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EvraklarRoute = EvraklarRouteImport.update({
+  id: '/evraklar',
+  path: '/evraklar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GirisRoute = GirisRouteImport.update({
+  id: '/giris',
+  path: '/giris',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HatirlatmalarRoute = HatirlatmalarRouteImport.update({
+  id: '/hatirlatmalar',
+  path: '/hatirlatmalar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MasraflarRoute = MasraflarRouteImport.update({
+  id: '/masraflar',
+  path: '/masraflar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MuvekkillerRoute = MuvekkillerRouteImport.update({
+  id: '/muvekkiller',
+  path: '/muvekkiller',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RaporlarRoute = RaporlarRouteImport.update({
+  id: '/raporlar',
+  path: '/raporlar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TahsilatlarRoute = TahsilatlarRouteImport.update({
+  id: '/tahsilatlar',
+  path: '/tahsilatlar',
   getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/aktivite': typeof AktiviteRoute
+  '/arama': typeof AramaRoute
   '/ayarlar': typeof AyarlarRoute
   '/bildirimler': typeof BildirimlerRoute
+  '/cari-hesap': typeof CariHesapRoute
   '/dosyalar': typeof DosyalarRoute
   '/evraklar': typeof EvraklarRoute
+  '/giris': typeof GirisRoute
   '/hatirlatmalar': typeof HatirlatmalarRoute
   '/masraflar': typeof MasraflarRoute
   '/muvekkiller': typeof MuvekkillerRoute
@@ -85,10 +113,14 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/aktivite': typeof AktiviteRoute
+  '/arama': typeof AramaRoute
   '/ayarlar': typeof AyarlarRoute
   '/bildirimler': typeof BildirimlerRoute
+  '/cari-hesap': typeof CariHesapRoute
   '/dosyalar': typeof DosyalarRoute
   '/evraklar': typeof EvraklarRoute
+  '/giris': typeof GirisRoute
   '/hatirlatmalar': typeof HatirlatmalarRoute
   '/masraflar': typeof MasraflarRoute
   '/muvekkiller': typeof MuvekkillerRoute
@@ -98,10 +130,14 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/aktivite': typeof AktiviteRoute
+  '/arama': typeof AramaRoute
   '/ayarlar': typeof AyarlarRoute
   '/bildirimler': typeof BildirimlerRoute
+  '/cari-hesap': typeof CariHesapRoute
   '/dosyalar': typeof DosyalarRoute
   '/evraklar': typeof EvraklarRoute
+  '/giris': typeof GirisRoute
   '/hatirlatmalar': typeof HatirlatmalarRoute
   '/masraflar': typeof MasraflarRoute
   '/muvekkiller': typeof MuvekkillerRoute
@@ -112,10 +148,14 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/aktivite'
+    | '/arama'
     | '/ayarlar'
     | '/bildirimler'
+    | '/cari-hesap'
     | '/dosyalar'
     | '/evraklar'
+    | '/giris'
     | '/hatirlatmalar'
     | '/masraflar'
     | '/muvekkiller'
@@ -124,10 +164,14 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/aktivite'
+    | '/arama'
     | '/ayarlar'
     | '/bildirimler'
+    | '/cari-hesap'
     | '/dosyalar'
     | '/evraklar'
+    | '/giris'
     | '/hatirlatmalar'
     | '/masraflar'
     | '/muvekkiller'
@@ -136,10 +180,14 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/aktivite'
+    | '/arama'
     | '/ayarlar'
     | '/bildirimler'
+    | '/cari-hesap'
     | '/dosyalar'
     | '/evraklar'
+    | '/giris'
     | '/hatirlatmalar'
     | '/masraflar'
     | '/muvekkiller'
@@ -149,10 +197,14 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AktiviteRoute: typeof AktiviteRoute
+  AramaRoute: typeof AramaRoute
   AyarlarRoute: typeof AyarlarRoute
   BildirimlerRoute: typeof BildirimlerRoute
+  CariHesapRoute: typeof CariHesapRoute
   DosyalarRoute: typeof DosyalarRoute
   EvraklarRoute: typeof EvraklarRoute
+  GirisRoute: typeof GirisRoute
   HatirlatmalarRoute: typeof HatirlatmalarRoute
   MasraflarRoute: typeof MasraflarRoute
   MuvekkillerRoute: typeof MuvekkillerRoute
@@ -162,60 +214,25 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/tahsilatlar': {
-      id: '/tahsilatlar'
-      path: '/tahsilatlar'
-      fullPath: '/tahsilatlar'
-      preLoaderRoute: typeof TahsilatlarRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/raporlar': {
-      id: '/raporlar'
-      path: '/raporlar'
-      fullPath: '/raporlar'
-      preLoaderRoute: typeof RaporlarRouteImport
+    '/aktivite': {
+      id: '/aktivite'
+      path: '/aktivite'
+      fullPath: '/aktivite'
+      preLoaderRoute: typeof AktiviteRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/muvekkiller': {
-      id: '/muvekkiller'
-      path: '/muvekkiller'
-      fullPath: '/muvekkiller'
-      preLoaderRoute: typeof MuvekkillerRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/masraflar': {
-      id: '/masraflar'
-      path: '/masraflar'
-      fullPath: '/masraflar'
-      preLoaderRoute: typeof MasraflarRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/hatirlatmalar': {
-      id: '/hatirlatmalar'
-      path: '/hatirlatmalar'
-      fullPath: '/hatirlatmalar'
-      preLoaderRoute: typeof HatirlatmalarRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/evraklar': {
-      id: '/evraklar'
-      path: '/evraklar'
-      fullPath: '/evraklar'
-      preLoaderRoute: typeof EvraklarRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/dosyalar': {
-      id: '/dosyalar'
-      path: '/dosyalar'
-      fullPath: '/dosyalar'
-      preLoaderRoute: typeof DosyalarRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/bildirimler': {
-      id: '/bildirimler'
-      path: '/bildirimler'
-      fullPath: '/bildirimler'
-      preLoaderRoute: typeof BildirimlerRouteImport
+    '/arama': {
+      id: '/arama'
+      path: '/arama'
+      fullPath: '/arama'
+      preLoaderRoute: typeof AramaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/ayarlar': {
@@ -225,11 +242,74 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AyarlarRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/bildirimler': {
+      id: '/bildirimler'
+      path: '/bildirimler'
+      fullPath: '/bildirimler'
+      preLoaderRoute: typeof BildirimlerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cari-hesap': {
+      id: '/cari-hesap'
+      path: '/cari-hesap'
+      fullPath: '/cari-hesap'
+      preLoaderRoute: typeof CariHesapRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dosyalar': {
+      id: '/dosyalar'
+      path: '/dosyalar'
+      fullPath: '/dosyalar'
+      preLoaderRoute: typeof DosyalarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/evraklar': {
+      id: '/evraklar'
+      path: '/evraklar'
+      fullPath: '/evraklar'
+      preLoaderRoute: typeof EvraklarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/giris': {
+      id: '/giris'
+      path: '/giris'
+      fullPath: '/giris'
+      preLoaderRoute: typeof GirisRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/hatirlatmalar': {
+      id: '/hatirlatmalar'
+      path: '/hatirlatmalar'
+      fullPath: '/hatirlatmalar'
+      preLoaderRoute: typeof HatirlatmalarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/masraflar': {
+      id: '/masraflar'
+      path: '/masraflar'
+      fullPath: '/masraflar'
+      preLoaderRoute: typeof MasraflarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/muvekkiller': {
+      id: '/muvekkiller'
+      path: '/muvekkiller'
+      fullPath: '/muvekkiller'
+      preLoaderRoute: typeof MuvekkillerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/raporlar': {
+      id: '/raporlar'
+      path: '/raporlar'
+      fullPath: '/raporlar'
+      preLoaderRoute: typeof RaporlarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tahsilatlar': {
+      id: '/tahsilatlar'
+      path: '/tahsilatlar'
+      fullPath: '/tahsilatlar'
+      preLoaderRoute: typeof TahsilatlarRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -237,10 +317,14 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AktiviteRoute: AktiviteRoute,
+  AramaRoute: AramaRoute,
   AyarlarRoute: AyarlarRoute,
   BildirimlerRoute: BildirimlerRoute,
+  CariHesapRoute: CariHesapRoute,
   DosyalarRoute: DosyalarRoute,
   EvraklarRoute: EvraklarRoute,
+  GirisRoute: GirisRoute,
   HatirlatmalarRoute: HatirlatmalarRoute,
   MasraflarRoute: MasraflarRoute,
   MuvekkillerRoute: MuvekkillerRoute,
@@ -250,3 +334,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

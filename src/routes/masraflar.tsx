@@ -1,28 +1,35 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Receipt } from "lucide-react";
-import { EmptyState } from "@/components/EmptyState";
+import { ManagementPage } from "@/components/management/ManagementPage";
+import { caseOptions, clientOptions, expenses, findCase, findClient } from "@/lib/erp-data";
+import { expenseFormFields } from "@/lib/management-form-config";
 
-export const Route = createFileRoute("/masraflar")({
-  head: () => ({
-    meta: [
-      { title: "Masraflar — Lex Yönetim" },
-      { name: "description", content: "Masraflar bölümü — Lex Yönetim hukuk büro yönetim paneli." },
-      { property: "og:title", content: "Masraflar — Lex Yönetim" },
-      { property: "og:description", content: "Masraflar bölümü yakında kullanıma açılacak." },
-    ],
-  }),
-  component: Page,
-});
-
+export const Route = createFileRoute("/masraflar")({ component: Page });
 function Page() {
   return (
-    <div className="mx-auto max-w-3xl py-10">
-      <EmptyState
-        icon={Receipt}
-        title="Masraflar yakında"
-        description="Bu bölüm hazırlanıyor. Kısa süre içinde büronuza özel Masraflar deneyimi burada olacak."
-        actionLabel="Dashboard'a dön"
-      />
-    </div>
+    <ManagementPage
+      title="Masraflar"
+      description="Dosya bazlı tüm harç, bilirkişi, tebligat ve ofis giderlerini belgesiyle birlikte kaydedin."
+      singular="masraf"
+      icon={Receipt}
+      accent="amber"
+      filterOptions={["Tümü", "Belgelendi", "Onay bekliyor"]}
+      formFields={expenseFormFields}
+      stats={[
+        { label: "Bu ay", value: "₺47.300", note: "%4,6 azalış" },
+        { label: "Bekleyen onay", value: "₺8.650", note: "6 işlem" },
+        { label: "Belgesiz kayıt", value: "3", note: "İncelenmeli" },
+      ]}
+      rows={expenses.map((expense) => {
+        const item = findCase(expense.caseId);
+        return {
+          title: expense.title,
+          subtitle: `${item.no} • ${findClient(item.clientId).name}`,
+          meta: `${expense.date} • Ödeyen: ${expense.payer}`,
+          status: expense.status,
+          amount: `₺${expense.amount.toLocaleString("tr-TR")}`,
+        };
+      })}
+    />
   );
 }

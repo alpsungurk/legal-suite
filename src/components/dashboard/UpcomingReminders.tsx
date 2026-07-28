@@ -11,7 +11,7 @@ const typeIcon = {
 
 export function UpcomingReminders() {
   return (
-    <Card className="border-border/60 shadow-soft">
+    <Card className="h-full min-h-[430px] border-border/60 shadow-soft">
       <CardHeader className="space-y-1">
         <CardTitle className="text-base font-semibold">Yaklaşan Hatırlatmalar</CardTitle>
         <CardDescription className="text-xs">Duruşma, toplantı ve tahsilat</CardDescription>
@@ -26,7 +26,9 @@ export function UpcomingReminders() {
             >
               <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
                 <div className="flex flex-col items-center leading-none">
-                  <span className="text-[10px] font-medium uppercase tracking-wider">{r.month}</span>
+                  <span className="text-[10px] font-medium uppercase tracking-wider">
+                    {r.month}
+                  </span>
                   <span className="text-lg font-bold">{r.day}</span>
                 </div>
               </div>

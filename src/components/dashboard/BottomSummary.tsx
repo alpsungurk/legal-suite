@@ -5,7 +5,11 @@ import { cn } from "@/lib/utils";
 import { activeReminders, pendingCollections, recentCases, recentClients } from "@/lib/mock-data";
 
 const fmt = (v: number) =>
-  new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY", maximumFractionDigits: 0 }).format(v);
+  new Intl.NumberFormat("tr-TR", {
+    style: "currency",
+    currency: "TRY",
+    maximumFractionDigits: 0,
+  }).format(v);
 
 function SectionCard({
   title,
@@ -18,12 +22,12 @@ function SectionCard({
 }) {
   return (
     <Card className="border-border/60 shadow-soft transition-shadow hover:shadow-card">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-        <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
+        <CardTitle className="flex min-w-0 flex-1 items-center gap-2 whitespace-nowrap text-xs font-semibold sm:text-sm">
           <Icon className="h-4 w-4 text-primary" />
           {title}
         </CardTitle>
-        <button className="flex items-center gap-0.5 text-xs font-medium text-primary hover:underline">
+        <button className="flex shrink-0 items-center gap-0.5 text-xs font-medium text-primary hover:underline">
           Tümü <ArrowRight className="h-3 w-3" />
         </button>
       </CardHeader>
@@ -37,7 +41,10 @@ export function BottomSummary() {
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
       <SectionCard title="Son Eklenen Müvekkiller" icon={UserRound}>
         {recentClients.map((c) => (
-          <div key={c.name} className="flex items-center justify-between gap-2 rounded-md p-1.5 hover:bg-secondary/50">
+          <div
+            key={c.name}
+            className="flex items-center justify-between gap-2 rounded-md p-1.5 hover:bg-secondary/50"
+          >
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">{c.name}</p>
               <p className="text-xs text-muted-foreground">{c.cases} dosya</p>
@@ -54,7 +61,9 @@ export function BottomSummary() {
           <div key={c.no} className="rounded-md p-1.5 hover:bg-secondary/50">
             <div className="flex items-center justify-between gap-2">
               <p className="truncate text-sm font-medium">{c.title}</p>
-              <span className="shrink-0 text-[11px] font-semibold text-muted-foreground tabular-nums">{c.no}</span>
+              <span className="shrink-0 text-[11px] font-semibold text-muted-foreground tabular-nums">
+                {c.no}
+              </span>
             </div>
             <div className="mt-0.5 flex items-center justify-between gap-2 text-xs text-muted-foreground">
               <span className="truncate">{c.client}</span>
@@ -68,7 +77,10 @@ export function BottomSummary() {
 
       <SectionCard title="Bekleyen Tahsilatlar" icon={Wallet}>
         {pendingCollections.map((p) => (
-          <div key={p.file} className="flex items-center justify-between gap-2 rounded-md p-1.5 hover:bg-secondary/50">
+          <div
+            key={p.file}
+            className="flex items-center justify-between gap-2 rounded-md p-1.5 hover:bg-secondary/50"
+          >
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">{p.client}</p>
               <p className="text-xs text-muted-foreground tabular-nums">
@@ -78,7 +90,7 @@ export function BottomSummary() {
             <span
               className={cn(
                 "shrink-0 text-sm font-semibold tabular-nums",
-                p.overdue ? "text-destructive" : "text-foreground"
+                p.overdue ? "text-destructive" : "text-foreground",
               )}
             >
               {fmt(p.amount)}

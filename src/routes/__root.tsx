@@ -4,6 +4,7 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
@@ -91,8 +92,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:title", content: "Lex Yönetim — Hukuk Büro Yönetim Sistemi" },
       {
         property: "og:description",
-        content:
-          "Müvekkil, dosya, tahsilat ve hatırlatmalar için premium, modern SaaS dashboard.",
+        content: "Müvekkil, dosya, tahsilat ve hatırlatmalar için premium, modern SaaS dashboard.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -130,21 +130,30 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const isAuthPage = pathname === "/giris";
 
   return (
     <QueryClientProvider client={queryClient}>
-      <SidebarProvider>
-        <div className="flex min-h-screen w-full bg-background">
-          <AppSidebar />
-          <SidebarInset className="flex min-w-0 flex-1 flex-col">
-            <Topbar />
-            <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
-              <Outlet />
-            </main>
-          </SidebarInset>
-        </div>
-        <Toaster />
-      </SidebarProvider>
+      {isAuthPage ? (
+        <>
+          <Outlet />
+          <Toaster />
+        </>
+      ) : (
+        <SidebarProvider>
+          <div className="flex min-h-screen w-full bg-background">
+            <AppSidebar />
+            <SidebarInset className="flex min-w-0 flex-1 flex-col">
+              <Topbar />
+              <main className="min-w-0 flex-1 overflow-x-hidden px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
+                <Outlet />
+              </main>
+            </SidebarInset>
+          </div>
+          <Toaster />
+        </SidebarProvider>
+      )}
     </QueryClientProvider>
   );
 }

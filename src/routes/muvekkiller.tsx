@@ -1,28 +1,31 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Users } from "lucide-react";
-import { EmptyState } from "@/components/EmptyState";
+import { ManagementPage } from "@/components/management/ManagementPage";
+import { clients } from "@/lib/erp-data";
+import { clientFormFields } from "@/lib/management-form-config";
 
-export const Route = createFileRoute("/muvekkiller")({
-  head: () => ({
-    meta: [
-      { title: "Müvekkiller — Lex Yönetim" },
-      { name: "description", content: "Müvekkiller bölümü — Lex Yönetim hukuk büro yönetim paneli." },
-      { property: "og:title", content: "Müvekkiller — Lex Yönetim" },
-      { property: "og:description", content: "Müvekkiller bölümü yakında kullanıma açılacak." },
-    ],
-  }),
-  component: Page,
-});
-
+export const Route = createFileRoute("/muvekkiller")({ component: Page });
 function Page() {
   return (
-    <div className="mx-auto max-w-3xl py-10">
-      <EmptyState
-        icon={Users}
-        title="Müvekkiller yakında"
-        description="Bu bölüm hazırlanıyor. Kısa süre içinde büronuza özel Müvekkiller deneyimi burada olacak."
-        actionLabel="Dashboard'a dön"
-      />
-    </div>
+    <ManagementPage
+      title="Müvekkiller"
+      description="Kişi ve kurum müvekkillerinizin dosya, iletişim ve cari durumunu tek ekrandan takip edin."
+      singular="müvekkil"
+      icon={Users}
+      accent="blue"
+      filterOptions={["Tümü", "Aktif", "İncelemede"]}
+      formFields={clientFormFields}
+      stats={[
+        { label: "Toplam müvekkil", value: "342", note: "+8 bu ay" },
+        { label: "Aktif müvekkil", value: "287", note: "%84 aktif" },
+        { label: "Yeni kayıt", value: "12", note: "Son 30 gün" },
+      ]}
+      rows={clients.slice(0, 4).map((client) => ({
+        title: client.name,
+        subtitle: `${client.kind} • ${client.email}`,
+        meta: `${client.activeCases} aktif dosya • ${client.phone}`,
+        status: client.name === "Kaya Holding A.Ş." ? "İncelemede" : "Aktif",
+      }))}
+    />
   );
 }

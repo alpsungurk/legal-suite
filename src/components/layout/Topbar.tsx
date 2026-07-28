@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useRouterState } from "@tanstack/react-router";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { Bell, LogOut, Moon, Search, Settings, Sun, User } from "lucide-react";
 
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -23,10 +23,13 @@ const titles: Record<string, string> = {
   "/dosyalar": "Dosyalar",
   "/masraflar": "Masraflar",
   "/tahsilatlar": "Tahsilatlar",
+  "/cari-hesap": "Cari Hesap",
   "/evraklar": "Evraklar",
   "/hatirlatmalar": "Hatırlatmalar",
   "/raporlar": "Raporlar",
   "/bildirimler": "Bildirimler",
+  "/aktivite": "Aktivite Geçmişi",
+  "/arama": "Global Arama",
   "/ayarlar": "Ayarlar",
 };
 
@@ -55,6 +58,7 @@ function ThemeToggle() {
 }
 
 export function Topbar() {
+  const navigate = useNavigate();
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const title = titles[pathname] ?? "Dashboard";
 
@@ -62,9 +66,7 @@ export function Topbar() {
     <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b bg-background/80 px-3 backdrop-blur sm:px-6">
       <SidebarTrigger className="h-9 w-9 text-muted-foreground hover:text-foreground" />
       <Separator orientation="vertical" className="h-6" />
-      <h1 className="truncate text-base font-semibold tracking-tight sm:text-lg">
-        {title}
-      </h1>
+      <h1 className="truncate text-base font-semibold tracking-tight sm:text-lg">{title}</h1>
 
       <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
         <div className="relative hidden md:block">
@@ -118,7 +120,10 @@ export function Topbar() {
               <Settings className="mr-2 h-4 w-4" /> Ayarlar
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive focus:text-destructive">
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onClick={() => navigate({ to: "/giris" })}
+            >
               <LogOut className="mr-2 h-4 w-4" /> Çıkış Yap
             </DropdownMenuItem>
           </DropdownMenuContent>

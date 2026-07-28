@@ -21,8 +21,7 @@ export const Route = createFileRoute("/")({
       { property: "og:title", content: "Dashboard — Lex Yönetim" },
       {
         property: "og:description",
-        content:
-          "Hukuk büronuza dair tüm önemli metrikler ve yaklaşan görevler tek ekranda.",
+        content: "Hukuk büronuza dair tüm önemli metrikler ve yaklaşan görevler tek ekranda.",
       },
     ],
   }),
@@ -31,26 +30,27 @@ export const Route = createFileRoute("/")({
 
 function Dashboard() {
   return (
-    <div className="mx-auto max-w-[1600px] space-y-6">
+    <div className="dashboard-enter mx-auto min-w-0 max-w-[1600px] space-y-5 sm:space-y-6">
       <WelcomeHeader />
       <StatCards />
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <div className="xl:col-span-2">
+      <div className="grid min-w-0 grid-cols-1 items-stretch gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(360px,0.9fr)]">
+        <div className="min-w-0">
           <RevenueChart />
         </div>
         <ExpensePieChart />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <div className="xl:col-span-2">
+      <div className="grid min-w-0 grid-cols-1 items-stretch gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(360px,0.9fr)]">
+        <div className="min-w-0">
           <RecentTransactionsTable />
         </div>
-        <div className="space-y-4">
-          <UpcomingReminders />
-          <NotificationsPanel />
-          <MiniCalendar />
-        </div>
+        <NotificationsPanel />
+      </div>
+
+      <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
+        <UpcomingReminders />
+        <MiniCalendar />
       </div>
 
       <BottomSummary />

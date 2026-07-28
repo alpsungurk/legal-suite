@@ -12,7 +12,7 @@ const toneMap = {
 
 export function NotificationsPanel() {
   return (
-    <Card className="border-border/60 shadow-soft">
+    <Card className="h-full min-h-[430px] border-border/60 shadow-soft">
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
         <CardTitle className="text-base font-semibold">Bildirimler</CardTitle>
         <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
@@ -24,8 +24,13 @@ export function NotificationsPanel() {
           const t = toneMap[n.tone];
           const Icon = t.icon;
           return (
-            <div key={i} className="flex items-start gap-3 rounded-lg p-2 transition-colors hover:bg-secondary/50">
-              <div className={cn("mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg", t.cls)}>
+            <div
+              key={i}
+              className="flex items-start gap-3 rounded-lg p-2 transition-colors hover:bg-secondary/50"
+            >
+              <div
+                className={cn("mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg", t.cls)}
+              >
                 <Icon className="h-4 w-4" />
               </div>
               <div className="min-w-0 flex-1">
