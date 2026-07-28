@@ -9,8 +9,62 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TahsilatlarRouteImport } from './routes/tahsilatlar'
+import { Route as RaporlarRouteImport } from './routes/raporlar'
+import { Route as MuvekkillerRouteImport } from './routes/muvekkiller'
+import { Route as MasraflarRouteImport } from './routes/masraflar'
+import { Route as HatirlatmalarRouteImport } from './routes/hatirlatmalar'
+import { Route as EvraklarRouteImport } from './routes/evraklar'
+import { Route as DosyalarRouteImport } from './routes/dosyalar'
+import { Route as BildirimlerRouteImport } from './routes/bildirimler'
+import { Route as AyarlarRouteImport } from './routes/ayarlar'
 import { Route as IndexRouteImport } from './routes/index'
 
+const TahsilatlarRoute = TahsilatlarRouteImport.update({
+  id: '/tahsilatlar',
+  path: '/tahsilatlar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RaporlarRoute = RaporlarRouteImport.update({
+  id: '/raporlar',
+  path: '/raporlar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MuvekkillerRoute = MuvekkillerRouteImport.update({
+  id: '/muvekkiller',
+  path: '/muvekkiller',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MasraflarRoute = MasraflarRouteImport.update({
+  id: '/masraflar',
+  path: '/masraflar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HatirlatmalarRoute = HatirlatmalarRouteImport.update({
+  id: '/hatirlatmalar',
+  path: '/hatirlatmalar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EvraklarRoute = EvraklarRouteImport.update({
+  id: '/evraklar',
+  path: '/evraklar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DosyalarRoute = DosyalarRouteImport.update({
+  id: '/dosyalar',
+  path: '/dosyalar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BildirimlerRoute = BildirimlerRouteImport.update({
+  id: '/bildirimler',
+  path: '/bildirimler',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AyarlarRoute = AyarlarRouteImport.update({
+  id: '/ayarlar',
+  path: '/ayarlar',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -19,28 +73,158 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/ayarlar': typeof AyarlarRoute
+  '/bildirimler': typeof BildirimlerRoute
+  '/dosyalar': typeof DosyalarRoute
+  '/evraklar': typeof EvraklarRoute
+  '/hatirlatmalar': typeof HatirlatmalarRoute
+  '/masraflar': typeof MasraflarRoute
+  '/muvekkiller': typeof MuvekkillerRoute
+  '/raporlar': typeof RaporlarRoute
+  '/tahsilatlar': typeof TahsilatlarRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/ayarlar': typeof AyarlarRoute
+  '/bildirimler': typeof BildirimlerRoute
+  '/dosyalar': typeof DosyalarRoute
+  '/evraklar': typeof EvraklarRoute
+  '/hatirlatmalar': typeof HatirlatmalarRoute
+  '/masraflar': typeof MasraflarRoute
+  '/muvekkiller': typeof MuvekkillerRoute
+  '/raporlar': typeof RaporlarRoute
+  '/tahsilatlar': typeof TahsilatlarRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/ayarlar': typeof AyarlarRoute
+  '/bildirimler': typeof BildirimlerRoute
+  '/dosyalar': typeof DosyalarRoute
+  '/evraklar': typeof EvraklarRoute
+  '/hatirlatmalar': typeof HatirlatmalarRoute
+  '/masraflar': typeof MasraflarRoute
+  '/muvekkiller': typeof MuvekkillerRoute
+  '/raporlar': typeof RaporlarRoute
+  '/tahsilatlar': typeof TahsilatlarRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/ayarlar'
+    | '/bildirimler'
+    | '/dosyalar'
+    | '/evraklar'
+    | '/hatirlatmalar'
+    | '/masraflar'
+    | '/muvekkiller'
+    | '/raporlar'
+    | '/tahsilatlar'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/ayarlar'
+    | '/bildirimler'
+    | '/dosyalar'
+    | '/evraklar'
+    | '/hatirlatmalar'
+    | '/masraflar'
+    | '/muvekkiller'
+    | '/raporlar'
+    | '/tahsilatlar'
+  id:
+    | '__root__'
+    | '/'
+    | '/ayarlar'
+    | '/bildirimler'
+    | '/dosyalar'
+    | '/evraklar'
+    | '/hatirlatmalar'
+    | '/masraflar'
+    | '/muvekkiller'
+    | '/raporlar'
+    | '/tahsilatlar'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AyarlarRoute: typeof AyarlarRoute
+  BildirimlerRoute: typeof BildirimlerRoute
+  DosyalarRoute: typeof DosyalarRoute
+  EvraklarRoute: typeof EvraklarRoute
+  HatirlatmalarRoute: typeof HatirlatmalarRoute
+  MasraflarRoute: typeof MasraflarRoute
+  MuvekkillerRoute: typeof MuvekkillerRoute
+  RaporlarRoute: typeof RaporlarRoute
+  TahsilatlarRoute: typeof TahsilatlarRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/tahsilatlar': {
+      id: '/tahsilatlar'
+      path: '/tahsilatlar'
+      fullPath: '/tahsilatlar'
+      preLoaderRoute: typeof TahsilatlarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/raporlar': {
+      id: '/raporlar'
+      path: '/raporlar'
+      fullPath: '/raporlar'
+      preLoaderRoute: typeof RaporlarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/muvekkiller': {
+      id: '/muvekkiller'
+      path: '/muvekkiller'
+      fullPath: '/muvekkiller'
+      preLoaderRoute: typeof MuvekkillerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/masraflar': {
+      id: '/masraflar'
+      path: '/masraflar'
+      fullPath: '/masraflar'
+      preLoaderRoute: typeof MasraflarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/hatirlatmalar': {
+      id: '/hatirlatmalar'
+      path: '/hatirlatmalar'
+      fullPath: '/hatirlatmalar'
+      preLoaderRoute: typeof HatirlatmalarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/evraklar': {
+      id: '/evraklar'
+      path: '/evraklar'
+      fullPath: '/evraklar'
+      preLoaderRoute: typeof EvraklarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dosyalar': {
+      id: '/dosyalar'
+      path: '/dosyalar'
+      fullPath: '/dosyalar'
+      preLoaderRoute: typeof DosyalarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/bildirimler': {
+      id: '/bildirimler'
+      path: '/bildirimler'
+      fullPath: '/bildirimler'
+      preLoaderRoute: typeof BildirimlerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ayarlar': {
+      id: '/ayarlar'
+      path: '/ayarlar'
+      fullPath: '/ayarlar'
+      preLoaderRoute: typeof AyarlarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -53,17 +237,16 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AyarlarRoute: AyarlarRoute,
+  BildirimlerRoute: BildirimlerRoute,
+  DosyalarRoute: DosyalarRoute,
+  EvraklarRoute: EvraklarRoute,
+  HatirlatmalarRoute: HatirlatmalarRoute,
+  MasraflarRoute: MasraflarRoute,
+  MuvekkillerRoute: MuvekkillerRoute,
+  RaporlarRoute: RaporlarRoute,
+  TahsilatlarRoute: TahsilatlarRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
