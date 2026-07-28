@@ -1,24 +1,59 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { WelcomeHeader } from "@/components/dashboard/WelcomeHeader";
+import { StatCards } from "@/components/dashboard/StatCards";
+import { RevenueChart } from "@/components/dashboard/RevenueChart";
+import { ExpensePieChart } from "@/components/dashboard/ExpensePieChart";
+import { RecentTransactionsTable } from "@/components/dashboard/RecentTransactionsTable";
+import { UpcomingReminders } from "@/components/dashboard/UpcomingReminders";
+import { NotificationsPanel } from "@/components/dashboard/NotificationsPanel";
+import { MiniCalendar } from "@/components/dashboard/MiniCalendar";
+import { BottomSummary } from "@/components/dashboard/BottomSummary";
 
-// No head() here: the home route inherits title/description/og/twitter from
-// __root.tsx, and ships no og:image so serve-time hosting can inject the
-// project's social preview (explicit og:image or latest screenshot).
 export const Route = createFileRoute("/")({
-  component: Index,
+  head: () => ({
+    meta: [
+      { title: "Dashboard — Lex Yönetim" },
+      {
+        name: "description",
+        content:
+          "Büro özet paneli: müvekkil, aktif dosya, tahsilat, masraf istatistikleri, yaklaşan duruşmalar ve son işlemler.",
+      },
+      { property: "og:title", content: "Dashboard — Lex Yönetim" },
+      {
+        property: "og:description",
+        content:
+          "Hukuk büronuza dair tüm önemli metrikler ve yaklaşan görevler tek ekranda.",
+      },
+    ],
+  }),
+  component: Dashboard,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
-function Index() {
+function Dashboard() {
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
+    <div className="mx-auto max-w-[1600px] space-y-6">
+      <WelcomeHeader />
+      <StatCards />
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <div className="xl:col-span-2">
+          <RevenueChart />
+        </div>
+        <ExpensePieChart />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <div className="xl:col-span-2">
+          <RecentTransactionsTable />
+        </div>
+        <div className="space-y-4">
+          <UpcomingReminders />
+          <NotificationsPanel />
+          <MiniCalendar />
+        </div>
+      </div>
+
+      <BottomSummary />
     </div>
   );
 }
