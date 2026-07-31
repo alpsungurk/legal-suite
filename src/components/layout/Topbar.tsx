@@ -16,6 +16,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useErp } from "@/lib/erp-store";
 
 const titles: Record<string, string> = {
   "/": "Dashboard",
@@ -24,7 +25,6 @@ const titles: Record<string, string> = {
   "/masraflar": "Masraflar",
   "/tahsilatlar": "Tahsilatlar",
   "/cari-hesap": "Cari Hesap",
-  "/evraklar": "Evraklar",
   "/hatirlatmalar": "Hatırlatmalar",
   "/raporlar": "Raporlar",
   "/bildirimler": "Bildirimler",
@@ -61,6 +61,37 @@ export function Topbar() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const title = titles[pathname] ?? "Dashboard";
+  const { currentUser, state, permissions, markAllNotificationsRead, logout } = useErp();
+  const [query, setQuery] = useState("");
+
+  const unread = state.notifications.filter(
+    (n) => n.userId === currentUser.id && !n.read,
+  ).length;
+
+  const initials = currentUser.name
+    .split(" ")
+    .filter(Boolean)
+    .slice(-2)
+    .map((p) => p[0])
+    .join("")
+    .toLocaleUpperCase("tr");
+
+  const goSearch = () => {
+    const q = query.trim();
+    navigate({ to: "/arama", search: q ? { q } : {} });
+  };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        const el = document.getElementById("global-search-input") as HTMLInputElement | null;
+        el?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
     <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b bg-background/80 px-3 backdrop-blur sm:px-6">
@@ -72,7 +103,13 @@ export function Topbar() {
         <div className="relative hidden md:block">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Müvekkil, dosya, evrak ara..."
+            id="global-search-input"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") goSearch();
+            }}
+            placeholder="Müvekkil, dosya, masraf ara..."
             className="h-9 w-64 rounded-lg border-border bg-secondary/60 pl-9 pr-14 text-sm shadow-none focus-visible:ring-1 lg:w-80"
           />
           <kbd className="pointer-events-none absolute right-2 top-1/2 hidden -translate-y-1/2 select-none items-center gap-1 rounded border bg-background px-1.5 font-mono text-[10px] font-medium text-muted-foreground sm:flex">
@@ -87,11 +124,17 @@ export function Topbar() {
           size="icon"
           className="relative rounded-lg text-muted-foreground hover:text-foreground"
           aria-label="Bildirimler"
+          onClick={() => {
+            markAllNotificationsRead();
+            navigate({ to: "/bildirimler" });
+          }}
         >
           <Bell className="h-[18px] w-[18px]" />
-          <span className="absolute right-1.5 top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground">
-            5
-          </span>
+          {unread > 0 && (
+            <span className="absolute right-1.5 top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground">
+              {unread}
+            </span>
+          )}
         </Button>
 
         <DropdownMenu>
@@ -99,30 +142,35 @@ export function Topbar() {
             <Button variant="ghost" className="h-9 gap-2 rounded-lg px-1.5 sm:pr-3">
               <Avatar className="h-7 w-7">
                 <AvatarFallback className="bg-primary text-primary-foreground text-[11px] font-semibold">
-                  AY
+                  {initials}
                 </AvatarFallback>
               </Avatar>
-              <span className="hidden text-sm font-medium sm:inline">Ahmet Yılmaz</span>
+              <span className="hidden text-sm font-medium sm:inline">{currentUser.name}</span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel className="flex flex-col">
-              <span className="text-sm">Av. Ahmet Yılmaz</span>
+              <span className="text-sm">{currentUser.name}</span>
               <span className="text-xs font-normal text-muted-foreground">
-                ahmet@lexyonetim.com
+                {currentUser.email}
               </span>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate({ to: "/ayarlar" })}>
               <User className="mr-2 h-4 w-4" /> Profil
             </DropdownMenuItem>
-            <DropdownMenuItem>
-              <Settings className="mr-2 h-4 w-4" /> Ayarlar
-            </DropdownMenuItem>
+            {permissions.canAccessSettings && (
+              <DropdownMenuItem onClick={() => navigate({ to: "/ayarlar" })}>
+                <Settings className="mr-2 h-4 w-4" /> Ayarlar
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"
-              onClick={() => navigate({ to: "/giris" })}
+              onClick={() => {
+                logout();
+                navigate({ to: "/giris" });
+              }}
             >
               <LogOut className="mr-2 h-4 w-4" /> Çıkış Yap
             </DropdownMenuItem>

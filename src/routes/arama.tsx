@@ -1,74 +1,91 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Search } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { ManagementPage } from "@/components/management/ManagementPage";
+import { useErp } from "@/lib/erp-store";
 
-export const Route = createFileRoute("/arama")({ component: Page });
+type SearchParams = { q?: string };
+
+export const Route = createFileRoute("/arama")({
+  validateSearch: (search: Record<string, unknown>): SearchParams => ({
+    q: typeof search.q === "string" ? search.q : undefined,
+  }),
+  component: Page,
+});
 
 function Page() {
+  const { q = "" } = Route.useSearch();
+  const navigate = useNavigate();
+  const { searchAll } = useErp();
+  const [liveQuery, setLiveQuery] = useState(q);
+
+  useEffect(() => {
+    setLiveQuery(q);
+  }, [q]);
+
+  const results = useMemo(() => searchAll(liveQuery), [searchAll, liveQuery]);
+
   return (
     <ManagementPage
       title="Global Arama"
-      description="Müvekkil, dosya, evrak, telefon ve açıklamalarda tek ekrandan hızlı arama yapın."
-      singular="arama kaydı"
+      description="Müvekkil, dosya, masraf, tahsilat, hatırlatma ve kullanıcılarda tek ekrandan hızlı arama yapın."
+      singular="sonuç"
       icon={Search}
       accent="blue"
-      filterOptions={["Tümü", "Müvekkil", "Dosya", "Evrak"]}
-      formFields={[
+      readOnly
+      initialQuery={q}
+      searchPlaceholder="Müvekkil, dosya no, telefon veya açıklama ara..."
+      onSearchChange={(value) => {
+        setLiveQuery(value);
+        navigate({
+          to: "/arama",
+          search: value.trim() ? { q: value.trim() } : {},
+          replace: true,
+        });
+      }}
+      columns={[
+        { key: "title", label: "Sonuç" },
+        { key: "subtitle", label: "Detay" },
         {
-          name: "title",
-          label: "Arama kaydı başlığı",
-          placeholder: "Kaydedilen arama adı",
-          required: true,
-          fullWidth: true,
-        },
-        {
-          name: "subtitle",
-          label: "Arama kapsamı",
-          type: "textarea",
-          placeholder: "Müvekkil, dosya veya evrak",
-          required: true,
-          fullWidth: true,
-        },
-        {
-          name: "meta",
-          label: "Arama kriteri",
-          placeholder: "Anahtar kelime veya numara",
-          required: true,
-        },
-        {
-          name: "status",
-          label: "Kayıt türü",
-          type: "select",
-          options: ["Müvekkil", "Dosya", "Evrak"],
-          required: true,
+          key: "type",
+          label: "Tür",
+          filterable: true,
+          filterOptions: ["Müvekkil", "Dosya", "Masraf", "Tahsilat", "Hatırlatma", "Kullanıcı"],
         },
       ]}
       stats={[
-        { label: "İndekslenen kayıt", value: "2.846", note: "Anlık güncel" },
-        { label: "Dosyalar", value: "214", note: "Aranabilir" },
-        { label: "Evraklar", value: "1.248", note: "Tam metin" },
-      ]}
-      searchPlaceholder="Müvekkil, dosya no, telefon veya evrak ara..."
-      rows={[
         {
-          title: "Ayşe Demir",
-          subtitle: "Müvekkil • ayse.demir@email.com",
-          meta: "0532 448 21 65 • 2 aktif dosya",
-          status: "Müvekkil",
+          label: "Sonuç",
+          value: String(results.length),
+          note: liveQuery ? `"${liveQuery}"` : "Arama yapın",
         },
         {
-          title: "2026/128 • Alacak davası",
-          subtitle: "Dosya • Ayşe Demir",
-          meta: "İstanbul 3. Asliye Hukuk • Tebligat",
-          status: "Dosya",
+          label: "Dosya",
+          value: String(results.filter((r) => r.type === "Dosya").length),
+          note: "Eşleşen",
         },
         {
-          title: "Dava_Dilekçesi_v3.pdf",
-          subtitle: "Evrak • 2026/128",
-          meta: "PDF • 2,4 MB • 28 Temmuz 2026",
-          status: "Evrak",
+          label: "Müvekkil",
+          value: String(results.filter((r) => r.type === "Müvekkil").length),
+          note: "Eşleşen",
         },
       ]}
+      rows={results.map((r) => ({
+        id: `${r.type}-${r.id}`,
+        title: r.title,
+        subtitle: r.subtitle,
+        type: r.type,
+        href: r.href,
+      }))}
+      onRowClick={(row) => {
+        const href = row.href;
+        if (href === "/muvekkiller") navigate({ to: "/muvekkiller" });
+        else if (href === "/dosyalar") navigate({ to: "/dosyalar" });
+        else if (href === "/masraflar") navigate({ to: "/masraflar" });
+        else if (href === "/tahsilatlar") navigate({ to: "/tahsilatlar" });
+        else if (href === "/hatirlatmalar") navigate({ to: "/hatirlatmalar" });
+        else if (href === "/ayarlar") navigate({ to: "/ayarlar" });
+      }}
     />
   );
 }

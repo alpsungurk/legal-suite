@@ -1,11 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Users } from "lucide-react";
+import { toast } from "sonner";
 import { ManagementPage } from "@/components/management/ManagementPage";
-import { clients } from "@/lib/erp-data";
-import { clientFormFields } from "@/lib/management-form-config";
+import { buildClientFormFields } from "@/lib/management-form-config";
+import { useErp } from "@/lib/erp-store";
 
 export const Route = createFileRoute("/muvekkiller")({ component: Page });
+
 function Page() {
+  const { state, upsertClient, deleteClient, permissions } = useErp();
+  const activeCount = state.clients.filter((c) => c.status === "Aktif").length;
+
   return (
     <ManagementPage
       title="Müvekkiller"
@@ -13,19 +18,68 @@ function Page() {
       singular="müvekkil"
       icon={Users}
       accent="blue"
-      filterOptions={["Tümü", "Aktif", "İncelemede"]}
-      formFields={clientFormFields}
-      stats={[
-        { label: "Toplam müvekkil", value: "342", note: "+8 bu ay" },
-        { label: "Aktif müvekkil", value: "287", note: "%84 aktif" },
-        { label: "Yeni kayıt", value: "12", note: "Son 30 gün" },
+      columns={[
+        { key: "name", label: "Ad Soyad / Firma" },
+        { key: "kind", label: "Tür", filterable: true },
+        { key: "email", label: "E-posta" },
+        { key: "phone", label: "Telefon" },
+        { key: "status", label: "Durum", filterable: true, filterOptions: ["Aktif", "Pasif"] },
       ]}
-      rows={clients.slice(0, 4).map((client) => ({
-        title: client.name,
-        subtitle: `${client.kind} • ${client.email}`,
-        meta: `${client.activeCases} aktif dosya • ${client.phone}`,
-        status: client.name === "Kaya Holding A.Ş." ? "İncelemede" : "Aktif",
+      formFields={buildClientFormFields()}
+      canCreate={permissions.canWrite}
+      canEdit={permissions.canWrite}
+      canDelete={permissions.canDelete}
+      stats={[
+        { label: "Toplam müvekkil", value: String(state.clients.length), note: "Kayıtlı" },
+        {
+          label: "Aktif müvekkil",
+          value: String(activeCount),
+          note: `%${state.clients.length ? Math.round((activeCount / state.clients.length) * 100) : 0} aktif`,
+        },
+        {
+          label: "Pasif müvekkil",
+          value: String(state.clients.length - activeCount),
+          note: "Arşiv",
+        },
+      ]}
+      emptyCreateValues={{ status: "Aktif", kind: "Bireysel" }}
+      rows={state.clients.map((client) => ({
+        id: client.id,
+        name: client.name,
+        kind: client.kind,
+        email: client.email,
+        phone: client.phone,
+        status: client.status,
       }))}
+      getEditValues={(row) => {
+        const client = state.clients.find((c) => c.id === row.id);
+        return {
+          name: client?.name ?? "",
+          email: client?.email ?? "",
+          phone: client?.phone ?? "",
+          kind: client?.kind ?? "Bireysel",
+          identity: client?.identity ?? "",
+          address: client?.address ?? "",
+          status: client?.status ?? "Aktif",
+        };
+      }}
+      onSave={(data, editingId) => {
+        upsertClient({
+          id: editingId ?? undefined,
+          name: data.name,
+          email: data.email,
+          phone: data.phone,
+          kind: (data.kind as "Bireysel" | "Kurumsal") || "Bireysel",
+          identity: data.identity,
+          address: data.address,
+          status: data.status === "Pasif" ? "Pasif" : "Aktif",
+        });
+        toast.success(editingId ? "Müvekkil güncellendi" : "Yeni müvekkil eklendi");
+      }}
+      onDelete={(id) => {
+        deleteClient(id);
+        toast.success("Müvekkil silindi");
+      }}
     />
   );
 }

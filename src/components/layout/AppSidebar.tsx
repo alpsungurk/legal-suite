@@ -1,11 +1,11 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { useEffect } from "react";
 import {
   LayoutDashboard,
   Users,
   FolderKanban,
   Receipt,
   Wallet,
-  FileText,
   BellRing,
   BarChart3,
   Bell,
@@ -14,6 +14,7 @@ import {
   Landmark,
   History,
   Search,
+  ChevronRight,
 } from "lucide-react";
 import {
   Sidebar,
@@ -26,30 +27,56 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useErp } from "@/lib/erp-store";
 
-const items = [
+const flatItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Müvekkiller", url: "/muvekkiller", icon: Users },
-  { title: "Dosyalar", url: "/dosyalar", icon: FolderKanban },
-  { title: "Masraflar", url: "/masraflar", icon: Receipt },
   { title: "Tahsilatlar", url: "/tahsilatlar", icon: Wallet },
   { title: "Cari Hesap", url: "/cari-hesap", icon: Landmark },
-  { title: "Evraklar", url: "/evraklar", icon: FileText },
   { title: "Hatırlatmalar", url: "/hatirlatmalar", icon: BellRing },
   { title: "Raporlar", url: "/raporlar", icon: BarChart3 },
   { title: "Bildirimler", url: "/bildirimler", icon: Bell },
   { title: "Aktivite Geçmişi", url: "/aktivite", icon: History },
   { title: "Global Arama", url: "/arama", icon: Search },
-  { title: "Ayarlar", url: "/ayarlar", icon: Settings },
 ];
 
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const pathname = useRouterState({ select: (r) => r.location.pathname });
+  const search = useRouterState({ select: (r) => r.location.search });
+  const navigate = useNavigate();
+  const { state: erp, currentUser, permissions } = useErp();
+
+  useEffect(() => {
+    if (!permissions.canAccessSettings && pathname.startsWith("/ayarlar")) {
+      navigate({ to: "/" });
+    }
+  }, [permissions.canAccessSettings, pathname, navigate]);
+
+  const turParam =
+    typeof search === "object" && search && "tur" in search
+      ? String((search as { tur?: string }).tur ?? "")
+      : "";
+
+  const isActive = (url: string) =>
+    url === "/" ? pathname === "/" : pathname === url || pathname.startsWith(url + "/");
+
+  const initials = currentUser.name
+    .split(" ")
+    .filter(Boolean)
+    .slice(-2)
+    .map((p) => p[0])
+    .join("")
+    .toLocaleUpperCase("tr");
 
   return (
     <Sidebar collapsible="icon" className="border-r-0">
@@ -81,27 +108,146 @@ export function AppSidebar() {
           )}
           <SidebarGroupContent>
             <SidebarMenu>
-              {items.map((item) => {
-                const active =
-                  item.url === "/"
-                    ? pathname === "/"
-                    : pathname === item.url || pathname.startsWith(item.url + "/");
-                return (
-                  <SidebarMenuItem key={item.title}>
+              {flatItems.slice(0, 2).map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isActive(item.url)}
+                    tooltip={item.title}
+                    className="data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground data-[active=true]:shadow-soft hover:bg-sidebar-accent"
+                  >
+                    <Link to={item.url} className="flex items-center gap-3">
+                      <item.icon className="h-[18px] w-[18px] shrink-0" />
+                      {!collapsed && <span className="truncate">{item.title}</span>}
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+
+              <Collapsible
+                asChild
+                defaultOpen={pathname.startsWith("/dosyalar")}
+                className="group/collapsible"
+              >
+                <SidebarMenuItem>
+                  <CollapsibleTrigger asChild>
                     <SidebarMenuButton
-                      asChild
-                      isActive={active}
-                      tooltip={item.title}
+                      tooltip="Dosyalar"
+                      isActive={pathname.startsWith("/dosyalar")}
                       className="data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground data-[active=true]:shadow-soft hover:bg-sidebar-accent"
                     >
-                      <Link to={item.url} className="flex items-center gap-3">
-                        <item.icon className="h-[18px] w-[18px] shrink-0" />
-                        {!collapsed && <span className="truncate">{item.title}</span>}
-                      </Link>
+                      <FolderKanban className="h-[18px] w-[18px] shrink-0" />
+                      {!collapsed && <span className="truncate">Dosyalar</span>}
+                      {!collapsed && (
+                        <ChevronRight className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
+                      )}
                     </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
+                  </CollapsibleTrigger>
+                  {!collapsed && (
+                    <CollapsibleContent>
+                      <SidebarMenuSub>
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton asChild isActive={pathname === "/dosyalar" && !turParam}>
+                            <Link to="/dosyalar">Tümü</Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                        {erp.caseTypes.map((type) => (
+                          <SidebarMenuSubItem key={type}>
+                            <SidebarMenuSubButton
+                              asChild
+                              isActive={pathname === "/dosyalar" && turParam === type}
+                            >
+                              <Link to="/dosyalar" search={{ tur: type }}>
+                                {type}
+                              </Link>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        ))}
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  )}
+                </SidebarMenuItem>
+              </Collapsible>
+
+              <Collapsible
+                asChild
+                defaultOpen={pathname.startsWith("/masraflar")}
+                className="group/collapsible"
+              >
+                <SidebarMenuItem>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton
+                      tooltip="Masraflar"
+                      isActive={pathname.startsWith("/masraflar")}
+                      className="data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground data-[active=true]:shadow-soft hover:bg-sidebar-accent"
+                    >
+                      <Receipt className="h-[18px] w-[18px] shrink-0" />
+                      {!collapsed && <span className="truncate">Masraflar</span>}
+                      {!collapsed && (
+                        <ChevronRight className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
+                      )}
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  {!collapsed && (
+                    <CollapsibleContent>
+                      <SidebarMenuSub>
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={pathname === "/masraflar" && !turParam}
+                          >
+                            <Link to="/masraflar">Tümü</Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                        {erp.expenseTypes.map((type) => (
+                          <SidebarMenuSubItem key={type}>
+                            <SidebarMenuSubButton
+                              asChild
+                              isActive={pathname === "/masraflar" && turParam === type}
+                            >
+                              <Link to="/masraflar" search={{ tur: type }}>
+                                {type}
+                              </Link>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        ))}
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  )}
+                </SidebarMenuItem>
+              </Collapsible>
+
+              {flatItems.slice(2).map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isActive(item.url)}
+                    tooltip={item.title}
+                    className="data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground data-[active=true]:shadow-soft hover:bg-sidebar-accent"
+                  >
+                    <Link to={item.url} className="flex items-center gap-3">
+                      <item.icon className="h-[18px] w-[18px] shrink-0" />
+                      {!collapsed && <span className="truncate">{item.title}</span>}
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+
+              {permissions.canAccessSettings && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isActive("/ayarlar")}
+                    tooltip="Ayarlar"
+                    className="data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground data-[active=true]:shadow-soft hover:bg-sidebar-accent"
+                  >
+                    <Link to="/ayarlar" className="flex items-center gap-3">
+                      <Settings className="h-[18px] w-[18px] shrink-0" />
+                      {!collapsed && <span className="truncate">Ayarlar</span>}
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -111,15 +257,17 @@ export function AppSidebar() {
         <div className="flex items-center gap-2.5 px-1 py-1.5 group-data-[collapsible=icon]:px-0">
           <Avatar className="h-8 w-8 shrink-0 ring-2 ring-sidebar-primary/30">
             <AvatarFallback className="bg-sidebar-accent text-sidebar-accent-foreground text-xs font-semibold">
-              AY
+              {initials}
             </AvatarFallback>
           </Avatar>
           {!collapsed && (
             <div className="flex min-w-0 flex-col leading-tight">
               <span className="truncate text-xs font-medium text-sidebar-foreground">
-                Av. Ahmet Yılmaz
+                {currentUser.name}
               </span>
-              <span className="truncate text-[11px] text-sidebar-foreground/60">Yönetici</span>
+              <span className="truncate text-[11px] text-sidebar-foreground/60">
+                {currentUser.role}
+              </span>
             </div>
           )}
         </div>

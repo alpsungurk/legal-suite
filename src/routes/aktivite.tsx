@@ -1,75 +1,63 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { History } from "lucide-react";
 import { ManagementPage } from "@/components/management/ManagementPage";
+import { useErp } from "@/lib/erp-store";
 
 export const Route = createFileRoute("/aktivite")({ component: Page });
 
 function Page() {
+  const { state, findUser } = useErp();
+
   return (
     <ManagementPage
       title="Aktivite Geçmişi"
-      description="Büroda yapılan tüm kayıt, güncelleme, belge yükleme ve finansal işlemleri izleyin."
+      description="Büroda yapılan tüm kayıt, güncelleme ve finansal işlemleri izleyin."
       singular="aktivite"
       icon={History}
       accent="violet"
-      filterOptions={["Tümü", "Tahsilat", "Evrak", "Güncellendi"]}
-      formFields={[
+      readOnly
+      columns={[
+        { key: "action", label: "İşlem" },
         {
-          name: "title",
-          label: "İşlem başlığı",
-          placeholder: "Örn. Dosya durumu güncellendi",
-          required: true,
-          fullWidth: true,
+          key: "entity",
+          label: "Tür",
+          filterable: true,
         },
-        {
-          name: "subtitle",
-          label: "İşlemi yapan kullanıcı",
-          placeholder: "Av. Ahmet Yılmaz",
-          required: true,
-        },
-        {
-          name: "meta",
-          label: "İşlem detayları",
-          type: "textarea",
-          placeholder: "Tarih • Dosya no",
-          required: true,
-          fullWidth: true,
-        },
-        { name: "amount", label: "İşlem tutarı", type: "number", placeholder: "İsteğe bağlı" },
-        {
-          name: "status",
-          label: "İşlem türü",
-          type: "select",
-          options: ["Tahsilat", "Masraf", "Evrak", "Güncellendi", "Giriş"],
-          required: true,
-        },
+        { key: "actor", label: "Kullanıcı", filterable: true },
+        { key: "detail", label: "Detay" },
+        { key: "amount", label: "Tutar" },
+        { key: "timestamp", label: "Zaman" },
       ]}
       stats={[
-        { label: "Bugünkü işlem", value: "28", note: "4 kullanıcı" },
-        { label: "Bu hafta", value: "174", note: "İzlenebilir kayıt" },
-        { label: "Oturumlar", value: "12", note: "Aktif kullanıcı" },
-      ]}
-      rows={[
         {
-          title: "Yeni tahsilat kaydedildi",
-          subtitle: "Av. Ahmet Yılmaz • Kaya Holding A.Ş.",
-          meta: "28 Temmuz 2026, 10:22 • 2026/109",
-          status: "Tahsilat",
-          amount: "₺62.000",
+          label: "Toplam kayıt",
+          value: String(state.activities.length),
+          note: "İzlenebilir",
         },
         {
-          title: "Bilirkişi raporu yüklendi",
-          subtitle: "Buse Eren • 2026/126 dosyası",
-          meta: "28 Temmuz 2026, 09:18 • PDF",
-          status: "Evrak",
+          label: "Bugün",
+          value: String(
+            state.activities.filter(
+              (a) => a.timestamp.slice(0, 10) === new Date().toISOString().slice(0, 10),
+            ).length,
+          ),
+          note: "Güncel hareket",
         },
         {
-          title: "Dosya durumu güncellendi",
-          subtitle: "Av. Selin Aras • 2026/127 dosyası",
-          meta: "27 Temmuz 2026, 18:40 • Ön inceleme",
-          status: "Güncellendi",
+          label: "Kullanıcı",
+          value: String(new Set(state.activities.map((a) => a.actorId)).size),
+          note: "Aktör",
         },
       ]}
+      rows={state.activities.map((a) => ({
+        id: a.id,
+        action: a.action,
+        entity: a.entity,
+        actor: findUser(a.actorId)?.name ?? "—",
+        detail: a.detail,
+        amount: a.amount ?? "—",
+        timestamp: new Date(a.timestamp).toLocaleString("tr-TR"),
+      }))}
     />
   );
 }

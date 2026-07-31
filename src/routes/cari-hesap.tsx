@@ -1,10 +1,44 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Landmark } from "lucide-react";
 import { ManagementPage } from "@/components/management/ManagementPage";
+import { useErp } from "@/lib/erp-store";
 
 export const Route = createFileRoute("/cari-hesap")({ component: Page });
 
 function Page() {
+  const { state, formatMoney } = useErp();
+
+  const rows = state.clients.map((client) => {
+    const clientCases = state.cases.filter((c) => c.clientId === client.id);
+    const caseIds = new Set(clientCases.map((c) => c.id));
+    const payments = state.payments
+      .filter((p) => caseIds.has(p.caseId) && p.status === "Tamamlandı")
+      .reduce((s, p) => s + p.amount, 0);
+    const expenses = state.expenses
+      .filter((e) => caseIds.has(e.caseId))
+      .reduce((s, e) => s + e.amount, 0);
+    const balance = payments - expenses;
+    const lastPayment = state.payments
+      .filter((p) => caseIds.has(p.caseId))
+      .sort((a, b) => b.date.localeCompare(a.date))[0];
+    return {
+      id: client.id,
+      client: client.name,
+      kind: client.kind,
+      activeCases: String(clientCases.filter((c) => c.stage !== "Kapalı").length),
+      lastTx: lastPayment
+        ? `${lastPayment.date} • ${lastPayment.type}`
+        : "İşlem yok",
+      balance: formatMoney(balance),
+      status: balance < 0 ? "Önemli" : "Güncel",
+    };
+  });
+
+  const totalPay = state.payments
+    .filter((p) => p.status === "Tamamlandı")
+    .reduce((s, p) => s + p.amount, 0);
+  const totalExp = state.expenses.reduce((s, e) => s + e.amount, 0);
+
   return (
     <ManagementPage
       title="Cari Hesap"
@@ -12,70 +46,27 @@ function Page() {
       singular="cari hesap kaydı"
       icon={Landmark}
       accent="green"
-      filterOptions={["Tümü", "Güncel", "Önemli"]}
-      formFields={[
+      readOnly
+      canCreate={false}
+      columns={[
+        { key: "client", label: "Müvekkil" },
+        { key: "kind", label: "Tür", filterable: true },
+        { key: "activeCases", label: "Aktif dosya" },
+        { key: "lastTx", label: "Son işlem" },
+        { key: "balance", label: "Bakiye" },
         {
-          name: "title",
-          label: "Müvekkil",
-          type: "select",
-          options: ["Ayşe Demir", "Kaya Holding A.Ş.", "Mehmet Kaya", "Fatma Öz"],
-          required: true,
-          fullWidth: true,
-        },
-        {
-          name: "subtitle",
-          label: "Dosya",
-          type: "select",
-          options: [
-            "2026/128 • Alacak davası",
-            "2026/109 • Ticari uyuşmazlık",
-            "2026/098 • Kira uyuşmazlığı",
-          ],
-          required: true,
-        },
-        {
-          name: "meta",
-          label: "Son işlem bilgisi",
-          placeholder: "Tarih • Ödeme türü",
-          required: true,
-        },
-        { name: "amount", label: "Kalan bakiye", type: "number", placeholder: "0", required: true },
-        {
-          name: "status",
-          label: "Hesap durumu",
-          type: "select",
-          options: ["Güncel", "Önemli", "Kapalı"],
-          required: true,
+          key: "status",
+          label: "Durum",
+          filterable: true,
+          filterOptions: ["Güncel", "Önemli"],
         },
       ]}
       stats={[
-        { label: "Toplam tahsilat", value: "₺284.500", note: "Bu ay" },
-        { label: "Toplam masraf", value: "₺47.300", note: "Bu ay" },
-        { label: "Net bakiye", value: "₺237.200", note: "Pozitif bakiye" },
+        { label: "Toplam tahsilat", value: formatMoney(totalPay), note: "Tamamlanan" },
+        { label: "Toplam masraf", value: formatMoney(totalExp), note: "Kayıtlı" },
+        { label: "Net bakiye", value: formatMoney(totalPay - totalExp), note: "Tahsilat - masraf" },
       ]}
-      rows={[
-        {
-          title: "Kaya Holding A.Ş.",
-          subtitle: "7 aktif dosya • Kurumsal müvekkil",
-          meta: "Son işlem: 28 Temmuz 2026 • Havale",
-          status: "Güncel",
-          amount: "₺112.400",
-        },
-        {
-          title: "Ayşe Demir",
-          subtitle: "2 aktif dosya • Bireysel müvekkil",
-          meta: "Son işlem: 28 Temmuz 2026 • Kredi kartı",
-          status: "Güncel",
-          amount: "₺24.500",
-        },
-        {
-          title: "Fatma Öz",
-          subtitle: "1 aktif dosya • Bireysel müvekkil",
-          meta: "Son işlem: 22 Temmuz 2026 • Vade geçti",
-          status: "Önemli",
-          amount: "-₺3.200",
-        },
-      ]}
+      rows={rows}
     />
   );
 }

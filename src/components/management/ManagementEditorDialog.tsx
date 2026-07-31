@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -39,6 +40,61 @@ type Props = {
   onSave: (values: Record<string, string>) => void;
 };
 
+function FieldControl({
+  field,
+  fieldId,
+  currentValue,
+}: {
+  field: ManagementFormField;
+  fieldId: string;
+  currentValue: string;
+}) {
+  const [selectValue, setSelectValue] = useState(currentValue || field.options?.[0] || "");
+
+  if (field.type === "textarea") {
+    return (
+      <Textarea
+        id={fieldId}
+        name={field.name}
+        defaultValue={currentValue}
+        placeholder={field.placeholder}
+        required={field.required}
+      />
+    );
+  }
+
+  if (field.type === "select") {
+    return (
+      <>
+        <input type="hidden" name={field.name} value={selectValue} />
+        <Select value={selectValue} onValueChange={setSelectValue}>
+          <SelectTrigger id={fieldId} className="h-10">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {field.options?.map((option) => (
+              <SelectItem key={option} value={option}>
+                {option}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </>
+    );
+  }
+
+  return (
+    <Input
+      id={fieldId}
+      name={field.name}
+      type={field.type ?? "text"}
+      defaultValue={field.type === "file" ? undefined : currentValue}
+      placeholder={field.placeholder}
+      required={field.required}
+    />
+  );
+}
+
 export function ManagementEditorDialog({
   open,
   onOpenChange,
@@ -57,6 +113,7 @@ export function ManagementEditorDialog({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <form
+          key={JSON.stringify(values) + String(open)}
           className="grid gap-4 sm:grid-cols-2"
           onSubmit={(event) => {
             event.preventDefault();
@@ -76,37 +133,7 @@ export function ManagementEditorDialog({
                 className={`grid gap-2 ${field.fullWidth || field.type === "textarea" ? "sm:col-span-2" : ""}`}
               >
                 <Label htmlFor={fieldId}>{field.label}</Label>
-                {field.type === "textarea" ? (
-                  <Textarea
-                    id={fieldId}
-                    name={field.name}
-                    defaultValue={currentValue}
-                    placeholder={field.placeholder}
-                    required={field.required}
-                  />
-                ) : field.type === "select" ? (
-                  <Select name={field.name} defaultValue={currentValue || field.options?.[0]}>
-                    <SelectTrigger id={fieldId} className="h-10">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {field.options?.map((option) => (
-                        <SelectItem key={option} value={option}>
-                          {option}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Input
-                    id={fieldId}
-                    name={field.name}
-                    type={field.type ?? "text"}
-                    defaultValue={field.type === "file" ? undefined : currentValue}
-                    placeholder={field.placeholder}
-                    required={field.required}
-                  />
-                )}
+                <FieldControl field={field} fieldId={fieldId} currentValue={currentValue} />
               </div>
             );
           })}

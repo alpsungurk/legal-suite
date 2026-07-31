@@ -7,6 +7,7 @@ import {
   useRouterState,
   HeadContent,
   Scripts,
+  useNavigate,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 
@@ -16,6 +17,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import { Toaster } from "@/components/ui/sonner";
+import { ErpProvider, useErp } from "@/lib/erp-store";
 
 function NotFoundComponent() {
   return (
@@ -86,7 +88,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       {
         name: "description",
         content:
-          "Avukatlar için modern hukuk büro yönetim paneli: müvekkil, dosya, tahsilat, masraf, evrak ve hatırlatmaları tek yerde yönetin.",
+          "Avukatlar için modern hukuk büro yönetim paneli: müvekkil, dosya, tahsilat, masraf ve hatırlatmaları tek yerde yönetin.",
       },
       { name: "author", content: "Lex Yönetim" },
       { property: "og:title", content: "Lex Yönetim — Hukuk Büro Yönetim Sistemi" },
@@ -128,6 +130,31 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+function AuthGate({ children }: { children: ReactNode }) {
+  const navigate = useNavigate();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const { isAuthenticated, hydrated } = useErp();
+  const isAuthPage = pathname === "/giris";
+
+  useEffect(() => {
+    if (!hydrated) return;
+    if (!isAuthenticated && !isAuthPage) {
+      navigate({ to: "/giris" });
+    } else if (isAuthenticated && isAuthPage) {
+      navigate({ to: "/" });
+    }
+  }, [hydrated, isAuthenticated, isAuthPage, navigate]);
+
+  if (!hydrated) {
+    return <div className="grid min-h-screen place-items-center text-sm text-muted-foreground">Yükleniyor…</div>;
+  }
+
+  if (!isAuthenticated && !isAuthPage) return null;
+  if (isAuthenticated && isAuthPage) return null;
+
+  return <>{children}</>;
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -135,25 +162,29 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {isAuthPage ? (
-        <>
-          <Outlet />
-          <Toaster />
-        </>
-      ) : (
-        <SidebarProvider>
-          <div className="flex min-h-screen w-full bg-background">
-            <AppSidebar />
-            <SidebarInset className="flex min-w-0 flex-1 flex-col">
-              <Topbar />
-              <main className="min-w-0 flex-1 overflow-x-hidden px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
-                <Outlet />
-              </main>
-            </SidebarInset>
-          </div>
-          <Toaster />
-        </SidebarProvider>
-      )}
+      <ErpProvider>
+        <AuthGate>
+          {isAuthPage ? (
+            <>
+              <Outlet />
+              <Toaster />
+            </>
+          ) : (
+            <SidebarProvider>
+              <div className="flex min-h-screen w-full bg-background">
+                <AppSidebar />
+                <SidebarInset className="flex min-w-0 flex-1 flex-col">
+                  <Topbar />
+                  <main className="min-w-0 flex-1 overflow-x-hidden px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
+                    <Outlet />
+                  </main>
+                </SidebarInset>
+              </div>
+              <Toaster />
+            </SidebarProvider>
+          )}
+        </AuthGate>
+      </ErpProvider>
     </QueryClientProvider>
   );
 }

@@ -16,7 +16,6 @@ import { Route as AyarlarRouteImport } from './routes/ayarlar'
 import { Route as BildirimlerRouteImport } from './routes/bildirimler'
 import { Route as CariHesapRouteImport } from './routes/cari-hesap'
 import { Route as DosyalarRouteImport } from './routes/dosyalar'
-import { Route as EvraklarRouteImport } from './routes/evraklar'
 import { Route as GirisRouteImport } from './routes/giris'
 import { Route as HatirlatmalarRouteImport } from './routes/hatirlatmalar'
 import { Route as MasraflarRouteImport } from './routes/masraflar'
@@ -59,11 +58,6 @@ const DosyalarRoute = DosyalarRouteImport.update({
   path: '/dosyalar',
   getParentRoute: () => rootRouteImport,
 } as any)
-const EvraklarRoute = EvraklarRouteImport.update({
-  id: '/evraklar',
-  path: '/evraklar',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const GirisRoute = GirisRouteImport.update({
   id: '/giris',
   path: '/giris',
@@ -103,7 +97,6 @@ export interface FileRoutesByFullPath {
   '/bildirimler': typeof BildirimlerRoute
   '/cari-hesap': typeof CariHesapRoute
   '/dosyalar': typeof DosyalarRoute
-  '/evraklar': typeof EvraklarRoute
   '/giris': typeof GirisRoute
   '/hatirlatmalar': typeof HatirlatmalarRoute
   '/masraflar': typeof MasraflarRoute
@@ -119,7 +112,6 @@ export interface FileRoutesByTo {
   '/bildirimler': typeof BildirimlerRoute
   '/cari-hesap': typeof CariHesapRoute
   '/dosyalar': typeof DosyalarRoute
-  '/evraklar': typeof EvraklarRoute
   '/giris': typeof GirisRoute
   '/hatirlatmalar': typeof HatirlatmalarRoute
   '/masraflar': typeof MasraflarRoute
@@ -136,7 +128,6 @@ export interface FileRoutesById {
   '/bildirimler': typeof BildirimlerRoute
   '/cari-hesap': typeof CariHesapRoute
   '/dosyalar': typeof DosyalarRoute
-  '/evraklar': typeof EvraklarRoute
   '/giris': typeof GirisRoute
   '/hatirlatmalar': typeof HatirlatmalarRoute
   '/masraflar': typeof MasraflarRoute
@@ -154,7 +145,6 @@ export interface FileRouteTypes {
     | '/bildirimler'
     | '/cari-hesap'
     | '/dosyalar'
-    | '/evraklar'
     | '/giris'
     | '/hatirlatmalar'
     | '/masraflar'
@@ -170,7 +160,6 @@ export interface FileRouteTypes {
     | '/bildirimler'
     | '/cari-hesap'
     | '/dosyalar'
-    | '/evraklar'
     | '/giris'
     | '/hatirlatmalar'
     | '/masraflar'
@@ -186,7 +175,6 @@ export interface FileRouteTypes {
     | '/bildirimler'
     | '/cari-hesap'
     | '/dosyalar'
-    | '/evraklar'
     | '/giris'
     | '/hatirlatmalar'
     | '/masraflar'
@@ -203,7 +191,6 @@ export interface RootRouteChildren {
   BildirimlerRoute: typeof BildirimlerRoute
   CariHesapRoute: typeof CariHesapRoute
   DosyalarRoute: typeof DosyalarRoute
-  EvraklarRoute: typeof EvraklarRoute
   GirisRoute: typeof GirisRoute
   HatirlatmalarRoute: typeof HatirlatmalarRoute
   MasraflarRoute: typeof MasraflarRoute
@@ -263,13 +250,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DosyalarRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/evraklar': {
-      id: '/evraklar'
-      path: '/evraklar'
-      fullPath: '/evraklar'
-      preLoaderRoute: typeof EvraklarRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/giris': {
       id: '/giris'
       path: '/giris'
@@ -323,7 +303,6 @@ const rootRouteChildren: RootRouteChildren = {
   BildirimlerRoute: BildirimlerRoute,
   CariHesapRoute: CariHesapRoute,
   DosyalarRoute: DosyalarRoute,
-  EvraklarRoute: EvraklarRoute,
   GirisRoute: GirisRoute,
   HatirlatmalarRoute: HatirlatmalarRoute,
   MasraflarRoute: MasraflarRoute,
