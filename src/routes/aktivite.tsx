@@ -6,7 +6,15 @@ import { useErp } from "@/lib/erp-store";
 export const Route = createFileRoute("/aktivite")({ component: Page });
 
 function Page() {
-  const { state, findUser } = useErp();
+  const { state, findUser, permissions } = useErp();
+
+  if (!permissions.canViewActivityHistory) {
+    return (
+      <div className="rounded-xl border p-8 text-center text-muted-foreground">
+        Aktivite geçmişini yalnızca admin görüntüleyebilir.
+      </div>
+    );
+  }
 
   return (
     <ManagementPage

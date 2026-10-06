@@ -22,7 +22,6 @@ export function WelcomeHeader() {
     caseOptions,
     userOptions,
     clientIdByName,
-    userIdByName,
     caseIdByLabel,
     upsertClient,
     upsertCase,
@@ -34,42 +33,54 @@ export function WelcomeHeader() {
   const actions = useMemo(
     () =>
       [
-        {
-          label: "Yeni Müvekkil",
-          singular: "müvekkil",
-          icon: UserPlus,
-          fields: buildClientFormFields(),
-          kind: "client" as const,
-        },
-        {
-          label: "Yeni Dosya",
-          singular: "dosya",
-          icon: FilePlus2,
-          fields: buildCaseFormFields({
-            clientOptions,
-            lawyerOptions: userOptions,
-            caseTypes: state.caseTypes,
-          }),
-          kind: "case" as const,
-        },
-        {
-          label: "Masraf Ekle",
-          singular: "masraf",
-          icon: Receipt,
-          fields: buildExpenseFormFields({
-            caseOptions,
-            clientOptions,
-            expenseTypes: state.expenseTypes,
-          }),
-          kind: "expense" as const,
-        },
-        {
-          label: "Tahsilat Ekle",
-          singular: "tahsilat",
-          icon: Wallet,
-          fields: buildPaymentFormFields({ clientOptions, caseOptions }),
-          kind: "payment" as const,
-        },
+        ...(permissions.canCreateClients
+          ? [
+              {
+                label: "Yeni Müvekkil",
+                singular: "müvekkil",
+                icon: UserPlus,
+                fields: buildClientFormFields(),
+                kind: "client" as const,
+              },
+            ]
+          : []),
+        ...(permissions.canCreateCases
+          ? [
+              {
+                label: "Yeni Dosya",
+                singular: "dosya",
+                icon: FilePlus2,
+                fields: buildCaseFormFields({
+                  clientOptions,
+                  lawyerOptions: userOptions,
+                  caseTypes: state.caseTypes,
+                }),
+                kind: "case" as const,
+              },
+            ]
+          : []),
+        ...(permissions.canManageFinance
+          ? [
+              {
+                label: "Masraf Ekle",
+                singular: "masraf",
+                icon: Receipt,
+                fields: buildExpenseFormFields({
+                  caseOptions,
+                  clientOptions,
+                  expenseTypes: state.expenseTypes,
+                }),
+                kind: "expense" as const,
+              },
+              {
+                label: "Tahsilat Ekle",
+                singular: "tahsilat",
+                icon: Wallet,
+                fields: buildPaymentFormFields({ clientOptions, caseOptions }),
+                kind: "payment" as const,
+              },
+            ]
+          : []),
       ] satisfies Array<{
         label: string;
         singular: string;
@@ -77,7 +88,7 @@ export function WelcomeHeader() {
         fields: ManagementFormField[];
         kind: "client" | "case" | "expense" | "payment";
       }>,
-    [clientOptions, caseOptions, userOptions, state.caseTypes, state.expenseTypes],
+    [clientOptions, caseOptions, userOptions, state.caseTypes, state.expenseTypes, permissions],
   );
 
   const [activeAction, setActiveAction] = useState<(typeof actions)[number] | null>(null);
@@ -103,10 +114,14 @@ export function WelcomeHeader() {
             Hoş Geldiniz, <span className="text-primary">{currentUser.name}</span>
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Size atanmış {myReminders} açık hatırlatma var.
+            {permissions.canViewFinance
+              ? `Büro genelindeki finans ve operasyon özetiniz hazır. ${myReminders} açık hatırlatmanız var.`
+              : `Müvekkil ve dosya çalışmalarınız hazır. Size atanmış ${myReminders} açık hatırlatma var.`}
           </p>
         </div>
-        {permissions.canWrite && (
+        {(permissions.canCreateClients ||
+          permissions.canCreateCases ||
+          permissions.canManageFinance) && (
           <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
             {actions.map((action, index) => (
               <Button
@@ -133,6 +148,11 @@ export function WelcomeHeader() {
         onSave={(data) => {
           if (!activeAction) return;
           if (activeAction.kind === "client") {
+            const monthlyFee = Number(data.monthlyFee) || 0;
+            if (data.kind === "Kurumsal" && monthlyFee > 0 && !data.monthlyFeeStartDate) {
+              toast.error("Aylık ücret takibi için başlangıç tarihi girin");
+              return;
+            }
             upsertClient({
               name: data.name,
               email: data.email,
@@ -140,13 +160,15 @@ export function WelcomeHeader() {
               kind: (data.kind as "Bireysel" | "Kurumsal") || "Bireysel",
               identity: data.identity,
               address: data.address,
+              monthlyFee,
+              monthlyFeeStartDate:
+                data.kind === "Kurumsal" && monthlyFee > 0 ? data.monthlyFeeStartDate : undefined,
               status: data.status === "Pasif" ? "Pasif" : "Aktif",
             });
           } else if (activeAction.kind === "case") {
             const clientId = clientIdByName(data.clientName);
-            const responsibleId = userIdByName(data.responsibleName);
-            if (!clientId || !responsibleId) {
-              toast.error("Müvekkil veya sorumlu seçimi geçersiz");
+            if (!clientId) {
+              toast.error("Müvekkil seçimi geçersiz");
               return;
             }
             upsertCase({
@@ -155,40 +177,78 @@ export function WelcomeHeader() {
               clientId,
               court: data.court,
               type: data.type,
-              responsibleId,
               openingDate: data.openingDate,
-              stage: data.stage,
               note: data.note,
             });
           } else if (activeAction.kind === "expense") {
-            const caseId = caseIdByLabel(data.caseLabel);
-            if (!caseId) {
-              toast.error("Dosya seçimi geçersiz");
+            const caseId = data.caseLabel ? caseIdByLabel(data.caseLabel) : undefined;
+            const clientId =
+              (data.clientName ? clientIdByName(data.clientName) : undefined) ??
+              (caseId ? state.cases.find((item) => item.id === caseId)?.clientId : undefined);
+            if (!caseId && !clientId) {
+              toast.error("Dosya veya müvekkil seçimi gerekli");
               return;
             }
             upsertExpense({
               title: data.title,
               caseId,
               date: data.date,
-              clientId: clientIdByName(data.clientName),
+              clientId,
               payer: data.payer || "Büro",
               amount: Number(data.amount) || 0,
               type: data.type,
               status: data.status,
+              direction: (data.direction as "Gelen" | "Giden") || "Giden",
+              recordDate: data.recordDate,
             });
           } else {
-            const caseId = caseIdByLabel(data.caseLabel);
-            if (!caseId) {
-              toast.error("Dosya seçimi geçersiz");
+            const caseId = data.caseLabel ? caseIdByLabel(data.caseLabel) : undefined;
+            const clientId =
+              (data.clientName ? clientIdByName(data.clientName) : undefined) ??
+              (caseId ? state.cases.find((item) => item.id === caseId)?.clientId : undefined);
+            if (!caseId && !clientId) {
+              toast.error("Dosya veya müvekkil seçimi gerekli");
               return;
             }
+            const countMap: Record<string, number> = {
+              "2 taksit": 2,
+              "3 taksit": 3,
+              "6 taksit": 6,
+              "12 taksit": 12,
+            };
+            const count = countMap[data.taksitPlan] ?? 0;
+            const amount = Number(data.amount) || 0;
+            const eachAmount = count ? Math.floor(amount / count) : 0;
+            const remainder = count ? amount - eachAmount * count : 0;
+            const installments = count
+              ? Array.from({ length: count }, (_, index) => {
+                  const [year, month, day] = data.date.split("-").map(Number);
+                  const monthIndex = month - 1 + index + 1;
+                  const dueYear = year + Math.floor(monthIndex / 12);
+                  const dueMonth = ((monthIndex % 12) + 12) % 12;
+                  const dueDay = Math.min(
+                    day,
+                    new Date(Date.UTC(dueYear, dueMonth + 1, 0)).getUTCDate(),
+                  );
+                  return {
+                    id: `quick-${Date.now()}-${index + 1}`,
+                    amount: eachAmount + (index === count - 1 ? remainder : 0),
+                    dueDate: new Date(Date.UTC(dueYear, dueMonth, dueDay))
+                      .toISOString()
+                      .slice(0, 10),
+                    status: "Bekliyor" as const,
+                  };
+                })
+              : undefined;
             upsertPayment({
               caseId,
+              clientId,
               date: data.date,
-              amount: Number(data.amount) || 0,
-              type: data.type || "Havale",
-              description: data.description,
+              amount,
+              type: data.type || "Peşin",
+              description: "Yasal vekalet ücreti",
               status: data.status,
+              installments,
             });
           }
           toast.success(`${activeAction.label} kaydedildi`);

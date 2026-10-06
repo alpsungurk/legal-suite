@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
-import { Bell, LogOut, Moon, Search, Settings, Sun, User } from "lucide-react";
+import { Bell, LogOut, Moon, Settings, Sun, User } from "lucide-react";
 
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -24,12 +23,12 @@ const titles: Record<string, string> = {
   "/dosyalar": "Dosyalar",
   "/masraflar": "Masraflar",
   "/tahsilatlar": "Tahsilatlar",
+  "/taksitler": "Taksit Takibi",
   "/cari-hesap": "Cari Hesap",
   "/hatirlatmalar": "Hatırlatmalar",
   "/raporlar": "Raporlar",
   "/bildirimler": "Bildirimler",
   "/aktivite": "Aktivite Geçmişi",
-  "/arama": "Global Arama",
   "/ayarlar": "Ayarlar",
 };
 
@@ -62,11 +61,8 @@ export function Topbar() {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const title = titles[pathname] ?? "Dashboard";
   const { currentUser, state, permissions, markAllNotificationsRead, logout } = useErp();
-  const [query, setQuery] = useState("");
 
-  const unread = state.notifications.filter(
-    (n) => n.userId === currentUser.id && !n.read,
-  ).length;
+  const unread = state.notifications.filter((n) => n.userId === currentUser.id && !n.read).length;
 
   const initials = currentUser.name
     .split(" ")
@@ -76,23 +72,6 @@ export function Topbar() {
     .join("")
     .toLocaleUpperCase("tr");
 
-  const goSearch = () => {
-    const q = query.trim();
-    navigate({ to: "/arama", search: q ? { q } : {} });
-  };
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        const el = document.getElementById("global-search-input") as HTMLInputElement | null;
-        el?.focus();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
   return (
     <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b bg-background/80 px-3 backdrop-blur sm:px-6">
       <SidebarTrigger className="h-9 w-9 text-muted-foreground hover:text-foreground" />
@@ -100,23 +79,6 @@ export function Topbar() {
       <h1 className="truncate text-base font-semibold tracking-tight sm:text-lg">{title}</h1>
 
       <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
-        <div className="relative hidden md:block">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            id="global-search-input"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") goSearch();
-            }}
-            placeholder="Müvekkil, dosya, masraf ara..."
-            className="h-9 w-64 rounded-lg border-border bg-secondary/60 pl-9 pr-14 text-sm shadow-none focus-visible:ring-1 lg:w-80"
-          />
-          <kbd className="pointer-events-none absolute right-2 top-1/2 hidden -translate-y-1/2 select-none items-center gap-1 rounded border bg-background px-1.5 font-mono text-[10px] font-medium text-muted-foreground sm:flex">
-            ⌘K
-          </kbd>
-        </div>
-
         <ThemeToggle />
 
         <Button
@@ -151,9 +113,7 @@ export function Topbar() {
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel className="flex flex-col">
               <span className="text-sm">{currentUser.name}</span>
-              <span className="text-xs font-normal text-muted-foreground">
-                {currentUser.email}
-              </span>
+              <span className="text-xs font-normal text-muted-foreground">{currentUser.email}</span>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => navigate({ to: "/ayarlar" })}>

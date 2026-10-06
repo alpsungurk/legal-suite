@@ -251,25 +251,14 @@
   }
 }
 
-@keyframes dashboard-enter {
+@keyframes route-content-enter {
   from {
-    opacity: 0;
-    transform: translateY(14px);
+    opacity: 0.96;
+    transform: translate3d(0, 5px, 0);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes page-enter {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+    transform: translate3d(0, 0, 0);
   }
 }
 
@@ -284,16 +273,12 @@
   }
 }
 
-.dashboard-enter {
-  animation: dashboard-enter 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-.page-enter {
-  animation: page-enter 560ms cubic-bezier(0.16, 1, 0.3, 1) both;
+.route-content-enter {
+  animation: route-content-enter 160ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
 }
 
 .stat-enter {
-  animation: page-enter 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: route-content-enter 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .row-enter {
@@ -342,10 +327,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dashboard-enter,
-  .page-enter,
   .stat-enter,
   .row-enter {
+    animation: none !important;
+  }
+
+  .route-content-enter {
     animation: none !important;
   }
 

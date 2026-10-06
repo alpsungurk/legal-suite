@@ -50,6 +50,7 @@ export function ExpensePieChart() {
                   paddingAngle={2}
                   stroke="var(--color-card)"
                   strokeWidth={2}
+                  isAnimationActive={false}
                 >
                   {expenseBreakdown.map((_, i) => (
                     <Cell key={i} fill={COLORS[i % COLORS.length]} />

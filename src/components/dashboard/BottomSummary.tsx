@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { activeReminders, pendingCollections, recentCases, recentClients } from "@/lib/mock-data";
+import { useErp } from "@/lib/erp-store";
 
 const fmt = (v: number) =>
   new Intl.NumberFormat("tr-TR", {
@@ -37,8 +38,11 @@ function SectionCard({
 }
 
 export function BottomSummary() {
+  const { permissions } = useErp();
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div
+      className={`grid grid-cols-1 gap-4 md:grid-cols-2 ${permissions.canViewFinance ? "xl:grid-cols-4" : "xl:grid-cols-3"}`}
+    >
       <SectionCard title="Son Eklenen Müvekkiller" icon={UserRound}>
         {recentClients.map((c) => (
           <div
@@ -67,37 +71,36 @@ export function BottomSummary() {
             </div>
             <div className="mt-0.5 flex items-center justify-between gap-2 text-xs text-muted-foreground">
               <span className="truncate">{c.client}</span>
-              <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                {c.stage}
-              </span>
             </div>
           </div>
         ))}
       </SectionCard>
 
-      <SectionCard title="Bekleyen Tahsilatlar" icon={Wallet}>
-        {pendingCollections.map((p) => (
-          <div
-            key={p.file}
-            className="flex items-center justify-between gap-2 rounded-md p-1.5 hover:bg-secondary/50"
-          >
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{p.client}</p>
-              <p className="text-xs text-muted-foreground tabular-nums">
-                {p.file} · {p.due}
-              </p>
-            </div>
-            <span
-              className={cn(
-                "shrink-0 text-sm font-semibold tabular-nums",
-                p.overdue ? "text-destructive" : "text-foreground",
-              )}
+      {permissions.canViewFinance && (
+        <SectionCard title="Bekleyen Tahsilatlar" icon={Wallet}>
+          {pendingCollections.map((p) => (
+            <div
+              key={p.file}
+              className="flex items-center justify-between gap-2 rounded-md p-1.5 hover:bg-secondary/50"
             >
-              {fmt(p.amount)}
-            </span>
-          </div>
-        ))}
-      </SectionCard>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">{p.client}</p>
+                <p className="text-xs text-muted-foreground tabular-nums">
+                  {p.file} · {p.due}
+                </p>
+              </div>
+              <span
+                className={cn(
+                  "shrink-0 text-sm font-semibold tabular-nums",
+                  p.overdue ? "text-destructive" : "text-foreground",
+                )}
+              >
+                {fmt(p.amount)}
+              </span>
+            </div>
+          ))}
+        </SectionCard>
+      )}
 
       <SectionCard title="Aktif Hatırlatmalar" icon={Bell}>
         {activeReminders.map((r, i) => {

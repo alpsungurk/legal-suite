@@ -4,7 +4,6 @@ import { toast } from "sonner";
 import { ManagementPage } from "@/components/management/ManagementPage";
 import { buildCaseFormFields } from "@/lib/management-form-config";
 import { useErp } from "@/lib/erp-store";
-import { CASE_STAGES } from "@/lib/erp-types";
 
 type Search = { tur?: string };
 
@@ -17,29 +16,20 @@ export const Route = createFileRoute("/dosyalar")({
 
 function Page() {
   const { tur } = Route.useSearch();
-  const {
-    state,
-    findClient,
-    findUser,
-    clientOptions,
-    userOptions,
-    clientIdByName,
-    userIdByName,
-    upsertCase,
-    deleteCase,
-    permissions,
-  } = useErp();
+  const { state, findClient, clientOptions, clientIdByName, upsertCase, deleteCase, permissions } =
+    useErp();
 
   const filtered = tur ? state.cases.filter((c) => c.type === tur) : state.cases;
-  const active = state.cases.filter((c) => c.stage !== "Kapalı").length;
+  const active = state.cases.length;
 
   return (
     <ManagementPage
       title={tur ? `Dosyalar — ${tur}` : "Dava Dosyaları"}
-      description="Dava süreçlerini, mahkeme bilgilerini, sorumlu avukatları ve dosya geçmişini kontrol altında tutun."
+      description="Dava süreçlerini ve mahkeme bilgilerini tek ekranda takip edin."
       singular="dosya"
       icon={FolderKanban}
       accent="violet"
+      searchPlaceholder="Dosya no, müvekkil adı veya mahkeme ara..."
       columns={[
         { key: "no", label: "Dosya No" },
         { key: "title", label: "Dosya Adı" },
@@ -51,29 +41,22 @@ function Page() {
           filterable: true,
           filterOptions: state.caseTypes,
         },
-        { key: "responsible", label: "Sorumlu", filterable: true },
         { key: "openingDate", label: "Açılış" },
-        {
-          key: "stage",
-          label: "Aşama",
-          filterable: true,
-          filterOptions: [...CASE_STAGES],
-        },
       ]}
       formFields={buildCaseFormFields({
         clientOptions,
-        lawyerOptions: userOptions,
+        lawyerOptions: [],
         caseTypes: state.caseTypes,
       })}
-      canCreate={permissions.canWrite}
-      canEdit={permissions.canWrite}
+      canCreate={permissions.canCreateCases}
+      canEdit={permissions.canManageRecords}
       canDelete={permissions.canDelete}
       stats={[
-        { label: "Aktif dosya", value: String(active), note: "Kapalı hariç" },
+        { label: "Toplam dosya", value: String(active), note: "Kayıtlı dosyalar" },
         {
-          label: "Kapalı dosya",
-          value: String(state.cases.length - active),
-          note: "Arşiv",
+          label: "Arabuluculuk",
+          value: String(state.cases.filter((item) => item.type === "Arabuluculuk").length),
+          note: "Kayıtlı dosya",
         },
         {
           label: tur ? `${tur} dosya` : "Toplam",
@@ -82,7 +65,6 @@ function Page() {
         },
       ]}
       emptyCreateValues={{
-        stage: "Tebligat",
         type: tur ?? state.caseTypes[0] ?? "Dava",
         openingDate: new Date().toISOString().slice(0, 10),
       }}
@@ -90,12 +72,11 @@ function Page() {
         id: item.id,
         no: item.no,
         title: item.title,
-        client: findClient(item.clientId)?.name ?? "—",
-        court: item.court,
+        client: findClient(item.clientId ?? "")?.name ?? "—",
+        court: item.court ?? "—",
         type: item.type,
-        responsible: findUser(item.responsibleId)?.name ?? "—",
         openingDate: item.openingDate,
-        stage: item.stage,
+        note: item.note ?? "—",
       }))}
       getEditValues={(row) => {
         const item = state.cases.find((c) => c.id === row.id);
@@ -105,17 +86,14 @@ function Page() {
           clientName: findClient(item?.clientId ?? "")?.name ?? "",
           court: item?.court ?? "",
           type: item?.type ?? "",
-          responsibleName: findUser(item?.responsibleId ?? "")?.name ?? "",
           openingDate: item?.openingDate ?? "",
-          stage: item?.stage ?? "Tebligat",
           note: item?.note ?? "",
         };
       }}
       onSave={(data, editingId) => {
         const clientId = clientIdByName(data.clientName);
-        const responsibleId = userIdByName(data.responsibleName);
-        if (!clientId || !responsibleId) {
-          toast.error("Müvekkil veya sorumlu seçimi geçersiz");
+        if (!clientId) {
+          toast.error("Müvekkil seçimi geçersiz");
           return;
         }
         upsertCase({
@@ -125,9 +103,7 @@ function Page() {
           clientId,
           court: data.court,
           type: data.type,
-          responsibleId,
           openingDate: data.openingDate,
-          stage: data.stage,
           note: data.note,
         });
         toast.success(editingId ? "Dosya güncellendi" : "Yeni dosya eklendi");

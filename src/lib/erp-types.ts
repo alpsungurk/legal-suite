@@ -1,4 +1,4 @@
-export type UserRole = "Admin" | "Avukat" | "Sekreter" | "Stajyer";
+export type UserRole = "Admin" | "Avukat" | "Sekreter";
 
 export type User = {
   id: string;
@@ -17,41 +17,53 @@ export type Client = {
   status: "Aktif" | "Pasif";
   identity?: string;
   address?: string;
+  monthlyFee?: number;
+  monthlyFeeStartDate?: string;
 };
 
 export type CaseFile = {
   id: string;
   no: string;
   title: string;
-  clientId: string;
-  court: string;
+  clientId?: string;
+  court?: string;
   type: string;
-  responsibleId: string;
-  stage: string;
   openingDate: string;
   note?: string;
+};
+
+export type PaymentInstallment = {
+  id: string;
+  dueDate: string;
+  amount: number;
+  status: "Ödendi" | "Bekliyor" | "Gecikmiş";
 };
 
 export type Expense = {
   id: string;
   title: string;
-  caseId: string;
+  caseId?: string;
+  clientId?: string;
   amount: number;
   date: string;
   payer: string;
   type: string;
   status: string;
-  clientId?: string;
+  direction?: "Gelen" | "Giden";
+  recordDate?: string;
 };
 
 export type Payment = {
   id: string;
-  caseId: string;
+  caseId?: string;
+  clientId?: string;
   amount: number;
   date: string;
   type: string;
   description: string;
   status: string;
+  installments?: PaymentInstallment[];
+  feePeriod?: string;
 };
 
 export type Reminder = {
@@ -101,15 +113,6 @@ export type ErpState = {
   currentUserId: string;
 };
 
-export const CASE_STAGES = [
-  "Tebligat",
-  "Ön inceleme",
-  "Delil toplama",
-  "Duruşma",
-  "Karar",
-  "Kapalı",
-] as const;
-
 export const DEFAULT_CASE_TYPES = ["Dava", "İcra", "Danışmanlık", "Arabuluculuk"];
 export const DEFAULT_EXPENSE_TYPES = [
   "Harç",
@@ -131,11 +134,23 @@ export const DEFAULT_REMINDER_TYPES = [
 ];
 
 export function permissionsFor(role: UserRole) {
+  const isAdmin = role === "Admin";
+  const isLawyer = role === "Avukat";
+  const isSecretary = role === "Sekreter";
+
   return {
-    canAccessSettings: role === "Admin" || role === "Avukat" || role === "Sekreter",
-    canManageUsers: role === "Admin",
-    canManageCategories: role === "Admin" || role === "Avukat",
-    canDelete: role === "Admin" || role === "Avukat",
-    canWrite: role !== "Stajyer",
+    canAccessSettings: isAdmin || isSecretary,
+    canManageUsers: isAdmin,
+    canManageCategories: isAdmin || isSecretary,
+    canDelete: isAdmin || isSecretary,
+    canWrite: isAdmin || isSecretary,
+    canManageRecords: isAdmin || isSecretary,
+    canManageFinance: isAdmin || isSecretary,
+    canViewFinance: isAdmin || isSecretary,
+    canViewPayments: isAdmin || isSecretary || isLawyer,
+    canViewActivityHistory: isAdmin,
+    canMarkExpenseReceived: isAdmin,
+    canCreateClients: isAdmin || isLawyer || isSecretary,
+    canCreateCases: isAdmin || isLawyer || isSecretary,
   };
 }

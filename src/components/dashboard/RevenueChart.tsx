@@ -81,6 +81,7 @@ export function RevenueChart() {
                 stroke="var(--color-primary)"
                 strokeWidth={2.5}
                 fill="url(#revFill)"
+                isAnimationActive={false}
                 activeDot={{ r: 5, stroke: "var(--color-background)", strokeWidth: 2 }}
               />
             </AreaChart>

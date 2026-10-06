@@ -11,7 +11,6 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AktiviteRouteImport } from './routes/aktivite'
-import { Route as AramaRouteImport } from './routes/arama'
 import { Route as AyarlarRouteImport } from './routes/ayarlar'
 import { Route as BildirimlerRouteImport } from './routes/bildirimler'
 import { Route as CariHesapRouteImport } from './routes/cari-hesap'
@@ -22,6 +21,7 @@ import { Route as MasraflarRouteImport } from './routes/masraflar'
 import { Route as MuvekkillerRouteImport } from './routes/muvekkiller'
 import { Route as RaporlarRouteImport } from './routes/raporlar'
 import { Route as TahsilatlarRouteImport } from './routes/tahsilatlar'
+import { Route as TaksitlerRouteImport } from './routes/taksitler'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -31,11 +31,6 @@ const IndexRoute = IndexRouteImport.update({
 const AktiviteRoute = AktiviteRouteImport.update({
   id: '/aktivite',
   path: '/aktivite',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AramaRoute = AramaRouteImport.update({
-  id: '/arama',
-  path: '/arama',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AyarlarRoute = AyarlarRouteImport.update({
@@ -88,11 +83,15 @@ const TahsilatlarRoute = TahsilatlarRouteImport.update({
   path: '/tahsilatlar',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TaksitlerRoute = TaksitlerRouteImport.update({
+  id: '/taksitler',
+  path: '/taksitler',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/aktivite': typeof AktiviteRoute
-  '/arama': typeof AramaRoute
   '/ayarlar': typeof AyarlarRoute
   '/bildirimler': typeof BildirimlerRoute
   '/cari-hesap': typeof CariHesapRoute
@@ -103,11 +102,11 @@ export interface FileRoutesByFullPath {
   '/muvekkiller': typeof MuvekkillerRoute
   '/raporlar': typeof RaporlarRoute
   '/tahsilatlar': typeof TahsilatlarRoute
+  '/taksitler': typeof TaksitlerRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/aktivite': typeof AktiviteRoute
-  '/arama': typeof AramaRoute
   '/ayarlar': typeof AyarlarRoute
   '/bildirimler': typeof BildirimlerRoute
   '/cari-hesap': typeof CariHesapRoute
@@ -118,12 +117,12 @@ export interface FileRoutesByTo {
   '/muvekkiller': typeof MuvekkillerRoute
   '/raporlar': typeof RaporlarRoute
   '/tahsilatlar': typeof TahsilatlarRoute
+  '/taksitler': typeof TaksitlerRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/aktivite': typeof AktiviteRoute
-  '/arama': typeof AramaRoute
   '/ayarlar': typeof AyarlarRoute
   '/bildirimler': typeof BildirimlerRoute
   '/cari-hesap': typeof CariHesapRoute
@@ -134,13 +133,13 @@ export interface FileRoutesById {
   '/muvekkiller': typeof MuvekkillerRoute
   '/raporlar': typeof RaporlarRoute
   '/tahsilatlar': typeof TahsilatlarRoute
+  '/taksitler': typeof TaksitlerRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/aktivite'
-    | '/arama'
     | '/ayarlar'
     | '/bildirimler'
     | '/cari-hesap'
@@ -151,11 +150,11 @@ export interface FileRouteTypes {
     | '/muvekkiller'
     | '/raporlar'
     | '/tahsilatlar'
+    | '/taksitler'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/aktivite'
-    | '/arama'
     | '/ayarlar'
     | '/bildirimler'
     | '/cari-hesap'
@@ -166,11 +165,11 @@ export interface FileRouteTypes {
     | '/muvekkiller'
     | '/raporlar'
     | '/tahsilatlar'
+    | '/taksitler'
   id:
     | '__root__'
     | '/'
     | '/aktivite'
-    | '/arama'
     | '/ayarlar'
     | '/bildirimler'
     | '/cari-hesap'
@@ -181,12 +180,12 @@ export interface FileRouteTypes {
     | '/muvekkiller'
     | '/raporlar'
     | '/tahsilatlar'
+    | '/taksitler'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AktiviteRoute: typeof AktiviteRoute
-  AramaRoute: typeof AramaRoute
   AyarlarRoute: typeof AyarlarRoute
   BildirimlerRoute: typeof BildirimlerRoute
   CariHesapRoute: typeof CariHesapRoute
@@ -197,6 +196,7 @@ export interface RootRouteChildren {
   MuvekkillerRoute: typeof MuvekkillerRoute
   RaporlarRoute: typeof RaporlarRoute
   TahsilatlarRoute: typeof TahsilatlarRoute
+  TaksitlerRoute: typeof TaksitlerRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -213,13 +213,6 @@ declare module '@tanstack/react-router' {
       path: '/aktivite'
       fullPath: '/aktivite'
       preLoaderRoute: typeof AktiviteRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/arama': {
-      id: '/arama'
-      path: '/arama'
-      fullPath: '/arama'
-      preLoaderRoute: typeof AramaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/ayarlar': {
@@ -292,13 +285,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TahsilatlarRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/taksitler': {
+      id: '/taksitler'
+      path: '/taksitler'
+      fullPath: '/taksitler'
+      preLoaderRoute: typeof TaksitlerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AktiviteRoute: AktiviteRoute,
-  AramaRoute: AramaRoute,
   AyarlarRoute: AyarlarRoute,
   BildirimlerRoute: BildirimlerRoute,
   CariHesapRoute: CariHesapRoute,
@@ -309,6 +308,7 @@ const rootRouteChildren: RootRouteChildren = {
   MuvekkillerRoute: MuvekkillerRoute,
   RaporlarRoute: RaporlarRoute,
   TahsilatlarRoute: TahsilatlarRoute,
+  TaksitlerRoute: TaksitlerRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

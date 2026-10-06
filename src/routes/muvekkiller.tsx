@@ -18,16 +18,19 @@ function Page() {
       singular="müvekkil"
       icon={Users}
       accent="blue"
+      searchPlaceholder="Müvekkil adı, e-posta veya telefon ara..."
       columns={[
         { key: "name", label: "Ad Soyad / Firma" },
         { key: "kind", label: "Tür", filterable: true },
+        { key: "monthlyFee", label: "Aylık ücret" },
+        { key: "monthlyFeeStartDate", label: "Ücret başlangıcı" },
         { key: "email", label: "E-posta" },
         { key: "phone", label: "Telefon" },
         { key: "status", label: "Durum", filterable: true, filterOptions: ["Aktif", "Pasif"] },
       ]}
       formFields={buildClientFormFields()}
-      canCreate={permissions.canWrite}
-      canEdit={permissions.canWrite}
+      canCreate={permissions.canCreateClients}
+      canEdit={permissions.canManageRecords}
       canDelete={permissions.canDelete}
       stats={[
         { label: "Toplam müvekkil", value: String(state.clients.length), note: "Kayıtlı" },
@@ -47,6 +50,10 @@ function Page() {
         id: client.id,
         name: client.name,
         kind: client.kind,
+        monthlyFee: client.monthlyFee ? `₺${client.monthlyFee.toLocaleString("tr-TR")}` : "—",
+        monthlyFeeStartDate: client.monthlyFeeStartDate ?? "—",
+        identity: client.identity ?? "—",
+        address: client.address ?? "—",
         email: client.email,
         phone: client.phone,
         status: client.status,
@@ -59,11 +66,18 @@ function Page() {
           phone: client?.phone ?? "",
           kind: client?.kind ?? "Bireysel",
           identity: client?.identity ?? "",
+          monthlyFee: String(client?.monthlyFee ?? "0"),
+          monthlyFeeStartDate: client?.monthlyFeeStartDate ?? "",
           address: client?.address ?? "",
           status: client?.status ?? "Aktif",
         };
       }}
       onSave={(data, editingId) => {
+        const monthlyFee = Number(data.monthlyFee) || 0;
+        if (data.kind === "Kurumsal" && monthlyFee > 0 && !data.monthlyFeeStartDate) {
+          toast.error("Aylık ücret takibi için başlangıç tarihi girin");
+          return;
+        }
         upsertClient({
           id: editingId ?? undefined,
           name: data.name,
@@ -71,6 +85,9 @@ function Page() {
           phone: data.phone,
           kind: (data.kind as "Bireysel" | "Kurumsal") || "Bireysel",
           identity: data.identity,
+          monthlyFee,
+          monthlyFeeStartDate:
+            data.kind === "Kurumsal" && monthlyFee > 0 ? data.monthlyFeeStartDate : undefined,
           address: data.address,
           status: data.status === "Pasif" ? "Pasif" : "Aktif",
         });

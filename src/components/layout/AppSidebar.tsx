@@ -13,7 +13,7 @@ import {
   Scale,
   Landmark,
   History,
-  Search,
+  CalendarClock,
   ChevronRight,
 } from "lucide-react";
 import {
@@ -40,12 +40,12 @@ const flatItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Müvekkiller", url: "/muvekkiller", icon: Users },
   { title: "Tahsilatlar", url: "/tahsilatlar", icon: Wallet },
+  { title: "Taksitler", url: "/taksitler", icon: CalendarClock },
   { title: "Cari Hesap", url: "/cari-hesap", icon: Landmark },
   { title: "Hatırlatmalar", url: "/hatirlatmalar", icon: BellRing },
   { title: "Raporlar", url: "/raporlar", icon: BarChart3 },
   { title: "Bildirimler", url: "/bildirimler", icon: Bell },
   { title: "Aktivite Geçmişi", url: "/aktivite", icon: History },
-  { title: "Global Arama", url: "/arama", icon: Search },
 ];
 
 export function AppSidebar() {
@@ -69,6 +69,19 @@ export function AppSidebar() {
 
   const isActive = (url: string) =>
     url === "/" ? pathname === "/" : pathname === url || pathname.startsWith(url + "/");
+
+  const visibleFlatItems = flatItems.filter((item) => {
+    if (item.url === "/aktivite") {
+      return permissions.canViewActivityHistory;
+    }
+    if (item.url === "/tahsilatlar") {
+      return permissions.canViewPayments;
+    }
+    if (["/taksitler", "/cari-hesap", "/raporlar"].includes(item.url)) {
+      return permissions.canViewFinance;
+    }
+    return true;
+  });
 
   const initials = currentUser.name
     .split(" ")
@@ -108,7 +121,7 @@ export function AppSidebar() {
           )}
           <SidebarGroupContent>
             <SidebarMenu>
-              {flatItems.slice(0, 2).map((item) => (
+              {visibleFlatItems.slice(0, 2).map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
@@ -147,7 +160,10 @@ export function AppSidebar() {
                     <CollapsibleContent>
                       <SidebarMenuSub>
                         <SidebarMenuSubItem>
-                          <SidebarMenuSubButton asChild isActive={pathname === "/dosyalar" && !turParam}>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={pathname === "/dosyalar" && !turParam}
+                          >
                             <Link to="/dosyalar">Tümü</Link>
                           </SidebarMenuSubButton>
                         </SidebarMenuSubItem>
@@ -169,55 +185,57 @@ export function AppSidebar() {
                 </SidebarMenuItem>
               </Collapsible>
 
-              <Collapsible
-                asChild
-                defaultOpen={pathname.startsWith("/masraflar")}
-                className="group/collapsible"
-              >
-                <SidebarMenuItem>
-                  <CollapsibleTrigger asChild>
-                    <SidebarMenuButton
-                      tooltip="Masraflar"
-                      isActive={pathname.startsWith("/masraflar")}
-                      className="data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground data-[active=true]:shadow-soft hover:bg-sidebar-accent"
-                    >
-                      <Receipt className="h-[18px] w-[18px] shrink-0" />
-                      {!collapsed && <span className="truncate">Masraflar</span>}
-                      {!collapsed && (
-                        <ChevronRight className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
-                      )}
-                    </SidebarMenuButton>
-                  </CollapsibleTrigger>
-                  {!collapsed && (
-                    <CollapsibleContent>
-                      <SidebarMenuSub>
-                        <SidebarMenuSubItem>
-                          <SidebarMenuSubButton
-                            asChild
-                            isActive={pathname === "/masraflar" && !turParam}
-                          >
-                            <Link to="/masraflar">Tümü</Link>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
-                        {erp.expenseTypes.map((type) => (
-                          <SidebarMenuSubItem key={type}>
+              {permissions.canViewFinance && (
+                <Collapsible
+                  asChild
+                  defaultOpen={pathname.startsWith("/masraflar")}
+                  className="group/collapsible"
+                >
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton
+                        tooltip="Masraflar"
+                        isActive={pathname.startsWith("/masraflar")}
+                        className="data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground data-[active=true]:shadow-soft hover:bg-sidebar-accent"
+                      >
+                        <Receipt className="h-[18px] w-[18px] shrink-0" />
+                        {!collapsed && <span className="truncate">Masraflar</span>}
+                        {!collapsed && (
+                          <ChevronRight className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
+                        )}
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    {!collapsed && (
+                      <CollapsibleContent>
+                        <SidebarMenuSub>
+                          <SidebarMenuSubItem>
                             <SidebarMenuSubButton
                               asChild
-                              isActive={pathname === "/masraflar" && turParam === type}
+                              isActive={pathname === "/masraflar" && !turParam}
                             >
-                              <Link to="/masraflar" search={{ tur: type }}>
-                                {type}
-                              </Link>
+                              <Link to="/masraflar">Tümü</Link>
                             </SidebarMenuSubButton>
                           </SidebarMenuSubItem>
-                        ))}
-                      </SidebarMenuSub>
-                    </CollapsibleContent>
-                  )}
-                </SidebarMenuItem>
-              </Collapsible>
+                          {erp.expenseTypes.map((type) => (
+                            <SidebarMenuSubItem key={type}>
+                              <SidebarMenuSubButton
+                                asChild
+                                isActive={pathname === "/masraflar" && turParam === type}
+                              >
+                                <Link to="/masraflar" search={{ tur: type }}>
+                                  {type}
+                                </Link>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          ))}
+                        </SidebarMenuSub>
+                      </CollapsibleContent>
+                    )}
+                  </SidebarMenuItem>
+                </Collapsible>
+              )}
 
-              {flatItems.slice(2).map((item) => (
+              {visibleFlatItems.slice(2).map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild

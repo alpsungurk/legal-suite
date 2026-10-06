@@ -21,8 +21,7 @@ const DEMO_ACCOUNTS = [
   { username: "admin", label: "Admin" },
   { username: "avukat", label: "Avukat" },
   { username: "avukat2", label: "Avukat 2" },
-  { username: "stajyer", label: "Stajyer" },
-  { username: "stajyer2", label: "Stajyer 2" },
+  { username: "sekreter", label: "Sekreter" },
 ] as const;
 
 function Login() {

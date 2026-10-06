@@ -8,6 +8,7 @@ import { UpcomingReminders } from "@/components/dashboard/UpcomingReminders";
 import { NotificationsPanel } from "@/components/dashboard/NotificationsPanel";
 import { MiniCalendar } from "@/components/dashboard/MiniCalendar";
 import { BottomSummary } from "@/components/dashboard/BottomSummary";
+import { useErp } from "@/lib/erp-store";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -29,22 +30,25 @@ export const Route = createFileRoute("/")({
 });
 
 function Dashboard() {
+  const { permissions } = useErp();
   return (
-    <div className="dashboard-enter mx-auto min-w-0 max-w-[1600px] space-y-5 sm:space-y-6">
+    <div className="mx-auto min-w-0 max-w-[1600px] space-y-5 sm:space-y-6">
       <WelcomeHeader />
       <StatCards />
 
-      <div className="grid min-w-0 grid-cols-1 items-stretch gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(360px,0.9fr)]">
-        <div className="min-w-0">
-          <RevenueChart />
+      {permissions.canViewFinance && (
+        <div
+          className={`grid min-w-0 grid-cols-1 items-stretch gap-4 ${permissions.canViewFinance ? "xl:grid-cols-[minmax(0,1.7fr)_minmax(360px,0.9fr)]" : ""}`}
+        >
+          <div className="min-w-0">
+            <RevenueChart />
+          </div>
+          <ExpensePieChart />
         </div>
-        <ExpensePieChart />
-      </div>
+      )}
 
       <div className="grid min-w-0 grid-cols-1 items-stretch gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(360px,0.9fr)]">
-        <div className="min-w-0">
-          <RecentTransactionsTable />
-        </div>
+        {permissions.canViewFinance && <RecentTransactionsTable />}
         <NotificationsPanel />
       </div>
 

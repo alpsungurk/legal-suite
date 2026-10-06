@@ -143,7 +143,7 @@ function Page() {
                 key: "role",
                 label: "Rol",
                 filterable: true,
-                filterOptions: ["Admin", "Avukat", "Sekreter", "Stajyer"],
+                filterOptions: ["Admin", "Avukat", "Sekreter"],
               },
             ]}
             formFields={buildUserFormFields()}

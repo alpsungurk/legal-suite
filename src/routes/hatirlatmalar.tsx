@@ -118,7 +118,7 @@ function Page() {
           client: r.clientId
             ? (findClient(r.clientId)?.name ?? "—")
             : item
-              ? (findClient(item.clientId)?.name ?? "—")
+              ? (findClient(item.clientId ?? "")?.name ?? "—")
               : "—",
           assignee: findUser(r.assigneeId)?.name ?? "—",
           type: r.type,

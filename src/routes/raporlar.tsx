@@ -6,7 +6,16 @@ import { useErp } from "@/lib/erp-store";
 export const Route = createFileRoute("/raporlar")({ component: Page });
 
 function Page() {
-  const { state, formatMoney } = useErp();
+  const { state, formatMoney, permissions } = useErp();
+
+  if (!permissions.canViewFinance) {
+    return (
+      <div className="rounded-xl border p-8 text-center text-muted-foreground">
+        Bu sayfaya erişim yetkiniz yok.
+      </div>
+    );
+  }
+
   const totalPay = state.payments
     .filter((p) => p.status === "Tamamlandı")
     .reduce((s, p) => s + p.amount, 0);

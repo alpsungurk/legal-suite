@@ -1,10 +1,23 @@
-import { ArrowDownRight, ArrowUpRight, FolderKanban, TrendingDown, TrendingUp, Users, Wallet } from "lucide-react";
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  FolderKanban,
+  TrendingDown,
+  TrendingUp,
+  Users,
+  Wallet,
+} from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { stats } from "@/lib/mock-data";
+import { useErp } from "@/lib/erp-store";
 
 const fmtCurrency = (v: number) =>
-  new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY", maximumFractionDigits: 0 }).format(v);
+  new Intl.NumberFormat("tr-TR", {
+    style: "currency",
+    currency: "TRY",
+    maximumFractionDigits: 0,
+  }).format(v);
 const fmtNumber = (v: number) => new Intl.NumberFormat("tr-TR").format(v);
 
 const items = [
@@ -46,9 +59,16 @@ const toneStyles: Record<string, string> = {
 };
 
 export function StatCards() {
+  const { permissions } = useErp();
+  const visibleItems = permissions.canViewFinance
+    ? items
+    : items.filter((item) => item.label !== "Bu Ay Tahsilat" && item.label !== "Bu Ay Masraf");
+
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      {items.map((s) => {
+    <div
+      className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${permissions.canViewFinance ? "xl:grid-cols-4" : "xl:grid-cols-2"}`}
+    >
+      {visibleItems.map((s) => {
         const positive = s.delta >= 0;
         return (
           <Card
@@ -61,11 +81,14 @@ export function StatCards() {
                   <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                     {s.label}
                   </p>
-                  <p className="mt-2 truncate text-2xl font-semibold tracking-tight">
-                    {s.value}
-                  </p>
+                  <p className="mt-2 truncate text-2xl font-semibold tracking-tight">{s.value}</p>
                 </div>
-                <div className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-xl", toneStyles[s.tone])}>
+                <div
+                  className={cn(
+                    "grid h-10 w-10 shrink-0 place-items-center rounded-xl",
+                    toneStyles[s.tone],
+                  )}
+                >
                   <s.icon className="h-5 w-5" />
                 </div>
               </div>
@@ -74,12 +97,14 @@ export function StatCards() {
                 <span
                   className={cn(
                     "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 font-medium",
-                    positive
-                      ? "bg-success/15 text-success"
-                      : "bg-destructive/15 text-destructive"
+                    positive ? "bg-success/15 text-success" : "bg-destructive/15 text-destructive",
                   )}
                 >
-                  {positive ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                  {positive ? (
+                    <ArrowUpRight className="h-3 w-3" />
+                  ) : (
+                    <ArrowDownRight className="h-3 w-3" />
+                  )}
                   {Math.abs(s.delta).toFixed(1)}%
                 </span>
                 <span className="text-muted-foreground">geçen aya göre</span>

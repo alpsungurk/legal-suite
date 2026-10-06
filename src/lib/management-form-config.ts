@@ -1,5 +1,4 @@
 import type { ManagementFormField } from "@/components/management/ManagementEditorDialog";
-import { CASE_STAGES } from "@/lib/erp-types";
 
 export function buildClientFormFields(): ManagementFormField[] {
   return [
@@ -20,6 +19,19 @@ export function buildClientFormFields(): ManagementFormField[] {
       required: true,
     },
     { name: "identity", label: "TC Kimlik / Vergi No", placeholder: "Opsiyonel" },
+    {
+      name: "monthlyFee",
+      label: "Aylık ücret",
+      type: "number",
+      placeholder: "0",
+      visibleWhen: { field: "kind", equals: "Kurumsal" },
+    },
+    {
+      name: "monthlyFeeStartDate",
+      label: "Aylık ücret başlangıç tarihi",
+      type: "date",
+      visibleWhen: { field: "kind", equals: "Kurumsal" },
+    },
     {
       name: "address",
       label: "Adres",
@@ -60,7 +72,7 @@ export function buildCaseFormFields(opts: {
       label: "Müvekkil",
       type: "select",
       options: opts.clientOptions,
-      required: true,
+      allowEmpty: true,
     },
     {
       name: "court",
@@ -75,21 +87,7 @@ export function buildCaseFormFields(opts: {
       options: opts.caseTypes,
       required: true,
     },
-    {
-      name: "responsibleName",
-      label: "Sorumlu avukat",
-      type: "select",
-      options: opts.lawyerOptions,
-      required: true,
-    },
     { name: "openingDate", label: "Açılış tarihi", type: "date", required: true },
-    {
-      name: "stage",
-      label: "Dosya aşaması",
-      type: "select",
-      options: [...CASE_STAGES],
-      required: true,
-    },
     {
       name: "note",
       label: "Dosya açıklaması",
@@ -109,16 +107,16 @@ export function buildExpenseFormFields(opts: {
     {
       name: "title",
       label: "Masraf açıklaması",
-      placeholder: "Örn. Harç ödemesi",
+      placeholder: "Örn. Yasal vekalet ücreti",
       required: true,
       fullWidth: true,
     },
     {
       name: "caseLabel",
-      label: "Dosya",
+      label: "Dosya (opsiyonel)",
       type: "select",
       options: opts.caseOptions,
-      required: true,
+      allowEmpty: true,
     },
     { name: "date", label: "Tarih", type: "date", required: true },
     {
@@ -126,6 +124,20 @@ export function buildExpenseFormFields(opts: {
       label: "Müvekkil",
       type: "select",
       options: opts.clientOptions,
+      required: true,
+    },
+    {
+      name: "direction",
+      label: "Gelen / Giden",
+      type: "select",
+      options: ["Gelen", "Giden"],
+      required: true,
+    },
+    {
+      name: "recordDate",
+      label: "Alacak olarak kaydetme tarihi",
+      type: "date",
+      required: true,
     },
     {
       name: "payer",
@@ -145,7 +157,7 @@ export function buildExpenseFormFields(opts: {
       name: "status",
       label: "Belge durumu",
       type: "select",
-      options: ["Belgelendi", "Onay bekliyor", "Belgesiz"],
+      options: ["Alındı", "Belgelendi", "Onay bekliyor", "Belgesiz"],
       required: true,
     },
   ];
@@ -161,29 +173,45 @@ export function buildPaymentFormFields(opts: {
       label: "Müvekkil",
       type: "select",
       options: opts.clientOptions,
-      required: true,
+      allowEmpty: true,
       fullWidth: true,
     },
     {
       name: "caseLabel",
-      label: "Dosya",
+      label: "Dosya (opsiyonel)",
       type: "select",
       options: opts.caseOptions,
-      required: true,
+      allowEmpty: true,
     },
-    { name: "date", label: "Tahsilat tarihi", type: "date", required: true },
+    { name: "date", label: "Parayı alma tarihi", type: "date", required: true },
     { name: "amount", label: "Tahsilat tutarı", type: "number", placeholder: "0", required: true },
     {
       name: "type",
       label: "Ödeme türü",
       type: "select",
-      options: ["Nakit", "Havale", "EFT", "Kredi Kartı", "Diğer"],
+      options: ["Peşin", "Nakit", "Havale"],
+      required: true,
+    },
+    {
+      name: "taksitPlan",
+      label: "Taksit planı",
+      type: "select",
+      options: ["Tek ödeme", "2 taksit", "3 taksit", "6 taksit", "12 taksit"],
+      required: true,
+    },
+    {
+      name: "feePeriod",
+      label: "Aylık ücret dönemi (kurumsal müvekkilde zorunlu)",
+      type: "month",
+      placeholder: "YYYY-AA",
     },
     {
       name: "description",
       label: "Açıklama",
-      placeholder: "Örn. Vekalet ücreti",
+      type: "select",
+      options: ["Yasal vekalet ücreti"],
       required: true,
+      fullWidth: true,
     },
     {
       name: "status",
@@ -279,7 +307,7 @@ export function buildUserFormFields(): ManagementFormField[] {
       name: "role",
       label: "Kullanıcı rolü",
       type: "select",
-      options: ["Admin", "Avukat", "Sekreter", "Stajyer"],
+      options: ["Admin", "Avukat", "Sekreter"],
       required: true,
     },
   ];
@@ -295,7 +323,16 @@ export const caseFormFields = buildCaseFormFields({
 export const expenseFormFields = buildExpenseFormFields({
   caseOptions: [],
   clientOptions: [],
-  expenseTypes: ["Harç", "Bilirkişi", "Tebligat", "Yol", "Kargo", "Fotokopi", "Ofis gideri", "Diğer"],
+  expenseTypes: [
+    "Harç",
+    "Bilirkişi",
+    "Tebligat",
+    "Yol",
+    "Kargo",
+    "Fotokopi",
+    "Ofis gideri",
+    "Diğer",
+  ],
 });
 export const paymentFormFields = buildPaymentFormFields({
   clientOptions: [],

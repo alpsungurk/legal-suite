@@ -157,7 +157,9 @@ function AuthGate({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const location = useRouterState({ select: (state) => state.location });
+  const pathname = location.pathname;
+  const routeKey = `${pathname}:${JSON.stringify(location.search)}`;
   const isAuthPage = pathname === "/giris";
 
   return (
@@ -176,7 +178,9 @@ function RootComponent() {
                 <SidebarInset className="flex min-w-0 flex-1 flex-col">
                   <Topbar />
                   <main className="min-w-0 flex-1 overflow-x-hidden px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
-                    <Outlet />
+                    <div key={routeKey} className="route-content-enter">
+                      <Outlet />
+                    </div>
                   </main>
                 </SidebarInset>
               </div>

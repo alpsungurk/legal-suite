@@ -43,18 +43,61 @@ function loadState(): ErpState {
               ...seedUser,
               ...existing,
               username: existing.username || seedUser.username,
-              role: existing.role || seedUser.role,
+              role:
+                String(existing.role) === "Stajyer"
+                  ? seedUser.role
+                  : existing.role || seedUser.role,
             }
           : seedUser;
       }),
-      ...(parsed.users ?? []).filter((u) => !seedById.has(u.id) && u.username),
+      ...(parsed.users ?? []).filter(
+        (u) => !seedById.has(u.id) && u.username && String(u.role) !== "Stajyer",
+      ),
     ];
+    const seedClientIds = new Set(seed.clients.map((client) => client.id));
+    const normalizedClients = [
+      ...seed.clients.map((seedClient) => ({
+        ...seedClient,
+        ...parsed.clients?.find((client) => client.id === seedClient.id),
+      })),
+      ...(parsed.clients ?? []).filter((client) => !seedClientIds.has(client.id)),
+    ];
+    const normalizedCases = (parsed.cases ?? seed.cases).map((item) => {
+      const caseFile = { ...item } as CaseFile & { responsibleId?: string; stage?: string };
+      delete caseFile.responsibleId;
+      delete caseFile.stage;
+      return caseFile;
+    });
+    const normalizedPayments = (parsed.payments ?? seed.payments).map((payment) =>
+      payment.installments?.length === 1 ? { ...payment, installments: undefined } : payment,
+    );
+    const seedExpensesById = new Map(seed.expenses.map((expense) => [expense.id, expense]));
+    const normalizedExpenses = (parsed.expenses ?? seed.expenses).map((expense) => {
+      if (expense.type !== "Yasal vekalet ücreti") return expense;
+      const seedExpense = seedExpensesById.get(expense.id);
+      if (!seedExpense) return { ...expense, type: "Diğer" };
+      return {
+        ...expense,
+        title: expense.title === "Yasal vekalet ücreti" ? seedExpense.title : expense.title,
+        type: seedExpense.type,
+      };
+    });
     return {
       ...seed,
       ...parsed,
       users: mergedUsers.length ? mergedUsers : seed.users,
+      clients: normalizedClients,
+      cases: normalizedCases,
+      expenses: normalizedExpenses,
+      payments: normalizedPayments,
       caseTypes: parsed.caseTypes?.length ? parsed.caseTypes : seed.caseTypes,
-      expenseTypes: parsed.expenseTypes?.length ? parsed.expenseTypes : seed.expenseTypes,
+      expenseTypes: [
+        ...new Set([
+          ...seed.expenseTypes,
+          ...(parsed.expenseTypes ?? []).filter((type) => type !== "Yasal vekalet ücreti"),
+          ...(parsed.expenses ?? []).map((expense) => expense.type),
+        ]),
+      ],
       reminderTypes: parsed.reminderTypes?.length ? parsed.reminderTypes : seed.reminderTypes,
     };
   } catch {
@@ -88,6 +131,7 @@ type ErpContextValue = {
   deleteExpense: (id: string) => void;
   upsertPayment: (data: Omit<Payment, "id"> & { id?: string }) => void;
   deletePayment: (id: string) => void;
+  markInstallmentPaid: (paymentId: string, installmentId: string) => void;
   upsertReminder: (data: Omit<Reminder, "id"> & { id?: string }) => void;
   deleteReminder: (id: string) => void;
   addCategory: (kind: "caseTypes" | "expenseTypes" | "reminderTypes", name: string) => void;
@@ -105,13 +149,6 @@ type ErpContextValue = {
   userIdByName: (name: string) => string | undefined;
   caseLabel: (item: CaseFile) => string;
   formatMoney: (n: number) => string;
-  searchAll: (query: string) => Array<{
-    id: string;
-    title: string;
-    subtitle: string;
-    type: string;
-    href: string;
-  }>;
 };
 
 const ErpContext = createContext<ErpContextValue | null>(null);
@@ -223,7 +260,7 @@ export function ErpProvider({ children }: { children: ReactNode }) {
       notifyUserId?: string,
     ) => {
       setState((prev) => {
-        const list = prev[key] as T[];
+        const list = prev[key] as unknown as T[];
         const nextList = isNew
           ? [item, ...list]
           : list.map((row) => (row.id === item.id ? item : row));
@@ -303,7 +340,7 @@ export function ErpProvider({ children }: { children: ReactNode }) {
     (data: Omit<CaseFile, "id"> & { id?: string }) => {
       const isNew = !data.id;
       const item: CaseFile = { ...data, id: data.id ?? uid("case") };
-      mutateList("cases", item, isNew, `${item.no} • ${item.title}`, "Dosya", item.responsibleId);
+      mutateList("cases", item, isNew, `${item.no} • ${item.title}`, "Dosya");
     },
     [mutateList],
   );
@@ -332,7 +369,6 @@ export function ErpProvider({ children }: { children: ReactNode }) {
         const list = isNew
           ? [item, ...prev.expenses]
           : prev.expenses.map((row) => (row.id === item.id ? item : row));
-        const caseFile = prev.cases.find((c) => c.id === item.caseId);
         let next: ErpState = { ...prev, expenses: list };
         next = pushActivity(
           next,
@@ -340,8 +376,6 @@ export function ErpProvider({ children }: { children: ReactNode }) {
           "Masraf",
           item.title,
           undefined,
-          caseFile?.responsibleId,
-          "Masraf",
         );
         return next;
       });
@@ -373,16 +407,13 @@ export function ErpProvider({ children }: { children: ReactNode }) {
         const list = isNew
           ? [item, ...prev.payments]
           : prev.payments.map((row) => (row.id === item.id ? item : row));
-        const caseFile = prev.cases.find((c) => c.id === item.caseId);
         let next: ErpState = { ...prev, payments: list };
         next = pushActivity(
           next,
           isNew ? "Tahsilat eklendi" : "Tahsilat güncellendi",
           "Tahsilat",
-          item.description || caseFile?.no || item.id,
+          item.description || item.id,
           undefined,
-          caseFile?.responsibleId,
-          "Tahsilat",
         );
         return next;
       });
@@ -401,6 +432,33 @@ export function ErpProvider({ children }: { children: ReactNode }) {
         };
         next = pushActivity(next, "Tahsilat silindi", "Tahsilat", item.description);
         return next;
+      });
+    },
+    [pushActivity],
+  );
+
+  const markInstallmentPaid = useCallback(
+    (paymentId: string, installmentId: string) => {
+      setState((prev) => {
+        const payment = prev.payments.find((item) => item.id === paymentId);
+        if (!payment?.installments) return prev;
+        const installments = payment.installments.map((installment) =>
+          installment.id === installmentId
+            ? { ...installment, status: "Ödendi" as const }
+            : installment,
+        );
+        const paymentStatus = installments.every((installment) => installment.status === "Ödendi")
+          ? "Tamamlandı"
+          : "Beklemede";
+        const nextPayments = prev.payments.map((item) =>
+          item.id === paymentId ? { ...item, installments, status: paymentStatus } : item,
+        );
+        return pushActivity(
+          { ...prev, payments: nextPayments },
+          "Taksit tahsil edildi",
+          "Tahsilat",
+          `${payment.description} • ${installmentId}`,
+        );
       });
     },
     [pushActivity],
@@ -509,100 +567,6 @@ export function ErpProvider({ children }: { children: ReactNode }) {
 
   const formatMoney = useCallback((n: number) => `₺${n.toLocaleString("tr-TR")}`, []);
 
-  const searchAll = useCallback(
-    (query: string) => {
-      const q = query.trim().toLocaleLowerCase("tr");
-      if (!q) return [];
-      const results: Array<{
-        id: string;
-        title: string;
-        subtitle: string;
-        type: string;
-        href: string;
-      }> = [];
-
-      for (const c of state.clients) {
-        const hay = `${c.name} ${c.email} ${c.phone} ${c.kind}`.toLocaleLowerCase("tr");
-        if (hay.includes(q)) {
-          results.push({
-            id: c.id,
-            title: c.name,
-            subtitle: `${c.kind} • ${c.email} • ${c.phone}`,
-            type: "Müvekkil",
-            href: "/muvekkiller",
-          });
-        }
-      }
-      for (const item of state.cases) {
-        const client = findClientFn(item.clientId);
-        const hay =
-          `${item.no} ${item.title} ${item.court} ${item.type} ${client?.name ?? ""}`.toLocaleLowerCase(
-            "tr",
-          );
-        if (hay.includes(q)) {
-          results.push({
-            id: item.id,
-            title: `${item.no} • ${item.title}`,
-            subtitle: `${client?.name ?? ""} • ${item.court} • ${item.stage}`,
-            type: "Dosya",
-            href: "/dosyalar",
-          });
-        }
-      }
-      for (const e of state.expenses) {
-        const hay = `${e.title} ${e.type} ${e.status}`.toLocaleLowerCase("tr");
-        if (hay.includes(q)) {
-          results.push({
-            id: e.id,
-            title: e.title,
-            subtitle: `${e.type} • ${formatMoney(e.amount)}`,
-            type: "Masraf",
-            href: "/masraflar",
-          });
-        }
-      }
-      for (const p of state.payments) {
-        const caseFile = findCaseFn(p.caseId);
-        const hay = `${p.description} ${p.type} ${caseFile?.no ?? ""}`.toLocaleLowerCase("tr");
-        if (hay.includes(q)) {
-          results.push({
-            id: p.id,
-            title: p.description,
-            subtitle: `${caseFile ? caseLabel(caseFile) : ""} • ${formatMoney(p.amount)}`,
-            type: "Tahsilat",
-            href: "/tahsilatlar",
-          });
-        }
-      }
-      for (const r of state.reminders) {
-        const hay = `${r.title} ${r.type}`.toLocaleLowerCase("tr");
-        if (hay.includes(q)) {
-          results.push({
-            id: r.id,
-            title: r.title,
-            subtitle: `${r.type} • ${r.date}`,
-            type: "Hatırlatma",
-            href: "/hatirlatmalar",
-          });
-        }
-      }
-      for (const u of state.users) {
-        const hay = `${u.name} ${u.email} ${u.role}`.toLocaleLowerCase("tr");
-        if (hay.includes(q)) {
-          results.push({
-            id: u.id,
-            title: u.name,
-            subtitle: `${u.role} • ${u.email}`,
-            type: "Kullanıcı",
-            href: "/ayarlar",
-          });
-        }
-      }
-      return results;
-    },
-    [state, findClientFn, findCaseFn, caseLabel, formatMoney],
-  );
-
   const value: ErpContextValue = {
     state,
     currentUser,
@@ -622,6 +586,7 @@ export function ErpProvider({ children }: { children: ReactNode }) {
     deleteExpense,
     upsertPayment,
     deletePayment,
+    markInstallmentPaid,
     upsertReminder,
     deleteReminder,
     addCategory,
@@ -639,7 +604,6 @@ export function ErpProvider({ children }: { children: ReactNode }) {
     userIdByName,
     caseLabel,
     formatMoney,
-    searchAll,
   };
 
   return <ErpContext.Provider value={value}>{children}</ErpContext.Provider>;
