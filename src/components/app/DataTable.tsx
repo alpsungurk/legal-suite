@@ -378,7 +378,7 @@ export function DataTable<T>({
             </tr>
           </thead>
           <tbody>
-            {pageRows.map((row, i) => {
+            {pageRows.map((row) => {
               const id = getId(row);
               const isSel = selected.has(id);
               return (
@@ -386,12 +386,11 @@ export function DataTable<T>({
                   key={id}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
                   className={cn(
-                    "group border-b border-border/50 transition-colors last:border-0 animate-fade-up",
+                    "group border-b border-border/50 transition-colors last:border-0",
                     onRowClick && "cursor-pointer hover:bg-secondary/50",
                     isSel && "bg-primary/[0.04]",
                     rowClassName?.(row),
                   )}
-                  style={{ animationDelay: `${Math.min(i, 12) * 18}ms` }}
                 >
                   {selectable && (
                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>

@@ -14,9 +14,10 @@ export const getRouter = () => {
     // Link'in üzerine gelince sayfa kodunu önceden yükle
     defaultPreload: "intent",
     defaultPreloadDelay: 40,
-    // Yükleme uzarsa eski sayfayı tutmak yerine iskelet göster
-    defaultPendingMs: 150,
-    defaultPendingMinMs: 200,
+    // Yalnızca gerçekten yavaş yüklemelerde iskelet göster; kısa yüklemelerde
+    // iskelet bir an görünüp kaybolursa sayfa iki kez açılıyormuş gibi görünür.
+    defaultPendingMs: 400,
+    defaultPendingMinMs: 300,
     defaultPendingComponent: PageSkeleton,
   });
 

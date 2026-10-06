@@ -186,9 +186,9 @@ function StaffShell({ children }: { children: ReactNode }) {
         <AppSidebar />
         <SidebarInset className="flex min-w-0 flex-1 flex-col bg-background">
           <Topbar />
-          <main className="min-w-0 flex-1 overflow-x-hidden px-4 pb-24 pt-5 sm:px-6 sm:pt-6 md:pb-10 lg:px-8">
+          <div className="min-w-0 flex-1 overflow-x-hidden px-4 pb-24 pt-5 sm:px-6 sm:pt-6 md:pb-10 lg:px-8">
             {children}
-          </main>
+          </div>
         </SidebarInset>
       </div>
       <CommandPalette />
@@ -211,11 +211,9 @@ function StaffShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-  // Giriş animasyonu yeni sayfa gerçekten render olduğunda oynasın (URL değiştiği anda değil)
-  const routeKey = useRouterState({
-    select: (s) => (s.resolvedLocation ?? s.location).pathname,
-  });
 
+  // Sayfa giriş animasyonları her sayfanın kendi bileşenlerinde (PageHeader, StatGrid,
+  // DataTable…). Burada key ile sarmalayıp yeniden mount etmek sayfayı iki kez çizdiriyordu.
   return (
     <QueryClientProvider client={queryClient}>
       <ErpProvider>
@@ -227,15 +225,11 @@ function RootComponent() {
                   <Outlet />
                 ) : area === "portal" ? (
                   <PortalShell>
-                    <div key={routeKey} className="route-content-enter">
-                      <Outlet />
-                    </div>
+                    <Outlet />
                   </PortalShell>
                 ) : (
                   <StaffShell>
-                    <div key={routeKey} className="route-content-enter">
-                      <Outlet />
-                    </div>
+                    <Outlet />
                   </StaffShell>
                 )
               }
