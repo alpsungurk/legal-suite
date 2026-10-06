@@ -11,17 +11,34 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AktiviteRouteImport } from './routes/aktivite'
+import { Route as AvanslarRouteImport } from './routes/avanslar'
 import { Route as AyarlarRouteImport } from './routes/ayarlar'
+import { Route as BankaKasaRouteImport } from './routes/banka-kasa'
+import { Route as BelgelerRouteImport } from './routes/belgeler'
 import { Route as BildirimlerRouteImport } from './routes/bildirimler'
 import { Route as CariHesapRouteImport } from './routes/cari-hesap'
-import { Route as DosyalarRouteImport } from './routes/dosyalar'
 import { Route as GirisRouteImport } from './routes/giris'
-import { Route as HatirlatmalarRouteImport } from './routes/hatirlatmalar'
 import { Route as MasraflarRouteImport } from './routes/masraflar'
-import { Route as MuvekkillerRouteImport } from './routes/muvekkiller'
+import { Route as MesajlarRouteImport } from './routes/mesajlar'
 import { Route as RaporlarRouteImport } from './routes/raporlar'
 import { Route as TahsilatlarRouteImport } from './routes/tahsilatlar'
 import { Route as TaksitlerRouteImport } from './routes/taksitler'
+import { Route as TakvimRouteImport } from './routes/takvim'
+import { Route as BorclularIndexRouteImport } from './routes/borclular/index'
+import { Route as BorclularIdRouteImport } from './routes/borclular/$id'
+import { Route as DosyalarIndexRouteImport } from './routes/dosyalar/index'
+import { Route as DosyalarIdRouteImport } from './routes/dosyalar/$id'
+import { Route as IcraIndexRouteImport } from './routes/icra/index'
+import { Route as IcraIdRouteImport } from './routes/icra/$id'
+import { Route as MuvekkillerIndexRouteImport } from './routes/muvekkiller/index'
+import { Route as MuvekkillerIdRouteImport } from './routes/muvekkiller/$id'
+import { Route as PortalIndexRouteImport } from './routes/portal/index'
+import { Route as PortalBelgelerRouteImport } from './routes/portal/belgeler'
+import { Route as PortalDosyalarRouteImport } from './routes/portal/dosyalar'
+import { Route as PortalEkstreRouteImport } from './routes/portal/ekstre'
+import { Route as PortalMesajlarRouteImport } from './routes/portal/mesajlar'
+import { Route as YazdirDosyaIdRouteImport } from './routes/yazdir/dosya.$id'
+import { Route as YazdirEkstreIdRouteImport } from './routes/yazdir/ekstre.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -33,9 +50,24 @@ const AktiviteRoute = AktiviteRouteImport.update({
   path: '/aktivite',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AvanslarRoute = AvanslarRouteImport.update({
+  id: '/avanslar',
+  path: '/avanslar',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AyarlarRoute = AyarlarRouteImport.update({
   id: '/ayarlar',
   path: '/ayarlar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BankaKasaRoute = BankaKasaRouteImport.update({
+  id: '/banka-kasa',
+  path: '/banka-kasa',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BelgelerRoute = BelgelerRouteImport.update({
+  id: '/belgeler',
+  path: '/belgeler',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BildirimlerRoute = BildirimlerRouteImport.update({
@@ -48,19 +80,9 @@ const CariHesapRoute = CariHesapRouteImport.update({
   path: '/cari-hesap',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DosyalarRoute = DosyalarRouteImport.update({
-  id: '/dosyalar',
-  path: '/dosyalar',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const GirisRoute = GirisRouteImport.update({
   id: '/giris',
   path: '/giris',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const HatirlatmalarRoute = HatirlatmalarRouteImport.update({
-  id: '/hatirlatmalar',
-  path: '/hatirlatmalar',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MasraflarRoute = MasraflarRouteImport.update({
@@ -68,9 +90,9 @@ const MasraflarRoute = MasraflarRouteImport.update({
   path: '/masraflar',
   getParentRoute: () => rootRouteImport,
 } as any)
-const MuvekkillerRoute = MuvekkillerRouteImport.update({
-  id: '/muvekkiller',
-  path: '/muvekkiller',
+const MesajlarRoute = MesajlarRouteImport.update({
+  id: '/mesajlar',
+  path: '/mesajlar',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RaporlarRoute = RaporlarRouteImport.update({
@@ -88,115 +110,314 @@ const TaksitlerRoute = TaksitlerRouteImport.update({
   path: '/taksitler',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TakvimRoute = TakvimRouteImport.update({
+  id: '/takvim',
+  path: '/takvim',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BorclularIndexRoute = BorclularIndexRouteImport.update({
+  id: '/borclular/',
+  path: '/borclular/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BorclularIdRoute = BorclularIdRouteImport.update({
+  id: '/borclular/$id',
+  path: '/borclular/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DosyalarIndexRoute = DosyalarIndexRouteImport.update({
+  id: '/dosyalar/',
+  path: '/dosyalar/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DosyalarIdRoute = DosyalarIdRouteImport.update({
+  id: '/dosyalar/$id',
+  path: '/dosyalar/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IcraIndexRoute = IcraIndexRouteImport.update({
+  id: '/icra/',
+  path: '/icra/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IcraIdRoute = IcraIdRouteImport.update({
+  id: '/icra/$id',
+  path: '/icra/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MuvekkillerIndexRoute = MuvekkillerIndexRouteImport.update({
+  id: '/muvekkiller/',
+  path: '/muvekkiller/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MuvekkillerIdRoute = MuvekkillerIdRouteImport.update({
+  id: '/muvekkiller/$id',
+  path: '/muvekkiller/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PortalIndexRoute = PortalIndexRouteImport.update({
+  id: '/portal/',
+  path: '/portal/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PortalBelgelerRoute = PortalBelgelerRouteImport.update({
+  id: '/portal/belgeler',
+  path: '/portal/belgeler',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PortalDosyalarRoute = PortalDosyalarRouteImport.update({
+  id: '/portal/dosyalar',
+  path: '/portal/dosyalar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PortalEkstreRoute = PortalEkstreRouteImport.update({
+  id: '/portal/ekstre',
+  path: '/portal/ekstre',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PortalMesajlarRoute = PortalMesajlarRouteImport.update({
+  id: '/portal/mesajlar',
+  path: '/portal/mesajlar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const YazdirDosyaIdRoute = YazdirDosyaIdRouteImport.update({
+  id: '/yazdir/dosya/$id',
+  path: '/yazdir/dosya/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const YazdirEkstreIdRoute = YazdirEkstreIdRouteImport.update({
+  id: '/yazdir/ekstre/$id',
+  path: '/yazdir/ekstre/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/aktivite': typeof AktiviteRoute
+  '/avanslar': typeof AvanslarRoute
   '/ayarlar': typeof AyarlarRoute
+  '/banka-kasa': typeof BankaKasaRoute
+  '/belgeler': typeof BelgelerRoute
   '/bildirimler': typeof BildirimlerRoute
   '/cari-hesap': typeof CariHesapRoute
-  '/dosyalar': typeof DosyalarRoute
   '/giris': typeof GirisRoute
-  '/hatirlatmalar': typeof HatirlatmalarRoute
   '/masraflar': typeof MasraflarRoute
-  '/muvekkiller': typeof MuvekkillerRoute
+  '/mesajlar': typeof MesajlarRoute
   '/raporlar': typeof RaporlarRoute
   '/tahsilatlar': typeof TahsilatlarRoute
   '/taksitler': typeof TaksitlerRoute
+  '/takvim': typeof TakvimRoute
+  '/borclular/$id': typeof BorclularIdRoute
+  '/dosyalar/$id': typeof DosyalarIdRoute
+  '/icra/$id': typeof IcraIdRoute
+  '/muvekkiller/$id': typeof MuvekkillerIdRoute
+  '/portal/belgeler': typeof PortalBelgelerRoute
+  '/portal/dosyalar': typeof PortalDosyalarRoute
+  '/portal/ekstre': typeof PortalEkstreRoute
+  '/portal/mesajlar': typeof PortalMesajlarRoute
+  '/borclular/': typeof BorclularIndexRoute
+  '/dosyalar/': typeof DosyalarIndexRoute
+  '/icra/': typeof IcraIndexRoute
+  '/muvekkiller/': typeof MuvekkillerIndexRoute
+  '/portal/': typeof PortalIndexRoute
+  '/yazdir/dosya/$id': typeof YazdirDosyaIdRoute
+  '/yazdir/ekstre/$id': typeof YazdirEkstreIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/aktivite': typeof AktiviteRoute
+  '/avanslar': typeof AvanslarRoute
   '/ayarlar': typeof AyarlarRoute
+  '/banka-kasa': typeof BankaKasaRoute
+  '/belgeler': typeof BelgelerRoute
   '/bildirimler': typeof BildirimlerRoute
   '/cari-hesap': typeof CariHesapRoute
-  '/dosyalar': typeof DosyalarRoute
   '/giris': typeof GirisRoute
-  '/hatirlatmalar': typeof HatirlatmalarRoute
   '/masraflar': typeof MasraflarRoute
-  '/muvekkiller': typeof MuvekkillerRoute
+  '/mesajlar': typeof MesajlarRoute
   '/raporlar': typeof RaporlarRoute
   '/tahsilatlar': typeof TahsilatlarRoute
   '/taksitler': typeof TaksitlerRoute
+  '/takvim': typeof TakvimRoute
+  '/borclular/$id': typeof BorclularIdRoute
+  '/dosyalar/$id': typeof DosyalarIdRoute
+  '/icra/$id': typeof IcraIdRoute
+  '/muvekkiller/$id': typeof MuvekkillerIdRoute
+  '/portal/belgeler': typeof PortalBelgelerRoute
+  '/portal/dosyalar': typeof PortalDosyalarRoute
+  '/portal/ekstre': typeof PortalEkstreRoute
+  '/portal/mesajlar': typeof PortalMesajlarRoute
+  '/borclular': typeof BorclularIndexRoute
+  '/dosyalar': typeof DosyalarIndexRoute
+  '/icra': typeof IcraIndexRoute
+  '/muvekkiller': typeof MuvekkillerIndexRoute
+  '/portal': typeof PortalIndexRoute
+  '/yazdir/dosya/$id': typeof YazdirDosyaIdRoute
+  '/yazdir/ekstre/$id': typeof YazdirEkstreIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/aktivite': typeof AktiviteRoute
+  '/avanslar': typeof AvanslarRoute
   '/ayarlar': typeof AyarlarRoute
+  '/banka-kasa': typeof BankaKasaRoute
+  '/belgeler': typeof BelgelerRoute
   '/bildirimler': typeof BildirimlerRoute
   '/cari-hesap': typeof CariHesapRoute
-  '/dosyalar': typeof DosyalarRoute
   '/giris': typeof GirisRoute
-  '/hatirlatmalar': typeof HatirlatmalarRoute
   '/masraflar': typeof MasraflarRoute
-  '/muvekkiller': typeof MuvekkillerRoute
+  '/mesajlar': typeof MesajlarRoute
   '/raporlar': typeof RaporlarRoute
   '/tahsilatlar': typeof TahsilatlarRoute
   '/taksitler': typeof TaksitlerRoute
+  '/takvim': typeof TakvimRoute
+  '/borclular/$id': typeof BorclularIdRoute
+  '/dosyalar/$id': typeof DosyalarIdRoute
+  '/icra/$id': typeof IcraIdRoute
+  '/muvekkiller/$id': typeof MuvekkillerIdRoute
+  '/portal/belgeler': typeof PortalBelgelerRoute
+  '/portal/dosyalar': typeof PortalDosyalarRoute
+  '/portal/ekstre': typeof PortalEkstreRoute
+  '/portal/mesajlar': typeof PortalMesajlarRoute
+  '/borclular/': typeof BorclularIndexRoute
+  '/dosyalar/': typeof DosyalarIndexRoute
+  '/icra/': typeof IcraIndexRoute
+  '/muvekkiller/': typeof MuvekkillerIndexRoute
+  '/portal/': typeof PortalIndexRoute
+  '/yazdir/dosya/$id': typeof YazdirDosyaIdRoute
+  '/yazdir/ekstre/$id': typeof YazdirEkstreIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/aktivite'
+    | '/avanslar'
     | '/ayarlar'
+    | '/banka-kasa'
+    | '/belgeler'
     | '/bildirimler'
     | '/cari-hesap'
-    | '/dosyalar'
     | '/giris'
-    | '/hatirlatmalar'
     | '/masraflar'
-    | '/muvekkiller'
+    | '/mesajlar'
     | '/raporlar'
     | '/tahsilatlar'
     | '/taksitler'
+    | '/takvim'
+    | '/borclular/$id'
+    | '/dosyalar/$id'
+    | '/icra/$id'
+    | '/muvekkiller/$id'
+    | '/portal/belgeler'
+    | '/portal/dosyalar'
+    | '/portal/ekstre'
+    | '/portal/mesajlar'
+    | '/borclular/'
+    | '/dosyalar/'
+    | '/icra/'
+    | '/muvekkiller/'
+    | '/portal/'
+    | '/yazdir/dosya/$id'
+    | '/yazdir/ekstre/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/aktivite'
+    | '/avanslar'
     | '/ayarlar'
+    | '/banka-kasa'
+    | '/belgeler'
     | '/bildirimler'
     | '/cari-hesap'
-    | '/dosyalar'
     | '/giris'
-    | '/hatirlatmalar'
     | '/masraflar'
-    | '/muvekkiller'
+    | '/mesajlar'
     | '/raporlar'
     | '/tahsilatlar'
     | '/taksitler'
+    | '/takvim'
+    | '/borclular/$id'
+    | '/dosyalar/$id'
+    | '/icra/$id'
+    | '/muvekkiller/$id'
+    | '/portal/belgeler'
+    | '/portal/dosyalar'
+    | '/portal/ekstre'
+    | '/portal/mesajlar'
+    | '/borclular'
+    | '/dosyalar'
+    | '/icra'
+    | '/muvekkiller'
+    | '/portal'
+    | '/yazdir/dosya/$id'
+    | '/yazdir/ekstre/$id'
   id:
     | '__root__'
     | '/'
     | '/aktivite'
+    | '/avanslar'
     | '/ayarlar'
+    | '/banka-kasa'
+    | '/belgeler'
     | '/bildirimler'
     | '/cari-hesap'
-    | '/dosyalar'
     | '/giris'
-    | '/hatirlatmalar'
     | '/masraflar'
-    | '/muvekkiller'
+    | '/mesajlar'
     | '/raporlar'
     | '/tahsilatlar'
     | '/taksitler'
+    | '/takvim'
+    | '/borclular/$id'
+    | '/dosyalar/$id'
+    | '/icra/$id'
+    | '/muvekkiller/$id'
+    | '/portal/belgeler'
+    | '/portal/dosyalar'
+    | '/portal/ekstre'
+    | '/portal/mesajlar'
+    | '/borclular/'
+    | '/dosyalar/'
+    | '/icra/'
+    | '/muvekkiller/'
+    | '/portal/'
+    | '/yazdir/dosya/$id'
+    | '/yazdir/ekstre/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AktiviteRoute: typeof AktiviteRoute
+  AvanslarRoute: typeof AvanslarRoute
   AyarlarRoute: typeof AyarlarRoute
+  BankaKasaRoute: typeof BankaKasaRoute
+  BelgelerRoute: typeof BelgelerRoute
   BildirimlerRoute: typeof BildirimlerRoute
   CariHesapRoute: typeof CariHesapRoute
-  DosyalarRoute: typeof DosyalarRoute
   GirisRoute: typeof GirisRoute
-  HatirlatmalarRoute: typeof HatirlatmalarRoute
   MasraflarRoute: typeof MasraflarRoute
-  MuvekkillerRoute: typeof MuvekkillerRoute
+  MesajlarRoute: typeof MesajlarRoute
   RaporlarRoute: typeof RaporlarRoute
   TahsilatlarRoute: typeof TahsilatlarRoute
   TaksitlerRoute: typeof TaksitlerRoute
+  TakvimRoute: typeof TakvimRoute
+  BorclularIdRoute: typeof BorclularIdRoute
+  DosyalarIdRoute: typeof DosyalarIdRoute
+  IcraIdRoute: typeof IcraIdRoute
+  MuvekkillerIdRoute: typeof MuvekkillerIdRoute
+  PortalBelgelerRoute: typeof PortalBelgelerRoute
+  PortalDosyalarRoute: typeof PortalDosyalarRoute
+  PortalEkstreRoute: typeof PortalEkstreRoute
+  PortalMesajlarRoute: typeof PortalMesajlarRoute
+  BorclularIndexRoute: typeof BorclularIndexRoute
+  DosyalarIndexRoute: typeof DosyalarIndexRoute
+  IcraIndexRoute: typeof IcraIndexRoute
+  MuvekkillerIndexRoute: typeof MuvekkillerIndexRoute
+  PortalIndexRoute: typeof PortalIndexRoute
+  YazdirDosyaIdRoute: typeof YazdirDosyaIdRoute
+  YazdirEkstreIdRoute: typeof YazdirEkstreIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -215,11 +436,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AktiviteRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/avanslar': {
+      id: '/avanslar'
+      path: '/avanslar'
+      fullPath: '/avanslar'
+      preLoaderRoute: typeof AvanslarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/ayarlar': {
       id: '/ayarlar'
       path: '/ayarlar'
       fullPath: '/ayarlar'
       preLoaderRoute: typeof AyarlarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/banka-kasa': {
+      id: '/banka-kasa'
+      path: '/banka-kasa'
+      fullPath: '/banka-kasa'
+      preLoaderRoute: typeof BankaKasaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/belgeler': {
+      id: '/belgeler'
+      path: '/belgeler'
+      fullPath: '/belgeler'
+      preLoaderRoute: typeof BelgelerRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/bildirimler': {
@@ -236,25 +478,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CariHesapRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/dosyalar': {
-      id: '/dosyalar'
-      path: '/dosyalar'
-      fullPath: '/dosyalar'
-      preLoaderRoute: typeof DosyalarRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/giris': {
       id: '/giris'
       path: '/giris'
       fullPath: '/giris'
       preLoaderRoute: typeof GirisRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/hatirlatmalar': {
-      id: '/hatirlatmalar'
-      path: '/hatirlatmalar'
-      fullPath: '/hatirlatmalar'
-      preLoaderRoute: typeof HatirlatmalarRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/masraflar': {
@@ -264,11 +492,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MasraflarRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/muvekkiller': {
-      id: '/muvekkiller'
-      path: '/muvekkiller'
-      fullPath: '/muvekkiller'
-      preLoaderRoute: typeof MuvekkillerRouteImport
+    '/mesajlar': {
+      id: '/mesajlar'
+      path: '/mesajlar'
+      fullPath: '/mesajlar'
+      preLoaderRoute: typeof MesajlarRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/raporlar': {
@@ -292,23 +520,152 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TaksitlerRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/takvim': {
+      id: '/takvim'
+      path: '/takvim'
+      fullPath: '/takvim'
+      preLoaderRoute: typeof TakvimRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/borclular/': {
+      id: '/borclular/'
+      path: '/borclular'
+      fullPath: '/borclular/'
+      preLoaderRoute: typeof BorclularIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/borclular/$id': {
+      id: '/borclular/$id'
+      path: '/borclular/$id'
+      fullPath: '/borclular/$id'
+      preLoaderRoute: typeof BorclularIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dosyalar/': {
+      id: '/dosyalar/'
+      path: '/dosyalar'
+      fullPath: '/dosyalar/'
+      preLoaderRoute: typeof DosyalarIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dosyalar/$id': {
+      id: '/dosyalar/$id'
+      path: '/dosyalar/$id'
+      fullPath: '/dosyalar/$id'
+      preLoaderRoute: typeof DosyalarIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/icra/': {
+      id: '/icra/'
+      path: '/icra'
+      fullPath: '/icra/'
+      preLoaderRoute: typeof IcraIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/icra/$id': {
+      id: '/icra/$id'
+      path: '/icra/$id'
+      fullPath: '/icra/$id'
+      preLoaderRoute: typeof IcraIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/muvekkiller/': {
+      id: '/muvekkiller/'
+      path: '/muvekkiller'
+      fullPath: '/muvekkiller/'
+      preLoaderRoute: typeof MuvekkillerIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/muvekkiller/$id': {
+      id: '/muvekkiller/$id'
+      path: '/muvekkiller/$id'
+      fullPath: '/muvekkiller/$id'
+      preLoaderRoute: typeof MuvekkillerIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/portal/': {
+      id: '/portal/'
+      path: '/portal'
+      fullPath: '/portal/'
+      preLoaderRoute: typeof PortalIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/portal/belgeler': {
+      id: '/portal/belgeler'
+      path: '/portal/belgeler'
+      fullPath: '/portal/belgeler'
+      preLoaderRoute: typeof PortalBelgelerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/portal/dosyalar': {
+      id: '/portal/dosyalar'
+      path: '/portal/dosyalar'
+      fullPath: '/portal/dosyalar'
+      preLoaderRoute: typeof PortalDosyalarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/portal/ekstre': {
+      id: '/portal/ekstre'
+      path: '/portal/ekstre'
+      fullPath: '/portal/ekstre'
+      preLoaderRoute: typeof PortalEkstreRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/portal/mesajlar': {
+      id: '/portal/mesajlar'
+      path: '/portal/mesajlar'
+      fullPath: '/portal/mesajlar'
+      preLoaderRoute: typeof PortalMesajlarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/yazdir/dosya/$id': {
+      id: '/yazdir/dosya/$id'
+      path: '/yazdir/dosya/$id'
+      fullPath: '/yazdir/dosya/$id'
+      preLoaderRoute: typeof YazdirDosyaIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/yazdir/ekstre/$id': {
+      id: '/yazdir/ekstre/$id'
+      path: '/yazdir/ekstre/$id'
+      fullPath: '/yazdir/ekstre/$id'
+      preLoaderRoute: typeof YazdirEkstreIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AktiviteRoute: AktiviteRoute,
+  AvanslarRoute: AvanslarRoute,
   AyarlarRoute: AyarlarRoute,
+  BankaKasaRoute: BankaKasaRoute,
+  BelgelerRoute: BelgelerRoute,
   BildirimlerRoute: BildirimlerRoute,
   CariHesapRoute: CariHesapRoute,
-  DosyalarRoute: DosyalarRoute,
   GirisRoute: GirisRoute,
-  HatirlatmalarRoute: HatirlatmalarRoute,
   MasraflarRoute: MasraflarRoute,
-  MuvekkillerRoute: MuvekkillerRoute,
+  MesajlarRoute: MesajlarRoute,
   RaporlarRoute: RaporlarRoute,
   TahsilatlarRoute: TahsilatlarRoute,
   TaksitlerRoute: TaksitlerRoute,
+  TakvimRoute: TakvimRoute,
+  BorclularIdRoute: BorclularIdRoute,
+  DosyalarIdRoute: DosyalarIdRoute,
+  IcraIdRoute: IcraIdRoute,
+  MuvekkillerIdRoute: MuvekkillerIdRoute,
+  PortalBelgelerRoute: PortalBelgelerRoute,
+  PortalDosyalarRoute: PortalDosyalarRoute,
+  PortalEkstreRoute: PortalEkstreRoute,
+  PortalMesajlarRoute: PortalMesajlarRoute,
+  BorclularIndexRoute: BorclularIndexRoute,
+  DosyalarIndexRoute: DosyalarIndexRoute,
+  IcraIndexRoute: IcraIndexRoute,
+  MuvekkillerIndexRoute: MuvekkillerIndexRoute,
+  PortalIndexRoute: PortalIndexRoute,
+  YazdirDosyaIdRoute: YazdirDosyaIdRoute,
+  YazdirEkstreIdRoute: YazdirEkstreIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

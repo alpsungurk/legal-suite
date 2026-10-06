@@ -1,28 +1,16 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import {
-  ArrowRight,
-  Eye,
-  EyeOff,
-  LockKeyhole,
-  Scale,
-  ShieldCheck,
-  UserRound,
-} from "lucide-react";
+import { ArrowRight, Eye, EyeOff, LockKeyhole, Scale, ShieldCheck, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
 import { useErp } from "@/lib/erp-store";
+import { DEMO_ACCOUNTS, DEMO_PASSWORD } from "@/lib/erp-data";
 
-export const Route = createFileRoute("/giris")({ component: Login });
-
-const DEMO_ACCOUNTS = [
-  { username: "admin", label: "Admin" },
-  { username: "avukat", label: "Avukat" },
-  { username: "avukat2", label: "Avukat 2" },
-  { username: "sekreter", label: "Sekreter" },
-] as const;
+export const Route = createFileRoute("/giris")({
+  head: () => ({ meta: [{ title: "Giriş — Lex Yönetim" }] }),
+  component: Login,
+});
 
 function Login() {
   const navigate = useNavigate();
@@ -30,7 +18,7 @@ function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [username, setUsername] = useState("admin");
-  const [password, setPassword] = useState("123456");
+  const [password, setPassword] = useState(DEMO_PASSWORD);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -44,18 +32,17 @@ function Login() {
     document.head.appendChild(link);
   }, []);
 
-  const signIn = () => {
+  const signIn = async () => {
     setLoading(true);
     setError("");
-    const result = login(username, password);
+    const result = await login(username, password);
     if (!result.ok) {
       setError(result.error);
       setLoading(false);
-      toast.error(result.error);
       return;
     }
-    toast.success("Giriş başarılı");
-    window.setTimeout(() => navigate({ to: "/" }), 200);
+    toast.success("Hoş geldiniz");
+    navigate({ to: username.trim().toLocaleLowerCase("tr") === "muvekkil" ? "/portal" : "/" });
   };
 
   return (
@@ -101,8 +88,7 @@ function Login() {
               className="mt-5 max-w-md text-[1.05rem] leading-8 text-white/70"
               style={{ fontFamily: "Manrope, sans-serif" }}
             >
-              Dosya, müvekkil ve tahsilatlarınız tek düzende. Büronuza sakin, net bir çalışma
-              alanı.
+              Dosya, müvekkil ve tahsilatlarınız tek düzende. Büronuza sakin, net bir çalışma alanı.
             </p>
 
             <div className="mt-10 flex items-center gap-3 border-t border-white/10 pt-8 text-sm text-white/55">
@@ -161,7 +147,7 @@ function Login() {
             className="mt-8 space-y-4"
             onSubmit={(e) => {
               e.preventDefault();
-              signIn();
+              void signIn();
             }}
           >
             <label className="grid gap-2 text-[13px] font-semibold text-slate-700">
@@ -174,7 +160,7 @@ function Login() {
                   onChange={(e) => setUsername(e.target.value)}
                   autoComplete="username"
                   placeholder="admin"
-                  className="h-12 rounded-xl border-slate-200/90 bg-white pl-10 shadow-soft transition-all focus-visible:border-[#1e3a8a]/40 focus-visible:ring-[#1e3a8a]/15"
+                  className="h-12 rounded-xl border-slate-200/90 bg-white pl-10 text-slate-900 shadow-soft transition-all focus-visible:border-[#1e3a8a]/40 focus-visible:ring-[#1e3a8a]/15"
                 />
               </div>
             </label>
@@ -189,7 +175,7 @@ function Login() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete="current-password"
-                  className="h-12 rounded-xl border-slate-200/90 bg-white pl-10 pr-11 shadow-soft transition-all focus-visible:border-[#1e3a8a]/40 focus-visible:ring-[#1e3a8a]/15"
+                  className="h-12 rounded-xl border-slate-200/90 bg-white pl-10 pr-11 text-slate-900 shadow-soft transition-all focus-visible:border-[#1e3a8a]/40 focus-visible:ring-[#1e3a8a]/15"
                 />
                 <button
                   type="button"
@@ -208,12 +194,14 @@ function Login() {
               </p>
             )}
 
-            <div className="flex items-center justify-between pt-1 text-sm">
-              <label className="flex items-center gap-2 text-slate-500">
-                <Checkbox /> Beni hatırla
-              </label>
+            <div className="flex items-center justify-end pt-1 text-sm">
               <button
                 type="button"
+                onClick={() =>
+                  toast.info(
+                    "Şifrenizi büro yöneticiniz Ayarlar > Kullanıcılar bölümünden sıfırlayabilir.",
+                  )
+                }
                 className="font-semibold text-[#1e3a8a] transition-opacity hover:opacity-70"
               >
                 Şifremi unuttum
@@ -222,6 +210,7 @@ function Login() {
 
             <Button
               type="submit"
+              size="lg"
               disabled={loading}
               className="h-12 w-full rounded-xl bg-[#143064] text-[15px] font-semibold shadow-[0_14px_28px_-12px_rgba(20,48,100,0.55)] transition-all hover:bg-[#0f2550] hover:shadow-[0_18px_36px_-12px_rgba(20,48,100,0.65)]"
             >
@@ -240,7 +229,7 @@ function Login() {
 
           <div className="mt-8">
             <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-              Hızlı giriş · şifre 123456
+              Demo hesaplar · şifre {DEMO_PASSWORD}
             </p>
             <div className="flex flex-wrap gap-2">
               {DEMO_ACCOUNTS.map((account) => (
@@ -249,7 +238,7 @@ function Login() {
                   type="button"
                   onClick={() => {
                     setUsername(account.username);
-                    setPassword("123456");
+                    setPassword(DEMO_PASSWORD);
                     setError("");
                   }}
                   className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-all ${

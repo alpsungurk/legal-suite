@@ -1,171 +1,218 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { Landmark } from "lucide-react";
-import { ManagementPage } from "@/components/management/ManagementPage";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { BookOpenCheck, Printer, Scale, TrendingDown, TrendingUp } from "lucide-react";
 import { useErp } from "@/lib/erp-store";
-import type { Expense, Payment } from "@/lib/erp-types";
+import { clientFinance, clientLedger } from "@/lib/finance";
+import { formatMoney, sumBy } from "@/lib/format";
+import { PageHeader } from "@/components/app/PageHeader";
+import { Avatar, Money, NoAccess, PageShell } from "@/components/app/bits";
+import { StatGrid, StatTile } from "@/components/app/StatTile";
+import { DataTable, type Column } from "@/components/app/DataTable";
+import { StatusBadge } from "@/components/app/StatusBadge";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 
-export const Route = createFileRoute("/cari-hesap")({ component: Page });
-
-function paidPaymentAmount(payment: Payment) {
-  if (payment.status === "İptal") return 0;
-  if (payment.installments?.length) {
-    return payment.installments
-      .filter((installment) => installment.status === "Ödendi")
-      .reduce((sum, installment) => sum + installment.amount, 0);
-  }
-  return payment.status === "Tamamlandı" ? payment.amount : 0;
-}
-
-function expenseReceivable(expense: Expense) {
-  return (expense.direction ?? "Giden") === "Giden" &&
-    expense.payer !== "Müvekkil" &&
-    expense.payer !== "Karşı taraf"
-    ? expense.amount
-    : 0;
-}
-
-function expenseRecovery(expense: Expense) {
-  const isIncoming =
-    expense.direction === "Gelen" || (!expense.direction && expense.payer === "Müvekkil");
-  return isIncoming && expense.status === "Alındı" ? expense.amount : 0;
-}
-
-function currentMonthKey() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function monthKey(date: string) {
-  return /^\d{4}-\d{2}/.test(date) ? date.slice(0, 7) : "";
-}
-
-function monthCountInclusive(from: string, to: string) {
-  const [fromYear, fromMonth] = from.split("-").map(Number);
-  const [toYear, toMonth] = to.split("-").map(Number);
-  return Math.max((toYear - fromYear) * 12 + toMonth - fromMonth + 1, 0);
-}
+export const Route = createFileRoute("/cari-hesap")({
+  head: () => ({ meta: [{ title: "Cari hesap — Lex Yönetim" }] }),
+  component: Page,
+});
 
 function Page() {
-  const { state, formatMoney, permissions } = useErp();
+  const { state, permissions } = useErp();
+  const navigate = useNavigate();
+  if (!permissions.viewFinance) return <NoAccess />;
 
-  if (!permissions.canViewFinance) {
-    return (
-      <div className="rounded-xl border p-8 text-center text-muted-foreground">
-        Bu sayfaya erişim yetkiniz yok.
-      </div>
-    );
-  }
-
-  const currentMonth = currentMonthKey();
-  const rows = state.clients.map((client) => {
-    const clientCases = state.cases.filter((c) => c.clientId === client.id);
-    const caseIds = new Set(clientCases.map((c) => c.id));
-    const clientExpenses = state.expenses.filter((expense) =>
-      expense.caseId ? caseIds.has(expense.caseId) : expense.clientId === client.id,
-    );
-    const clientPayments = state.payments.filter((p) =>
-      p.caseId ? caseIds.has(p.caseId) : p.clientId === client.id,
-    );
-    const borc = clientExpenses.reduce((sum, expense) => sum + expenseReceivable(expense), 0);
-    const odenen = clientExpenses.reduce((sum, expense) => sum + expenseRecovery(expense), 0);
-    const kalan = borc - odenen;
-    const vekaletUcreti = clientPayments.reduce(
-      (sum, payment) => sum + paidPaymentAmount(payment),
-      0,
-    );
-    const monthlyFeeStart = client.monthlyFeeStartDate ? monthKey(client.monthlyFeeStartDate) : "";
-    const monthlyPeriods =
-      client.kind === "Kurumsal" &&
-      client.monthlyFee &&
-      monthlyFeeStart &&
-      monthlyFeeStart <= currentMonth
-        ? monthCountInclusive(monthlyFeeStart, currentMonth)
-        : 0;
-    const monthlyFeeDue = monthlyPeriods * (client.monthlyFee ?? 0);
-    const monthlyFeeReceived = clientPayments
-      .filter(
-        (payment) =>
-          payment.feePeriod &&
-          payment.feePeriod >= monthlyFeeStart &&
-          payment.feePeriod <= currentMonth,
-      )
-      .reduce((sum, payment) => sum + paidPaymentAmount(payment), 0);
-    const monthlyFeeRemaining = Math.max(monthlyFeeDue - monthlyFeeReceived, 0);
+  const rows = state.clients.map((c) => {
+    const { entries } = clientLedger(state, c.id);
+    const fin = clientFinance(state, c.id);
     return {
-      id: client.id,
-      client: client.name,
-      kind: client.kind,
-      monthlyFee: client.monthlyFee ? formatMoney(client.monthlyFee) : "—",
-      borc: formatMoney(borc),
-      odenen: formatMoney(odenen),
-      kalan: formatMoney(kalan),
-      vekaletUcreti: formatMoney(vekaletUcreti),
-      monthlyFeeDue: formatMoney(monthlyFeeDue),
-      monthlyFeeReceived: formatMoney(monthlyFeeReceived),
-      monthlyFeeRemaining: formatMoney(monthlyFeeRemaining),
-      hareketler: [
-        ...clientExpenses.map(
-          (expense) =>
-            `${expense.date} • ${expenseRecovery(expense) ? "Masraf tahsilatı" : "Müvekkil masrafı"} • ${expense.title} • ${formatMoney(expense.amount)}`,
-        ),
-        ...clientPayments.map((payment) => {
-          const period = payment.feePeriod ? ` • Aylık dönem ${payment.feePeriod}` : "";
-          return `${payment.date} • Vekalet ücreti tahsilatı${period} (cari masraf bakiyesinden ayrı) • ${formatMoney(paidPaymentAmount(payment))}`;
-        }),
-      ]
-        .sort()
-        .reverse()
-        .join("\n"),
-      status: kalan + monthlyFeeRemaining > 0 ? "Borçlu" : kalan < 0 ? "Alacaklı" : "Güncel",
+      client: c,
+      debit: sumBy(entries, (e) => e.debit),
+      credit: sumBy(entries, (e) => e.credit),
+      fin,
+      last: entries[entries.length - 1]?.date,
     };
   });
+  type R = (typeof rows)[number];
+  const debtors = rows.filter((r) => r.fin.status === "Borçlu");
+  const creditors = rows.filter((r) => r.fin.status === "Alacaklı");
 
-  const totalBorc = state.expenses.reduce((sum, expense) => sum + expenseReceivable(expense), 0);
-  const totalPay = state.expenses.reduce((sum, expense) => sum + expenseRecovery(expense), 0);
-  const totalVekalet = state.payments.reduce((sum, payment) => sum + paidPaymentAmount(payment), 0);
-  const totalBalance = totalBorc - totalPay;
+  const columns: Column<R>[] = [
+    {
+      id: "client",
+      header: "Müvekkil",
+      sort: (r) => r.client.name,
+      export: (r) => r.client.name,
+      cell: (r) => (
+        <div className="flex items-center gap-3">
+          <Avatar name={r.client.name} size="sm" />
+          <div className="min-w-0">
+            <p className="truncate font-medium">{r.client.name}</p>
+            <p className="text-xs text-muted-foreground">{r.client.kind}</p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: "debit",
+      header: "Borç",
+      align: "right",
+      money: true,
+      hideBelow: "md",
+      sort: (r) => r.debit,
+      export: (r) => r.debit,
+      cell: (r) => <Money value={r.debit} />,
+    },
+    {
+      id: "credit",
+      header: "Alacak",
+      align: "right",
+      money: true,
+      hideBelow: "md",
+      sort: (r) => r.credit,
+      export: (r) => r.credit,
+      cell: (r) => <Money value={r.credit} className="text-emerald-600 dark:text-emerald-400" />,
+    },
+    {
+      id: "adv",
+      header: "Avans bakiyesi",
+      align: "right",
+      money: true,
+      hideBelow: "lg",
+      sort: (r) => r.fin.advance.balance,
+      export: (r) => r.fin.advance.balance,
+      cell: (r) => <Money value={r.fin.advance.balance} className="text-muted-foreground" />,
+    },
+    {
+      id: "fee",
+      header: "Ücret alacağı",
+      align: "right",
+      money: true,
+      hideBelow: "lg",
+      sort: (r) => r.fin.feeRemaining,
+      export: (r) => r.fin.feeRemaining,
+      cell: (r) => <Money value={r.fin.feeRemaining} className="text-muted-foreground" />,
+    },
+    {
+      id: "balance",
+      header: "Bakiye",
+      align: "right",
+      money: true,
+      sort: (r) => r.fin.balance,
+      export: (r) => r.fin.balance,
+      cell: (r) => <Money value={Math.abs(r.fin.balance)} className="font-semibold" />,
+    },
+    {
+      id: "status",
+      header: "Durum",
+      sort: (r) => r.fin.status,
+      export: (r) => r.fin.status,
+      cell: (r) => (
+        <StatusBadge status={r.fin.status} tone={r.fin.status === "Kapalı" ? "slate" : undefined} />
+      ),
+    },
+  ];
+
   return (
-    <ManagementPage
-      title="Cari Hesap"
-      description="Müvekkil masrafı ve masraf tahsilatını cari hesapta; vekalet ücretini ayrı izleyin."
-      singular="cari hesap kaydı"
-      icon={Landmark}
-      accent="green"
-      readOnly
-      canCreate={false}
-      columns={[
-        { key: "client", label: "Müvekkil" },
-        { key: "kind", label: "Tür", filterable: true },
-        { key: "monthlyFee", label: "Aylık ücret" },
-        { key: "monthlyFeeDue", label: "Aylık biriken" },
-        { key: "monthlyFeeReceived", label: "Aylık alınan" },
-        { key: "monthlyFeeRemaining", label: "Aylık kalan" },
-        { key: "borc", label: "Borç" },
-        { key: "odenen", label: "Ödenen" },
-        { key: "kalan", label: "Kalan" },
-        { key: "vekaletUcreti", label: "Vekalet ücreti" },
-        {
-          key: "status",
-          label: "Durum",
-          filterable: true,
-          filterOptions: ["Güncel", "Borçlu", "Alacaklı"],
-        },
-      ]}
-      stats={[
-        { label: "Müvekkil masrafı", value: formatMoney(totalBorc), note: "Müvekkile yansıtılan" },
-        {
-          label: "Masraf tahsilatı",
-          value: formatMoney(totalPay),
-          note: "Gelen masraf hareketleri",
-        },
-        {
-          label: "Cari açık",
-          value: formatMoney(Math.max(totalBalance, 0)),
-          note: "Masraf eksi masraf tahsilatı",
-        },
-        { label: "Vekalet ücreti", value: formatMoney(totalVekalet), note: "Ayrı tahsilat kalemi" },
-      ]}
-      rows={rows}
-    />
+    <PageShell>
+      <PageHeader
+        title="Cari hesap"
+        description="Masraf, avans, ücret ve icra tahsilatlarını tek bakiyede birleştiren müvekkil hesapları"
+        icon={BookOpenCheck}
+      />
+      <StatGrid>
+        <StatTile
+          label="Müvekkillerden alacak"
+          value={formatMoney(sumBy(debtors, (r) => r.fin.balance))}
+          icon={TrendingUp}
+          tone="red"
+          hint={`${debtors.length} borçlu müvekkil`}
+        />
+        <StatTile
+          label="Müvekkillere borç"
+          value={formatMoney(Math.abs(sumBy(creditors, (r) => r.fin.balance)))}
+          icon={TrendingDown}
+          tone="green"
+          hint={`${creditors.length} alacaklı (avans/icra fazlası)`}
+        />
+        <StatTile
+          label="Net pozisyon"
+          value={formatMoney(sumBy(rows, (r) => r.fin.balance))}
+          icon={Scale}
+          tone="blue"
+        />
+        <StatTile
+          label="İcra tahsilatı (aktarılmamış)"
+          value={formatMoney(
+            sumBy(
+              state.collections.filter((c) => !c.transferredToClient),
+              (c) => c.amount,
+            ),
+          )}
+          tone="violet"
+          to="/banka-kasa"
+        />
+      </StatGrid>
+      <DataTable
+        rows={rows}
+        columns={columns}
+        getId={(r) => r.client.id}
+        searchText={(r) => [r.client.name]}
+        filters={[
+          {
+            id: "st",
+            label: "Durum",
+            options: ["Borçlu", "Alacaklı", "Kapalı"],
+            get: (r) => r.fin.status,
+          },
+        ]}
+        initialSort={{ id: "balance", desc: true }}
+        exportName="Cari hesaplar"
+        onRowClick={(r) =>
+          navigate({
+            to: "/muvekkiller/$id",
+            params: { id: r.client.id },
+            search: { sekme: "ekstre" },
+          })
+        }
+        rowActions={(r) => (
+          <DropdownMenuItem asChild>
+            <Link to="/yazdir/ekstre/$id" params={{ id: r.client.id }} target="_blank">
+              <Printer /> Ekstre yazdır
+            </Link>
+          </DropdownMenuItem>
+        )}
+        footer={(v) => (
+          <tr>
+            <td className="px-4 py-3 text-xs font-normal text-muted-foreground">Toplam</td>
+            <td className="hidden px-4 py-3 text-right md:table-cell">
+              <Money value={sumBy(v, (r) => r.debit)} />
+            </td>
+            <td className="hidden px-4 py-3 text-right md:table-cell">
+              <Money value={sumBy(v, (r) => r.credit)} />
+            </td>
+            <td className="hidden lg:table-cell" />
+            <td className="hidden lg:table-cell" />
+            <td className="px-4 py-3 text-right">
+              <Money value={sumBy(v, (r) => r.fin.balance)} />
+            </td>
+            <td />
+            <td />
+          </tr>
+        )}
+        mobileCard={(r) => (
+          <div className="flex items-center justify-between gap-3">
+            <span className="truncate font-medium">{r.client.name}</span>
+            <span className="flex items-center gap-2">
+              <Money value={Math.abs(r.fin.balance)} className="font-semibold" />
+              <StatusBadge status={r.fin.status} />
+            </span>
+          </div>
+        )}
+      />
+      <p className="text-xs text-muted-foreground">
+        Borç: müvekkile yansıtılan masraflar ve tahakkuk eden ücretler. Alacak: alınan avanslar,
+        ücret tahsilatları ve müvekkil adına yapılan icra tahsilatları. Bakiye pozitifse müvekkil
+        borçlu, negatifse alacaklıdır.
+      </p>
+    </PageShell>
   );
 }

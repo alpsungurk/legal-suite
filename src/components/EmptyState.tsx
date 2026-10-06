@@ -1,26 +1,41 @@
 import type { LucideIcon } from "lucide-react";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import type { ReactNode } from "react";
+import { cn } from "@/lib/utils";
 
 export function EmptyState({
   icon: Icon,
   title,
   description,
-  actionLabel,
+  action,
+  className,
+  compact,
 }: {
   icon: LucideIcon;
   title: string;
-  description: string;
-  actionLabel?: string;
+  description?: string;
+  action?: ReactNode;
+  className?: string;
+  compact?: boolean;
 }) {
   return (
-    <Card className="flex flex-col items-center justify-center gap-3 border-dashed p-12 text-center shadow-none">
-      <div className="grid h-14 w-14 place-items-center rounded-2xl bg-primary/10 text-primary">
-        <Icon className="h-6 w-6" />
+    <div
+      className={cn(
+        "flex flex-col items-center justify-center gap-2 text-center animate-fade-up",
+        compact ? "py-8" : "py-14",
+        className,
+      )}
+    >
+      <div className="relative mb-1">
+        <div className="absolute inset-0 scale-150 rounded-full bg-primary/5 blur-xl" />
+        <div className="relative grid h-12 w-12 place-items-center rounded-2xl border border-border/80 bg-card text-muted-foreground shadow-soft">
+          <Icon className="h-5 w-5" />
+        </div>
       </div>
-      <h3 className="text-lg font-semibold">{title}</h3>
-      <p className="max-w-sm text-sm text-muted-foreground">{description}</p>
-      {actionLabel && <Button className="mt-2">{actionLabel}</Button>}
-    </Card>
+      <h3 className="text-sm font-semibold">{title}</h3>
+      {description && (
+        <p className="max-w-xs text-xs leading-5 text-muted-foreground">{description}</p>
+      )}
+      {action && <div className="mt-2">{action}</div>}
+    </div>
   );
 }

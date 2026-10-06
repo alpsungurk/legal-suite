@@ -10,32 +10,33 @@ import {
   useNavigate,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
+import { Plus, Scale } from "lucide-react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/AppSidebar";
-import { Topbar } from "@/components/layout/Topbar";
+import { QuickAddMenu, THEME_INIT_SCRIPT, Topbar } from "@/components/layout/Topbar";
+import { CommandPalette } from "@/components/layout/CommandPalette";
+import { PortalShell } from "@/components/layout/PortalShell";
 import { Toaster } from "@/components/ui/sonner";
 import { ErpProvider, useErp } from "@/lib/erp-store";
+import { ConfirmProvider } from "@/components/app/confirm";
+import { QuickActionsProvider } from "@/components/forms/quick";
+import { Button } from "@/components/ui/button";
 
 function NotFoundComponent() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">Sayfa bulunamadı</h2>
+    <div className="flex min-h-[70vh] items-center justify-center px-4">
+      <div className="max-w-md text-center animate-fade-up">
+        <p className="text-7xl font-extrabold tracking-tighter text-primary/20">404</p>
+        <h2 className="mt-2 text-xl font-semibold">Sayfa bulunamadı</h2>
         <p className="mt-2 text-sm text-muted-foreground">
           Aradığınız sayfa mevcut değil veya taşınmış olabilir.
         </p>
-        <div className="mt-6">
-          <Link
-            to="/"
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            Ana sayfa
-          </Link>
-        </div>
+        <Button asChild className="mt-6">
+          <Link to="/">Gösterge paneline dön</Link>
+        </Button>
       </div>
     </div>
   );
@@ -58,21 +59,17 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
           Bir şeyler yanlış gitti. Yeniden deneyebilir veya ana sayfaya dönebilirsiniz.
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
-          <button
+          <Button
             onClick={() => {
               router.invalidate();
               reset();
             }}
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
             Tekrar dene
-          </button>
-          <a
-            href="/"
-            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
-          >
-            Ana sayfa
-          </a>
+          </Button>
+          <Button variant="outline" asChild>
+            <a href="/">Ana sayfa</a>
+          </Button>
         </div>
       </div>
     </div>
@@ -83,21 +80,16 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lex Yönetim — Hukuk Büro Yönetim Sistemi" },
+      { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
+      { title: "Lex Yönetim — Hukuk Bürosu Yönetim Sistemi" },
       {
         name: "description",
         content:
-          "Avukatlar için modern hukuk büro yönetim paneli: müvekkil, dosya, tahsilat, masraf ve hatırlatmaları tek yerde yönetin.",
+          "Hukuk büroları için masraf, masraf avansı, tahsilat, taksit, cari hesap, banka/kasa, icra takibi ve müvekkil portalı.",
       },
-      { name: "author", content: "Lex Yönetim" },
-      { property: "og:title", content: "Lex Yönetim — Hukuk Büro Yönetim Sistemi" },
-      {
-        property: "og:description",
-        content: "Müvekkil, dosya, tahsilat ve hatırlatmalar için premium, modern SaaS dashboard.",
-      },
+      { name: "theme-color", content: "#143064" },
+      { property: "og:title", content: "Lex Yönetim — Hukuk Bürosu Yönetim Sistemi" },
       { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
@@ -118,8 +110,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="tr">
+    <html lang="tr" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <HeadContent />
       </head>
       <body>
@@ -130,64 +123,122 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
-function AuthGate({ children }: { children: ReactNode }) {
+type Area = "auth" | "print" | "portal" | "staff";
+
+function areaOf(pathname: string): Area {
+  if (pathname === "/giris") return "auth";
+  if (pathname.startsWith("/yazdir")) return "print";
+  if (pathname === "/portal" || pathname.startsWith("/portal/")) return "portal";
+  return "staff";
+}
+
+function Splash() {
+  return (
+    <div className="grid min-h-screen place-items-center bg-background">
+      <div className="flex flex-col items-center gap-3 animate-fade-up">
+        <div className="grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br from-[#d4b483] to-[#a67c42] text-[#0c1c3f] shadow-lg">
+          <Scale className="h-6 w-6 animate-pulse" />
+        </div>
+        <div className="h-1 w-24 overflow-hidden rounded-full bg-secondary">
+          <div className="skeleton h-full w-full" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AuthGate({ children }: { children: (area: Area) => ReactNode }) {
   const navigate = useNavigate();
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const { isAuthenticated, hydrated } = useErp();
-  const isAuthPage = pathname === "/giris";
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const { isAuthenticated, hydrated, permissions } = useErp();
+  const area = areaOf(pathname);
+
+  const target: string | null = !hydrated
+    ? null
+    : !isAuthenticated
+      ? area === "auth"
+        ? null
+        : "/giris"
+      : area === "auth"
+        ? permissions.isPortal
+          ? "/portal"
+          : "/"
+        : permissions.isPortal && area === "staff"
+          ? "/portal"
+          : !permissions.isPortal && area === "portal"
+            ? "/"
+            : null;
 
   useEffect(() => {
-    if (!hydrated) return;
-    if (!isAuthenticated && !isAuthPage) {
-      navigate({ to: "/giris" });
-    } else if (isAuthenticated && isAuthPage) {
-      navigate({ to: "/" });
-    }
-  }, [hydrated, isAuthenticated, isAuthPage, navigate]);
+    if (target) navigate({ to: target, replace: true });
+  }, [target, navigate]);
 
-  if (!hydrated) {
-    return <div className="grid min-h-screen place-items-center text-sm text-muted-foreground">Yükleniyor…</div>;
-  }
+  if (!hydrated || target) return area === "auth" && !target ? <>{children(area)}</> : <Splash />;
+  return <>{children(area)}</>;
+}
 
-  if (!isAuthenticated && !isAuthPage) return null;
-  if (isAuthenticated && isAuthPage) return null;
-
-  return <>{children}</>;
+function StaffShell({ children }: { children: ReactNode }) {
+  return (
+    <SidebarProvider>
+      <div className="flex min-h-svh w-full bg-background">
+        <AppSidebar />
+        <SidebarInset className="flex min-w-0 flex-1 flex-col bg-background">
+          <Topbar />
+          <main className="min-w-0 flex-1 overflow-x-hidden px-4 pb-24 pt-5 sm:px-6 sm:pt-6 md:pb-10 lg:px-8">
+            {children}
+          </main>
+        </SidebarInset>
+      </div>
+      <CommandPalette />
+      <div className="no-print fixed bottom-5 right-5 z-40 md:hidden">
+        <QuickAddMenu
+          trigger={
+            <Button
+              size="icon"
+              className="h-14 w-14 rounded-full shadow-[0_10px_30px_-8px_var(--primary)]"
+              aria-label="Yeni kayıt"
+            >
+              <Plus className="!size-6" />
+            </Button>
+          }
+        />
+      </div>
+    </SidebarProvider>
+  );
 }
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-  const location = useRouterState({ select: (state) => state.location });
-  const pathname = location.pathname;
-  const routeKey = `${pathname}:${JSON.stringify(location.search)}`;
-  const isAuthPage = pathname === "/giris";
+  const location = useRouterState({ select: (s) => s.location });
+  const routeKey = location.pathname;
 
   return (
     <QueryClientProvider client={queryClient}>
       <ErpProvider>
-        <AuthGate>
-          {isAuthPage ? (
-            <>
-              <Outlet />
-              <Toaster />
-            </>
-          ) : (
-            <SidebarProvider>
-              <div className="flex min-h-screen w-full bg-background">
-                <AppSidebar />
-                <SidebarInset className="flex min-w-0 flex-1 flex-col">
-                  <Topbar />
-                  <main className="min-w-0 flex-1 overflow-x-hidden px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
+        <ConfirmProvider>
+          <QuickActionsProvider>
+            <AuthGate>
+              {(area) =>
+                area === "auth" || area === "print" ? (
+                  <Outlet />
+                ) : area === "portal" ? (
+                  <PortalShell>
                     <div key={routeKey} className="route-content-enter">
                       <Outlet />
                     </div>
-                  </main>
-                </SidebarInset>
-              </div>
-              <Toaster />
-            </SidebarProvider>
-          )}
-        </AuthGate>
+                  </PortalShell>
+                ) : (
+                  <StaffShell>
+                    <div key={routeKey} className="route-content-enter">
+                      <Outlet />
+                    </div>
+                  </StaffShell>
+                )
+              }
+            </AuthGate>
+            <Toaster richColors closeButton position="bottom-right" />
+          </QuickActionsProvider>
+        </ConfirmProvider>
       </ErpProvider>
     </QueryClientProvider>
   );
