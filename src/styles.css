@@ -402,6 +402,15 @@
   }
 }
 
+@keyframes nav-progress {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+
 @keyframes progress-grow {
   from {
     transform: scaleX(0);
@@ -441,6 +450,10 @@
   }
   .interactive-card:active {
     transform: translateY(0) scale(0.995);
+  }
+
+  .nav-progress {
+    animation: nav-progress 900ms cubic-bezier(0.4, 0, 0.2, 1) infinite;
   }
 
   .progress-bar {

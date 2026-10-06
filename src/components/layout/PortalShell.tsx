@@ -6,10 +6,12 @@ import { Avatar } from "@/components/app/bits";
 import { Button } from "@/components/ui/button";
 import { ThemeMenu } from "@/components/layout/Topbar";
 import { cn } from "@/lib/utils";
+import { useWarmRoutes } from "@/components/layout/navigation";
 
 export function PortalShell({ children }: { children: ReactNode }) {
   const { state, currentUser, logout } = useErp();
   const navigate = useNavigate();
+  useWarmRoutes();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const client = state.clients.find((c) => c.id === currentUser.clientId);
   const unread = state.messages.filter(

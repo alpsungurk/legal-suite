@@ -18,6 +18,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { QuickAddMenu, THEME_INIT_SCRIPT, Topbar } from "@/components/layout/Topbar";
 import { CommandPalette } from "@/components/layout/CommandPalette";
+import { NavProgress, useWarmRoutes } from "@/components/layout/navigation";
 import { PortalShell } from "@/components/layout/PortalShell";
 import { Toaster } from "@/components/ui/sonner";
 import { ErpProvider, useErp } from "@/lib/erp-store";
@@ -178,6 +179,7 @@ function AuthGate({ children }: { children: (area: Area) => ReactNode }) {
 }
 
 function StaffShell({ children }: { children: ReactNode }) {
+  useWarmRoutes();
   return (
     <SidebarProvider>
       <div className="flex min-h-svh w-full bg-background">
@@ -209,8 +211,10 @@ function StaffShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-  const location = useRouterState({ select: (s) => s.location });
-  const routeKey = location.pathname;
+  // Giriş animasyonu yeni sayfa gerçekten render olduğunda oynasın (URL değiştiği anda değil)
+  const routeKey = useRouterState({
+    select: (s) => (s.resolvedLocation ?? s.location).pathname,
+  });
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -236,6 +240,7 @@ function RootComponent() {
                 )
               }
             </AuthGate>
+            <NavProgress />
             <Toaster richColors closeButton position="bottom-right" />
           </QuickActionsProvider>
         </ConfirmProvider>
