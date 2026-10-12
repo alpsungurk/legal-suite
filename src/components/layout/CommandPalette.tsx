@@ -5,7 +5,6 @@ import {
   FilePlus2,
   FolderKanban,
   Gavel,
-  PiggyBank,
   Receipt,
   UserPlus,
   Users,
@@ -66,22 +65,41 @@ export function CommandPalette() {
   };
 
   const actions: Array<{ kind: QuickKind; label: string; icon: LucideIcon; show: boolean }> = [
-    { kind: "expense", label: "Yeni masraf", icon: Receipt, show: permissions.addExpense },
-    { kind: "plan", label: "Yeni tahsilat planı", icon: Wallet, show: permissions.manageFinance },
     {
-      kind: "advance",
-      label: "Masraf avansı al",
-      icon: PiggyBank,
-      show: permissions.manageFinance,
+      kind: "expense",
+      label: "Yeni masraf",
+      icon: Receipt,
+      show: permissions.can("expenses", "create"),
     },
-    { kind: "reminder", label: "Ajandaya ekle", icon: CalendarPlus, show: true },
-    { kind: "client", label: "Yeni müvekkil", icon: UserPlus, show: permissions.manageRecords },
-    { kind: "case", label: "Yeni dosya", icon: FilePlus2, show: permissions.manageRecords },
+    {
+      kind: "plan",
+      label: "Yeni tahsilat planı",
+      icon: Wallet,
+      show: permissions.can("fees", "create"),
+    },
+    {
+      kind: "reminder",
+      label: "Ajandaya ekle",
+      icon: CalendarPlus,
+      show: permissions.can("reminders", "create"),
+    },
+    {
+      kind: "client",
+      label: "Yeni müvekkil",
+      icon: UserPlus,
+      show: permissions.can("clients", "create"),
+    },
+    {
+      kind: "case",
+      label: "Yeni dosya",
+      icon: FilePlus2,
+      show: permissions.can("cases", "create"),
+    },
     {
       kind: "enforcement",
       label: "Yeni icra dosyası",
       icon: Gavel,
-      show: permissions.manageRecords,
+      show: permissions.can("enforcements", "create"),
     },
   ];
 
@@ -115,56 +133,62 @@ export function CommandPalette() {
                 ))}
             </CommandGroup>
             <CommandSeparator />
-            <CommandGroup heading="Müvekkiller">
-              {state.clients.map((c) => (
-                <CommandItem
-                  key={c.id}
-                  value={`müvekkil ${c.name} ${c.phone} ${c.identity ?? ""}`}
-                  onSelect={() => go(`/muvekkiller/${c.id}`)}
-                >
-                  <Users className="h-4 w-4 text-muted-foreground" />
-                  <span className="flex-1 truncate">{c.name}</span>
-                  <span className="text-xs text-muted-foreground">{c.kind}</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-            <CommandGroup heading="Dosyalar">
-              {state.cases.map((c) => (
-                <CommandItem
-                  key={c.id}
-                  value={`dosya ${c.no} ${c.title} ${c.esasNo ?? ""} ${c.court ?? ""}`}
-                  onSelect={() => go(`/dosyalar/${c.id}`)}
-                >
-                  <FolderKanban className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-medium">{c.no}</span>
-                  <span className="flex-1 truncate text-muted-foreground">{c.title}</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-            <CommandGroup heading="İcra">
-              {state.enforcements.map((e) => (
-                <CommandItem
-                  key={e.id}
-                  value={`icra ${e.no} ${e.office}`}
-                  onSelect={() => go(`/icra/${e.id}`)}
-                >
-                  <Gavel className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-medium">{e.no}</span>
-                  <span className="flex-1 truncate text-muted-foreground">{e.office}</span>
-                </CommandItem>
-              ))}
-              {state.debtors.map((d) => (
-                <CommandItem
-                  key={d.id}
-                  value={`borçlu ${d.name} ${d.identity ?? ""}`}
-                  onSelect={() => go(`/borclular/${d.id}`)}
-                >
-                  <UserX className="h-4 w-4 text-muted-foreground" />
-                  <span className="flex-1 truncate">{d.name}</span>
-                  <span className="text-xs text-muted-foreground">Borçlu</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
+            {permissions.can("clients") && (
+              <CommandGroup heading="Müvekkiller">
+                {state.clients.map((c) => (
+                  <CommandItem
+                    key={c.id}
+                    value={`müvekkil ${c.name} ${c.phone} ${c.identity ?? ""}`}
+                    onSelect={() => go(`/muvekkiller/${c.id}`)}
+                  >
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                    <span className="flex-1 truncate">{c.name}</span>
+                    <span className="text-xs text-muted-foreground">{c.kind}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+            {permissions.can("cases") && (
+              <CommandGroup heading="Dosyalar">
+                {state.cases.map((c) => (
+                  <CommandItem
+                    key={c.id}
+                    value={`dosya ${c.no} ${c.title} ${c.esasNo ?? ""} ${c.court ?? ""}`}
+                    onSelect={() => go(`/dosyalar/${c.id}`)}
+                  >
+                    <FolderKanban className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">{c.no}</span>
+                    <span className="flex-1 truncate text-muted-foreground">{c.title}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+            {permissions.can("enforcements") && (
+              <CommandGroup heading="İcra">
+                {state.enforcements.map((e) => (
+                  <CommandItem
+                    key={e.id}
+                    value={`icra ${e.no} ${e.office}`}
+                    onSelect={() => go(`/icra/${e.id}`)}
+                  >
+                    <Gavel className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">{e.no}</span>
+                    <span className="flex-1 truncate text-muted-foreground">{e.office}</span>
+                  </CommandItem>
+                ))}
+                {state.debtors.map((d) => (
+                  <CommandItem
+                    key={d.id}
+                    value={`borçlu ${d.name} ${d.identity ?? ""}`}
+                    onSelect={() => go(`/borclular/${d.id}`)}
+                  >
+                    <UserX className="h-4 w-4 text-muted-foreground" />
+                    <span className="flex-1 truncate">{d.name}</span>
+                    <span className="text-xs text-muted-foreground">Borçlu</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
             <CommandGroup heading="Sayfalar">
               {pages.map((p) => (
                 <CommandItem key={p.url} value={`sayfa ${p.title}`} onSelect={() => go(p.url)}>

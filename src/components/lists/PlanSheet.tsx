@@ -83,7 +83,7 @@ export function PlanSheet({
                   s.status === "Gecikmiş" ? "red" : s.status === "Tamamlandı" ? "green" : "primary"
                 }
               />
-              {permissions.manageFinance && (
+              {permissions.can("fees", "edit") && (
                 <div className="flex gap-2">
                   {s.remaining > 0 && !plan.cancelled && (
                     <Button className="flex-1" onClick={() => quick.open("payment", { plan })}>
@@ -143,7 +143,7 @@ export function PlanSheet({
                             </p>
                           )}
                         </div>
-                        {permissions.manageFinance && rem > 0 && !plan.cancelled && (
+                        {permissions.can("fees", "edit") && rem > 0 && !plan.cancelled && (
                           <Button
                             size="sm"
                             variant="soft"
@@ -166,7 +166,7 @@ export function PlanSheet({
                                 {account(p.accountId) && ` · ${account(p.accountId)}`}
                               </span>
                               <Money value={p.amount} className="font-medium text-foreground" />
-                              {permissions.manageFinance && (
+                              {permissions.can("fees", "edit") && (
                                 <button
                                   type="button"
                                   title="Ödemeyi geri al"

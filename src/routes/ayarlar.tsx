@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
+  Archive,
   Building2,
+  Clock,
   DatabaseBackup,
   Download,
   KeyRound,
+  Lock,
   Pencil,
   Plus,
-  RotateCcw,
   Settings,
+  ShieldCheck,
   Tags,
   Trash2,
   Upload,
@@ -30,10 +33,28 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { useQuick } from "@/components/forms/quick";
 import { useConfirm } from "@/components/app/confirm";
-import type { FirmProfile, Settings as SettingsT, User } from "@/lib/erp-types";
+import {
+  LOCKED_CASE_STATUSES,
+  LOCKED_ENFORCEMENT_STATUSES,
+  LOCKED_FEE_KINDS,
+  type FirmProfile,
+  type Settings as SettingsT,
+  type User,
+} from "@/lib/erp-types";
 import { exportBackup, readBackup } from "@/lib/backup";
-import { formatBytes, formatIban } from "@/lib/format";
-import { STORAGE_KEY } from "@/lib/migrations";
+import { formatIban } from "@/lib/format";
+import { sendSentryTest, sentryEnabled } from "@/lib/sentry";
+import { PermissionsTab } from "@/components/settings/PermissionsTab";
+import { CronTab } from "@/components/settings/CronTab";
+import { formatDate, today } from "@/lib/format";
+import { archiveCandidates } from "@/lib/finance";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type Search = { sekme?: string };
 
@@ -41,7 +62,7 @@ export const Route = createFileRoute("/ayarlar")({
   validateSearch: (s: Record<string, unknown>): Search => ({
     sekme: typeof s.sekme === "string" ? s.sekme : undefined,
   }),
-  head: () => ({ meta: [{ title: "Ayarlar — Lex Yönetim" }] }),
+  head: () => ({ meta: [{ title: "Ayarlar — LexKasa" }] }),
   component: Page,
 });
 
@@ -49,7 +70,13 @@ function Page() {
   const { permissions } = useErp();
   const navigate = useNavigate();
   const { sekme } = Route.useSearch();
-  const tab = sekme ?? (permissions.manageSettings ? "buro" : "hesabim");
+  // Yetkisi olmayan sekmeler adresle de açılamaz
+  const allowed = new Set(
+    permissions.manageSettings
+      ? ["buro", "kullanicilar", "izinler", "kategoriler", "hesabim", "yedek", "zamanlama"]
+      : ["hesabim"],
+  );
+  const tab = sekme && allowed.has(sekme) ? sekme : permissions.manageSettings ? "buro" : "hesabim";
   const setTab = (t: string) => navigate({ to: "/ayarlar", search: { sekme: t }, replace: true });
 
   return (
@@ -72,6 +99,11 @@ function Page() {
                 <Users className="mr-1.5 h-4 w-4" /> Kullanıcılar
               </TabsTrigger>
             )}
+            {permissions.manageUsers && (
+              <TabsTrigger value="izinler">
+                <ShieldCheck className="mr-1.5 h-4 w-4" /> İzinler
+              </TabsTrigger>
+            )}
             {permissions.manageSettings && (
               <TabsTrigger value="kategoriler">
                 <Tags className="mr-1.5 h-4 w-4" /> Kategoriler
@@ -85,6 +117,11 @@ function Page() {
                 <DatabaseBackup className="mr-1.5 h-4 w-4" /> Yedekleme
               </TabsTrigger>
             )}
+            {permissions.manageSettings && (
+              <TabsTrigger value="zamanlama">
+                <Clock className="mr-1.5 h-4 w-4" /> Zamanlama
+              </TabsTrigger>
+            )}
           </TabsList>
         </div>
         <TabsContent value="buro" className="mt-4">
@@ -92,6 +129,9 @@ function Page() {
         </TabsContent>
         <TabsContent value="kullanicilar" className="mt-4">
           <UsersTab />
+        </TabsContent>
+        <TabsContent value="izinler" className="mt-4">
+          <PermissionsTab />
         </TabsContent>
         <TabsContent value="kategoriler" className="mt-4">
           <CategoriesTab />
@@ -102,6 +142,9 @@ function Page() {
         <TabsContent value="yedek" className="mt-4">
           <BackupTab />
         </TabsContent>
+        <TabsContent value="zamanlama" className="mt-4">
+          <CronTab />
+        </TabsContent>
       </Tabs>
     </PageShell>
   );
@@ -110,7 +153,7 @@ function Page() {
 /* ───────────── Büro ───────────── */
 
 function FirmTab() {
-  const { state, updateSettings } = useErp();
+  const { state, updateSettings, organization } = useErp();
   const [firm, setFirm] = useState<FirmProfile>(state.settings.firm);
   useEffect(() => setFirm(state.settings.firm), [state.settings.firm]);
   const dirty = JSON.stringify(firm) !== JSON.stringify(state.settings.firm);
@@ -130,6 +173,34 @@ function FirmTab() {
   );
   return (
     <div className="space-y-4">
+      <Section
+        title="Organizasyon"
+        description="Büronuzun LexKasa çalışma alanı. Tüm kullanıcılar ve kayıtlar bu organizasyona bağlıdır."
+      >
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {(
+            [
+              ["Organizasyon", organization.name],
+              ["Organizasyon kodu", organization.id],
+              [
+                "Kuruluş",
+                organization.createdAt ? formatDate(organization.createdAt.slice(0, 10)) : "—",
+              ],
+              ["Kullanıcı", `${state.users.filter((u) => u.active).length} aktif`],
+            ] as const
+          ).map(([label, value]) => (
+            <div key={label} className="min-w-0 rounded-xl bg-secondary/40 p-3">
+              <p className="text-xs text-muted-foreground">{label}</p>
+              <p className="truncate text-sm font-semibold" title={value}>
+                {value}
+              </p>
+            </div>
+          ))}
+        </div>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Organizasyon adı aşağıdaki "Kısa ad" alanından değiştirilir.
+        </p>
+      </Section>
       <Section title="Büro bilgileri" description="Ekstre ve dökümlerin başlığında görünür">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {field("name", "Kısa ad", { placeholder: "Lex Hukuk Bürosu" })}
@@ -237,12 +308,7 @@ function UsersTab() {
       header: "Rol",
       sort: (u) => u.role,
       export: (u) => u.role,
-      cell: (u) =>
-        u.role === "Müvekkil" ? (
-          <StatusBadge tone="cyan">Müvekkil · {clientName(u.clientId)}</StatusBadge>
-        ) : (
-          <StatusBadge status={u.role} />
-        ),
+      cell: (u) => <StatusBadge status={u.role} />,
     },
     {
       id: "active",
@@ -254,7 +320,7 @@ function UsersTab() {
   return (
     <Section
       title="Kullanıcılar"
-      description="Ekip üyeleri ve müvekkil portalı hesapları"
+      description="Büro kullanıcıları (admin ve avukat)"
       actions={
         <Button size="sm" onClick={() => quick.open("user")}>
           <Plus /> Kullanıcı ekle
@@ -272,7 +338,7 @@ function UsersTab() {
           {
             id: "role",
             label: "Rol",
-            options: ["Admin", "Avukat", "Sekreter", "Müvekkil"],
+            options: ["Admin", "Avukat"],
             get: (u) => u.role,
           },
         ]}
@@ -315,33 +381,100 @@ function UsersTab() {
 
 /* ───────────── Kategoriler ───────────── */
 
-const CATS: Array<{
-  key: keyof Pick<SettingsT, "caseTypes" | "expenseTypes" | "reminderTypes" | "documentCategories">;
+type CatKey = keyof Omit<SettingsT, "firm" | "rolePermissions">;
+
+const CAT_GROUPS: Array<{
   title: string;
-  desc: string;
+  items: Array<{ key: CatKey; title: string; desc: string; locked?: string[]; canEmpty?: boolean }>;
 }> = [
-  { key: "expenseTypes", title: "Masraf türleri", desc: "Harç, bilirkişi, tebligat..." },
-  { key: "caseTypes", title: "Dosya türleri", desc: "Dava, icra, danışmanlık..." },
-  { key: "reminderTypes", title: "Ajanda türleri", desc: "Duruşma, süre sonu, toplantı..." },
   {
-    key: "documentCategories",
-    title: "Belge kategorileri",
-    desc: "Dilekçe, karar, vekaletname...",
+    title: "Dosyalar",
+    items: [
+      { key: "caseTypes", title: "Dosya türleri", desc: "Dava, icra, danışmanlık..." },
+      {
+        key: "caseStatuses",
+        title: "Dosya durumları",
+        desc: "Açık, derdest, karar... (Kapalı dosyayı kapatır)",
+        locked: LOCKED_CASE_STATUSES,
+      },
+      {
+        key: "courts",
+        title: "Mahkemeler",
+        desc: "Dosya açarken listeden seçilir; yeni yazılan mahkeme buraya eklenir",
+        canEmpty: true,
+      },
+      {
+        key: "documentCategories",
+        title: "Belge kategorileri",
+        desc: "Dilekçe, karar, vekaletname...",
+      },
+      { key: "reminderTypes", title: "Ajanda türleri", desc: "Duruşma, süre sonu, toplantı..." },
+    ],
+  },
+  {
+    title: "Masraf ve tahsilat",
+    items: [
+      { key: "expenseTypes", title: "Masraf türleri", desc: "Harç, bilirkişi, tebligat..." },
+      {
+        key: "feeKinds",
+        title: "Ücret türleri",
+        desc: "Vekalet ücreti, danışmanlık... (Aylık ücret otomatik tahakkukta kullanılır)",
+        locked: LOCKED_FEE_KINDS,
+      },
+      { key: "paymentMethods", title: "Ödeme yöntemleri", desc: "Nakit, havale, kredi kartı..." },
+    ],
+  },
+  {
+    title: "İcra",
+    items: [
+      {
+        key: "enforcementStatuses",
+        title: "İcra durumları",
+        desc: "Haciz, satış, ödeme planı... (kilitliler otomatik kullanılır)",
+        locked: LOCKED_ENFORCEMENT_STATUSES,
+      },
+      { key: "enforcementTypes", title: "Takip türleri", desc: "İlamsız, ilamlı, kambiyo..." },
+      {
+        key: "enforcementOffices",
+        title: "İcra daireleri",
+        desc: "Takip açarken listeden seçilir; yeni yazılan daire buraya eklenir",
+        canEmpty: true,
+      },
+      {
+        key: "contactChannels",
+        title: "Görüşme kanalları",
+        desc: "Telefon, WhatsApp, yüz yüze...",
+      },
+    ],
   },
 ];
 
 function CategoriesTab() {
   const { state, updateSettings } = useErp();
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-      {CATS.map((c) => (
-        <CategoryEditor
-          key={c.key}
-          title={c.title}
-          description={c.desc}
-          items={state.settings[c.key]}
-          onChange={(items) => updateSettings({ [c.key]: items } as Partial<SettingsT>)}
-        />
+    <div className="space-y-6">
+      <p className="text-sm text-muted-foreground">
+        Formlardaki açılır listeler buradan gelir. Eklediğiniz değer hemen tüm formlarda çıkar;
+        sildiğiniz değer eski kayıtlarda olduğu gibi kalır. <Lock className="inline h-3.5 w-3.5" />{" "}
+        işaretli değerleri program otomatik kullandığı için silinemez.
+      </p>
+      {CAT_GROUPS.map((g) => (
+        <div key={g.title} className="space-y-3">
+          <h3 className="text-sm font-semibold text-muted-foreground">{g.title}</h3>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {g.items.map((c) => (
+              <CategoryEditor
+                key={c.key}
+                title={c.title}
+                description={c.desc}
+                items={state.settings[c.key]}
+                locked={c.locked}
+                canEmpty={c.canEmpty}
+                onChange={(items) => updateSettings({ [c.key]: items } as Partial<SettingsT>)}
+              />
+            ))}
+          </div>
+        </div>
       ))}
     </div>
   );
@@ -351,11 +484,15 @@ function CategoryEditor({
   title,
   description,
   items,
+  locked = [],
+  canEmpty,
   onChange,
 }: {
   title: string;
   description: string;
   items: string[];
+  locked?: string[];
+  canEmpty?: boolean;
   onChange: (v: string[]) => void;
 }) {
   const [value, setValue] = useState("");
@@ -363,31 +500,49 @@ function CategoryEditor({
     const v = value.trim();
     if (!v) return;
     if (items.some((i) => i.toLocaleLowerCase("tr") === v.toLocaleLowerCase("tr"))) {
-      toast.error("Bu kategori zaten var");
+      toast.error("Bu değer zaten var");
       return;
     }
     onChange([...items, v]);
     setValue("");
   };
+  const removeItem = (i: string) => {
+    if (!canEmpty && items.length <= 1) {
+      toast.error("Listede en az bir değer kalmalı");
+      return;
+    }
+    onChange(items.filter((x) => x !== i));
+  };
   return (
     <Section title={title} description={description}>
-      <div className="flex flex-wrap gap-1.5">
-        {items.map((i) => (
-          <span
-            key={i}
-            className="group inline-flex h-7 items-center gap-1 rounded-full border border-border/80 bg-secondary/50 pl-3 pr-1.5 text-xs font-medium animate-pop"
-          >
-            {i}
-            <button
-              type="button"
-              onClick={() => onChange(items.filter((x) => x !== i))}
-              className="grid h-4 w-4 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/15 hover:text-destructive"
-              aria-label={`${i} sil`}
+      <div className="flex max-h-56 flex-wrap gap-1.5 overflow-y-auto">
+        {items.length === 0 && (
+          <p className="text-xs text-muted-foreground">Henüz değer yok. Aşağıdan ekleyin.</p>
+        )}
+        {items.map((i) => {
+          const isLocked = locked.includes(i);
+          return (
+            <span
+              key={i}
+              title={isLocked ? "Program bu değeri kullanıyor, silinemez" : undefined}
+              className="group inline-flex h-7 items-center gap-1 rounded-full border border-border/80 bg-secondary/50 pl-3 pr-1.5 text-xs font-medium animate-pop"
             >
-              <X className="h-3 w-3" />
-            </button>
-          </span>
-        ))}
+              {i}
+              {isLocked ? (
+                <Lock className="mx-0.5 h-3 w-3 text-muted-foreground" />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => removeItem(i)}
+                  className="grid h-4 w-4 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/15 hover:text-destructive"
+                  aria-label={`${i} sil`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </span>
+          );
+        })}
       </div>
       <form
         className="mt-3 flex gap-2"
@@ -508,18 +663,145 @@ function AccountTab() {
 
 /* ───────────── Yedekleme ───────────── */
 
+function ArchiveSection() {
+  const { state, archiveYears } = useErp();
+  const confirm = useConfirm();
+  const current = Number(today().slice(0, 4));
+  const dated = [
+    ...state.expenses.map((e) => e.date),
+    ...state.transactions.map((t) => t.date),
+    ...state.collections.map((c) => c.date),
+    ...state.plans.map((p) => p.date),
+  ];
+  const minYear = dated.length ? Math.min(...dated.map((d) => Number(d.slice(0, 4)))) : current;
+  const years = Array.from({ length: Math.max(0, current - minYear) }, (_, i) => current - 1 - i);
+  const [year, setYear] = useState<string>(years[0] ? String(years[0]) : "");
+  const c = year ? archiveCandidates(state, Number(year)) : null;
+  const counts: Array<[string, number]> = c
+    ? [
+        ["Masraf (makbuzlarıyla)", c.expenses.length],
+        ["Biten tahsilat planı", c.plans.length],
+        ["Aktarılmış icra tahsilatı", c.collections.length],
+        ["Kasa / banka hareketi", c.transactions.length],
+        ["Biten ajanda kaydı", c.reminders.length],
+        ["Sonuçlanan ödeme sözü", c.promises.length],
+        ["Görüşme notu", c.contacts.length],
+        ["Aktivite / bildirim", c.activities.length + c.notifications.length],
+      ]
+    : [];
+  const total = counts.reduce((n, [, v]) => n + v, 0);
+  return (
+    <Section
+      title="Eski yılları arşivle"
+      description="Yer açmak için eski yılların ayrıntılarını siler; her yılın para toplamları kalır."
+    >
+      {years.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          Arşivlenecek eski yıl yok. Yalnızca içinde bulunulan yıldan önceki yıllar arşivlenebilir.
+        </p>
+      ) : (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <Select value={year} onValueChange={setYear}>
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {years.map((y) => (
+                  <SelectItem key={y} value={String(y)}>
+                    {y}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <span className="text-muted-foreground">yılı ve öncesi</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {counts.map(([label, n]) => (
+              <div key={label} className="rounded-xl bg-secondary/40 p-3">
+                <p className="text-xs text-muted-foreground">{label}</p>
+                <p className="text-lg font-bold">{n}</p>
+              </div>
+            ))}
+          </div>
+          <ul className="list-disc space-y-1 pl-5 text-xs text-muted-foreground">
+            <li>
+              <strong>Kalanlar:</strong> müvekkiller, dosyalar, icra dosyaları, borçlular, belgeler;
+              her yılın tahsilat / masraf toplamları (Raporlar → Yıllık özet); kasa ve cari
+              bakiyeleri.
+            </li>
+            <li>
+              <strong>Kalmayanlar:</strong> yukarıdaki kayıtların tek tek ayrıntısı. Hâlâ ödemesi
+              bekleyen taksit, aktarılmamış icra parası ve bekleyen işler silinmez.
+            </li>
+          </ul>
+          <Button
+            variant="destructive"
+            disabled={!total}
+            onClick={async () => {
+              if (
+                await confirm({
+                  title: `${year} ve öncesi arşivlensin mi?`,
+                  description: `${total} kayıt kalıcı olarak silinecek; yalnızca yıllık toplamlar ve bakiyeler kalacak. Geri alınamaz, önce yedek almanız önerilir.`,
+                  confirmLabel: "Arşivle",
+                })
+              ) {
+                const n = archiveYears(Number(year));
+                toast.success(`${n} kayıt arşivlendi; yıllık toplamlar Raporlar'da duruyor`);
+              }
+            }}
+          >
+            <Archive /> {total ? `${total} kaydı arşivle` : "Arşivlenecek kayıt yok"}
+          </Button>
+        </div>
+      )}
+    </Section>
+  );
+}
+
+function ErrorTrackingSection() {
+  const [busy, setBusy] = useState(false);
+  const enabled = sentryEnabled();
+  return (
+    <Section
+      title="Hata izleme"
+      description="Uygulamada oluşan hatalar geliştiriciye otomatik bildirilir (Sentry)."
+    >
+      <div className="flex flex-wrap items-center gap-3">
+        <StatusBadge tone={enabled ? "green" : "slate"}>
+          {enabled ? "Açık" : "Kapalı (DSN tanımlı değil)"}
+        </StatusBadge>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={!enabled}
+          loading={busy}
+          onClick={async () => {
+            setBusy(true);
+            const sent = await sendSentryTest();
+            setBusy(false);
+            if (sent)
+              toast.success("Test hatası gönderildi; Sentry panelinde birkaç saniyede görünür");
+            else toast.error("Gönderilemedi (ağ ya da reklam engelleyici olabilir)");
+          }}
+        >
+          Test hatası gönder
+        </Button>
+      </div>
+      <p className="mt-3 text-xs text-muted-foreground">
+        Kişisel veri gönderilmez: ad, e-posta, TC / vergi no, IBAN, telefon maskelenir; istek
+        içeriği ve tıklanan metinler izlenmez. Hatayı kimin aldığı yalnızca kimlik numarasıyla
+        görünür.
+      </p>
+    </Section>
+  );
+}
+
 function BackupTab() {
-  const { state, replaceState, resetDemo } = useErp();
+  const { state, replaceState } = useErp();
   const confirm = useConfirm();
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
-  const size = (() => {
-    try {
-      return (localStorage.getItem(STORAGE_KEY)?.length ?? 0) * 2;
-    } catch {
-      return 0;
-    }
-  })();
   const counts: Array<[string, number]> = [
     ["Müvekkil", state.clients.length],
     ["Dosya", state.cases.length],
@@ -543,7 +825,7 @@ function BackupTab() {
           ))}
         </div>
         <p className="mt-3 text-xs text-muted-foreground">
-          Kayıt verisi: {formatBytes(size)} (ekler ayrıca tarayıcı veritabanında tutulur)
+          Veriler Supabase üzerinde tutulur; ekler Storage kovasında saklanır.
         </p>
       </Section>
       <Section title="Yedek al / geri yükle">
@@ -555,7 +837,7 @@ function BackupTab() {
               try {
                 const r = await exportBackup(state);
                 toast.success(`Yedek indirildi (${r.attachments} ek dahil)`);
-                if (r.missing) toast.warning(`${r.missing} ek bu cihazda bulunamadı`);
+                if (r.missing) toast.warning(`${r.missing} ek indirilemedi`);
               } catch (e) {
                 toast.error((e as Error).message);
               } finally {
@@ -580,14 +862,14 @@ function BackupTab() {
               if (
                 !(await confirm({
                   title: "Yedek geri yüklensin mi?",
-                  description: "Mevcut tüm veriler yedekteki verilerle değiştirilecek.",
-                  confirmLabel: "Geri yükle",
+                  description:
+                    "Sunucu aktarımı henüz otomatik değildir. Excel aktarımını veya destek sürecini kullanın.",
+                  confirmLabel: "Anladım",
                 }))
               )
                 return;
               try {
                 replaceState(await readBackup(file));
-                toast.success("Yedek geri yüklendi");
               } catch (err) {
                 toast.error((err as Error).message);
               }
@@ -595,28 +877,8 @@ function BackupTab() {
           />
         </div>
       </Section>
-      <Section
-        title="Demo verisine dön"
-        description="Tüm kayıtları silip örnek veriyle yeniden başlar."
-      >
-        <Button
-          variant="destructive"
-          onClick={async () => {
-            if (
-              await confirm({
-                title: "Tüm veriler silinsin mi?",
-                description: "Bu işlem geri alınamaz. Önce yedek almanız önerilir.",
-                confirmLabel: "Sıfırla",
-              })
-            ) {
-              resetDemo();
-              toast.success("Demo verisi yüklendi");
-            }
-          }}
-        >
-          <RotateCcw /> Sıfırla
-        </Button>
-      </Section>
+      <ArchiveSection />
+      <ErrorTrackingSection />
     </div>
   );
 }

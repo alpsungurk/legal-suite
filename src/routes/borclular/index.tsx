@@ -1,10 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Pencil, Plus, UserX } from "lucide-react";
+import { FileSpreadsheet, Pencil, Plus, UserX } from "lucide-react";
 import { useErp } from "@/lib/erp-store";
 import { debtorSummary } from "@/lib/finance";
 import { formatMoney, sumBy } from "@/lib/format";
 import { PageHeader } from "@/components/app/PageHeader";
-import { Avatar, Money, PageShell } from "@/components/app/bits";
+import { Avatar, Money, PageShell, NoAccess } from "@/components/app/bits";
 import { StatGrid, StatTile } from "@/components/app/StatTile";
 import { DataTable, type Column } from "@/components/app/DataTable";
 import { ReliabilityBadge } from "@/components/app/StatusBadge";
@@ -13,7 +13,7 @@ import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { useQuick } from "@/components/forms/quick";
 
 export const Route = createFileRoute("/borclular/")({
-  head: () => ({ meta: [{ title: "Borçlular — Lex Yönetim" }] }),
+  head: () => ({ meta: [{ title: "Borçlular — LexKasa" }] }),
   component: Page,
 });
 
@@ -98,6 +98,7 @@ function Page() {
     },
   ];
 
+  if (!permissions.can("enforcements")) return <NoAccess />;
   return (
     <PageShell>
       <PageHeader
@@ -105,16 +106,21 @@ function Page() {
         description="Borçlu kartları: tüm icra dosyaları, sözler ve görüşmeler tek yerde"
         icon={UserX}
         actions={
-          permissions.manageRecords && (
-            <Button
-              onClick={() =>
-                quick.open("debtor", {
-                  onSaved: (d) => navigate({ to: "/borclular/$id", params: { id: d.id } }),
-                })
-              }
-            >
-              <Plus /> Yeni borçlu
-            </Button>
+          permissions.can("enforcements", "create") && (
+            <>
+              <Button variant="outline" onClick={() => quick.open("import", { kind: "debtors" })}>
+                <FileSpreadsheet /> Excel ile aktar
+              </Button>
+              <Button
+                onClick={() =>
+                  quick.open("debtor", {
+                    onSaved: (d) => navigate({ to: "/borclular/$id", params: { id: d.id } }),
+                  })
+                }
+              >
+                <Plus /> Yeni borçlu
+              </Button>
+            </>
           )
         }
       />
@@ -149,7 +155,7 @@ function Page() {
         exportName="Borçlular"
         onRowClick={(r) => navigate({ to: "/borclular/$id", params: { id: r.d.id } })}
         rowActions={
-          permissions.manageRecords
+          permissions.can("enforcements", "edit")
             ? (r) => (
                 <DropdownMenuItem onClick={() => quick.open("debtor", { record: r.d })}>
                   <Pencil /> Düzenle

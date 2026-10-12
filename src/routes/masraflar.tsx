@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { FileWarning, Plus, Receipt, Building2, Users } from "lucide-react";
+import { FileSpreadsheet, FileWarning, Plus, Receipt, Building2, Users } from "lucide-react";
 import { useErp } from "@/lib/erp-store";
 import { formatMoney, sumBy, today } from "@/lib/format";
 import { PageHeader } from "@/components/app/PageHeader";
@@ -12,14 +12,16 @@ import { ExpenseTable } from "@/components/lists/tables";
 import { useQuick } from "@/components/forms/quick";
 
 export const Route = createFileRoute("/masraflar")({
-  head: () => ({ meta: [{ title: "Masraflar — Lex Yönetim" }] }),
+  head: () => ({ meta: [{ title: "Masraflar — LexKasa" }] }),
   component: Page,
 });
 
 function Page() {
   const { state, currentUser, permissions } = useErp();
   const quick = useQuick();
-  const [scope, setScope] = useState(permissions.viewFinance ? "all" : "mine");
+  const seeAll = permissions.can("expenses");
+  const [scopeState, setScope] = useState(seeAll ? "all" : "mine");
+  const scope = seeAll ? scopeState : "mine";
   const [kind, setKind] = useState("all");
 
   const visible = state.expenses.filter(
@@ -38,10 +40,15 @@ function Page() {
         description="Dosya masrafları ve büro giderleri · makbuz ve belgeleriyle"
         icon={Receipt}
         actions={
-          permissions.addExpense && (
-            <Button onClick={() => quick.open("expense")}>
-              <Plus /> Yeni masraf
-            </Button>
+          permissions.can("expenses", "create") && (
+            <>
+              <Button variant="outline" onClick={() => quick.open("import", { kind: "expenses" })}>
+                <FileSpreadsheet /> Excel ile aktar
+              </Button>
+              <Button onClick={() => quick.open("expense")}>
+                <Plus /> Yeni masraf
+              </Button>
+            </>
           )
         }
       />
@@ -63,7 +70,7 @@ function Page() {
           )}
           icon={Users}
           tone="blue"
-          hint="Avanstan düşülen / cariye yazılan"
+          hint="Müvekkilin carisine yazılan"
         />
         <StatTile
           label="Büro giderleri"
@@ -90,7 +97,7 @@ function Page() {
         />
       </StatGrid>
       <div className="flex flex-wrap items-center gap-2">
-        {permissions.viewFinance && (
+        {seeAll && (
           <Segmented
             className="w-auto"
             value={scope}

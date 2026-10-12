@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, ChevronsUpDown, X } from "lucide-react";
+import { Check, ChevronsUpDown, Plus, X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Command,
@@ -85,6 +85,7 @@ export function Combobox({
   allowClear,
   invalid,
   id,
+  creatable,
 }: {
   value: string | undefined;
   onChange: (v: string) => void;
@@ -95,11 +96,26 @@ export function Combobox({
   allowClear?: boolean;
   invalid?: boolean;
   id?: string;
+  /** Listede olmayan değer yazılıp eklenebilir (değer = yazılan metin) */
+  creatable?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const selected = options.find((o) => o.value === value);
+  const [search, setSearch] = useState("");
+  const found = options.find((o) => o.value === value);
+  const selected = found ?? (creatable && value ? { value, label: value } : undefined);
+  const typed = search.trim();
+  const canCreate =
+    creatable &&
+    !!typed &&
+    !options.some((o) => o.label.toLocaleLowerCase("tr") === typed.toLocaleLowerCase("tr"));
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) setSearch("");
+      }}
+    >
       <PopoverTrigger asChild>
         <button
           id={id}
@@ -139,10 +155,28 @@ export function Combobox({
         align="start"
       >
         <Command>
-          <CommandInput placeholder={searchPlaceholder} />
+          <CommandInput
+            placeholder={creatable ? "Ara veya yeni yaz..." : searchPlaceholder}
+            value={search}
+            onValueChange={setSearch}
+          />
           <CommandList className="max-h-64">
-            <CommandEmpty>{emptyText}</CommandEmpty>
+            {!canCreate && <CommandEmpty>{emptyText}</CommandEmpty>}
             <CommandGroup>
+              {canCreate && (
+                <CommandItem
+                  value={`__ekle__ ${typed}`}
+                  onSelect={() => {
+                    onChange(typed);
+                    setOpen(false);
+                    setSearch("");
+                  }}
+                  className="gap-2 font-medium text-primary"
+                >
+                  <Plus className="h-4 w-4 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">“{typed}” ekle</span>
+                </CommandItem>
+              )}
               {options.map((o) => (
                 <CommandItem
                   key={o.value}
@@ -150,6 +184,7 @@ export function Combobox({
                   onSelect={() => {
                     onChange(o.value);
                     setOpen(false);
+                    setSearch("");
                   }}
                   className="gap-2"
                 >

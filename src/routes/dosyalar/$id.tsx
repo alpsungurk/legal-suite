@@ -11,15 +11,17 @@ import {
   Printer,
   Receipt,
   Wallet,
+  Archive,
   Clock,
   CircleDot,
 } from "lucide-react";
 import { useErp } from "@/lib/erp-store";
-import { advanceBalance, caseFinance, enforcementSummary } from "@/lib/finance";
+import { caseFinance, enforcementSummary } from "@/lib/finance";
 import { formatDate, formatDateLong, formatMoney, relativeDue, today } from "@/lib/format";
 import { PageHeader } from "@/components/app/PageHeader";
 import {
   AvatarStack,
+  NoAccess,
   DetailList,
   Money,
   PageShell,
@@ -37,6 +39,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useQuick } from "@/components/forms/quick";
+import { useCloseCase } from "@/components/forms/close-case";
 import { DocumentTable, ExpenseTable, PlanTable, ReminderTable } from "@/components/lists/tables";
 import { PlanSheet } from "@/components/lists/PlanSheet";
 import { EmptyState } from "@/components/EmptyState";
@@ -55,11 +58,13 @@ function Page() {
   const { id } = Route.useParams();
   const { sekme = "ozet" } = Route.useSearch();
   const navigate = useNavigate();
-  const { state, permissions } = useErp();
+  const { state, permissions, currentUser } = useErp();
   const quick = useQuick();
+  const closeCase = useCloseCase();
   const [planId, setPlanId] = useState<string | null>(null);
 
   const c = state.cases.find((x) => x.id === id);
+  if (!permissions.can("cases")) return <NoAccess />;
   if (!c) {
     return (
       <PageShell>
@@ -77,8 +82,14 @@ function Page() {
   }
   const client = state.clients.find((x) => x.id === c.clientId);
   const fin = caseFinance(state, c.id);
-  const adv = client ? advanceBalance(state, client.id, c.id) : null;
-  const expenses = state.expenses.filter((e) => e.caseId === c.id);
+  // Başkalarının masraflarını görme izni yoksa yalnızca kendi girdikleri görünür
+  const expenses = state.expenses.filter(
+    (e) => e.caseId === c.id && (permissions.can("expenses") || e.createdBy === currentUser.id),
+  );
+  const expenseShown = expenses.reduce((t, e) => t + e.amount, 0);
+  const chargedShown = expenses
+    .filter((e) => e.chargeTo === "Müvekkil" && e.paidBy === "Büro")
+    .reduce((t, e) => t + e.amount, 0);
   const plans = state.plans.filter((p) => p.caseId === c.id);
   const reminders = state.reminders.filter((r) => r.caseId === c.id);
   const docs = state.documents.filter((d) => d.caseId === c.id);
@@ -172,77 +183,87 @@ function Page() {
         }
         actions={
           <>
-            {permissions.viewFinance && (
+            {permissions.can("expenses") && (
               <Button variant="outline" asChild>
                 <Link to="/yazdir/dosya/$id" params={{ id: c.id }} target="_blank">
                   <Printer /> Masraf dökümü
                 </Link>
               </Button>
             )}
-            {permissions.manageRecords && (
+            {permissions.can("cases", "edit") && (
               <Button variant="outline" onClick={() => quick.open("case", { record: c })}>
                 <Pencil /> Düzenle
               </Button>
             )}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button>
-                  <Plus /> Ekle
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52">
-                <DropdownMenuItem
-                  onClick={() =>
-                    quick.open("expense", { preset: { caseId: c.id, clientId: c.clientId } })
-                  }
-                >
-                  <Receipt /> Masraf
-                </DropdownMenuItem>
-                {permissions.manageFinance && client && (
-                  <>
+            {permissions.can("cases", "delete") && (
+              <Button variant="outline" onClick={() => void closeCase(c.id)}>
+                <Archive /> Dosyayı kapat
+              </Button>
+            )}
+            {(permissions.can("expenses", "create") ||
+              permissions.can("fees", "create") ||
+              permissions.can("reminders", "create") ||
+              permissions.can("documents", "create") ||
+              permissions.can("enforcements", "create")) && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button>
+                    <Plus /> Ekle
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  {permissions.can("expenses", "create") && (
                     <DropdownMenuItem
                       onClick={() =>
-                        quick.open("advance", { preset: { clientId: client.id, caseId: c.id } })
+                        quick.open("expense", { preset: { caseId: c.id, clientId: c.clientId } })
                       }
                     >
-                      <PiggyBank /> Masraf avansı
+                      <Receipt /> Masraf
                     </DropdownMenuItem>
+                  )}
+                  {permissions.can("fees", "create") && client && (
+                    <>
+                      <DropdownMenuItem
+                        onClick={() =>
+                          quick.open("plan", {
+                            preset: { clientId: client.id, caseId: c.id, total: c.agreedFee },
+                          })
+                        }
+                      >
+                        <Wallet /> Tahsilat planı
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  {permissions.can("reminders", "create") && (
                     <DropdownMenuItem
                       onClick={() =>
-                        quick.open("plan", {
-                          preset: { clientId: client.id, caseId: c.id, total: c.agreedFee },
-                        })
+                        quick.open("reminder", { preset: { caseId: c.id, clientId: c.clientId } })
                       }
                     >
-                      <Wallet /> Tahsilat planı
+                      <CalendarPlus /> Duruşma / görev
                     </DropdownMenuItem>
-                  </>
-                )}
-                <DropdownMenuItem
-                  onClick={() =>
-                    quick.open("reminder", { preset: { caseId: c.id, clientId: c.clientId } })
-                  }
-                >
-                  <CalendarPlus /> Duruşma / görev
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() =>
-                    quick.open("document", { preset: { caseId: c.id, clientId: c.clientId } })
-                  }
-                >
-                  <FileText /> Belge
-                </DropdownMenuItem>
-                {permissions.manageRecords && client && (
-                  <DropdownMenuItem
-                    onClick={() =>
-                      quick.open("enforcement", { preset: { caseId: c.id, clientId: client.id } })
-                    }
-                  >
-                    <Gavel /> İcra takibi başlat
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  )}
+                  {permissions.can("documents", "create") && (
+                    <DropdownMenuItem
+                      onClick={() =>
+                        quick.open("document", { preset: { caseId: c.id, clientId: c.clientId } })
+                      }
+                    >
+                      <FileText /> Belge
+                    </DropdownMenuItem>
+                  )}
+                  {permissions.can("enforcements", "create") && client && (
+                    <DropdownMenuItem
+                      onClick={() =>
+                        quick.open("enforcement", { preset: { caseId: c.id, clientId: client.id } })
+                      }
+                    >
+                      <Gavel /> İcra takibi başlat
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </>
         }
       />
@@ -250,19 +271,19 @@ function Page() {
       <StatGrid>
         <StatTile
           label="Toplam masraf"
-          value={formatMoney(fin.expenseTotal)}
+          value={formatMoney(expenseShown)}
           icon={Receipt}
           tone="amber"
-          hint={`${expenses.length} kalem · ${formatMoney(fin.chargedTotal)} müvekkile yansıyan`}
+          hint={`${expenses.length} kalem · ${formatMoney(chargedShown)} müvekkile yansıyan`}
         />
-        {permissions.viewFinance && adv ? (
+        {permissions.can("fees") && client ? (
           <>
             <StatTile
-              label="Avans bakiyesi"
-              value={formatMoney(adv.balance)}
+              label="Müvekkile yansıyan"
+              value={formatMoney(chargedShown)}
               icon={PiggyBank}
-              tone={adv.balance < 0 ? "red" : "green"}
-              hint="Müvekkilin genel avansı dahil"
+              tone="violet"
+              hint="Büronun ödediği, cariye yazılan masraf"
             />
             <StatTile
               label="Ücret"
@@ -294,7 +315,7 @@ function Page() {
             <TabsTrigger value="ozet">Özet</TabsTrigger>
             <TabsTrigger value="ajanda">Ajanda ({reminders.length})</TabsTrigger>
             <TabsTrigger value="masraflar">Masraflar ({expenses.length})</TabsTrigger>
-            {permissions.viewFinance && (
+            {permissions.can("fees") && (
               <TabsTrigger value="tahsilatlar">Tahsilatlar ({plans.length})</TabsTrigger>
             )}
             <TabsTrigger value="belgeler">Belgeler ({docs.length})</TabsTrigger>
@@ -317,10 +338,9 @@ function Page() {
                     ...(c.closingDate
                       ? [{ label: "Kapanış", value: formatDateLong(c.closingDate) }]
                       : []),
-                    ...(c.agreedFee && permissions.viewFinance
+                    ...(c.agreedFee && permissions.can("fees")
                       ? [{ label: "Anlaşılan ücret", value: formatMoney(c.agreedFee) }]
                       : []),
-                    { label: "Müvekkil portalı", value: c.portalVisible ? "Görünür" : "Gizli" },
                   ]}
                 />
                 {c.note && (
@@ -329,7 +349,7 @@ function Page() {
                   </p>
                 )}
               </Section>
-              {permissions.viewFinance && fin.feeTotal > 0 && (
+              {permissions.can("fees") && fin.feeTotal > 0 && (
                 <Section title="Ücret tahsilatı">
                   <div className="mb-2 flex justify-between text-sm">
                     <span className="text-muted-foreground">Tahsil edilen</span>

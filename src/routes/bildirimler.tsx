@@ -12,7 +12,7 @@ import { StatusBadge } from "@/components/app/StatusBadge";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/bildirimler")({
-  head: () => ({ meta: [{ title: "Bildirimler — Lex Yönetim" }] }),
+  head: () => ({ meta: [{ title: "Bildirimler — LexKasa" }] }),
   component: Page,
 });
 
@@ -21,7 +21,12 @@ function Page() {
   const navigate = useNavigate();
   const mine = state.notifications.filter((n) => n.userId === currentUser.id);
   const unread = mine.filter((n) => !n.read).length;
-  const alertCount = computeAlerts(state, currentUser, permissions.viewFinance).length;
+  const alertCount = computeAlerts(
+    state,
+    currentUser,
+    permissions.can("fees"),
+    permissions.can("reminders"),
+  ).length;
 
   return (
     <PageShell>
@@ -40,7 +45,7 @@ function Page() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(320px,1fr)]">
         <Section
           title="Bildirimler"
-          description="Size atanan işler, müvekkil mesajları ve yüklemeler"
+          description="Size atanan işler ve hatırlatmalar"
           bodyClassName="p-2"
         >
           {mine.length === 0 ? (

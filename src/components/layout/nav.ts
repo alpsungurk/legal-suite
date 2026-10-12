@@ -2,7 +2,6 @@ import {
   BarChart3,
   BookOpenCheck,
   Bell,
-  CalendarClock,
   CalendarDays,
   FolderKanban,
   FolderOpen,
@@ -10,7 +9,6 @@ import {
   History,
   Landmark,
   LayoutDashboard,
-  MessagesSquare,
   PiggyBank,
   Receipt,
   Settings,
@@ -31,21 +29,23 @@ export type NavPage = {
 export const NAV_PAGES: NavPage[] = [
   { title: "Gösterge paneli", url: "/", icon: LayoutDashboard },
   { title: "Ajanda", url: "/takvim", icon: CalendarDays },
-  { title: "Mesajlar", url: "/mesajlar", icon: MessagesSquare },
-  { title: "Müvekkiller", url: "/muvekkiller", icon: Users },
-  { title: "Dosyalar", url: "/dosyalar", icon: FolderKanban },
-  { title: "Belgeler", url: "/belgeler", icon: FolderOpen },
-  { title: "Masraflar", url: "/masraflar", icon: Receipt },
-  { title: "Masraf avansları", url: "/avanslar", icon: PiggyBank, allow: (p) => p.viewFinance },
-  { title: "Tahsilatlar", url: "/tahsilatlar", icon: Wallet, allow: (p) => p.viewFinance },
-  { title: "Taksitler", url: "/taksitler", icon: CalendarClock, allow: (p) => p.viewFinance },
-  { title: "Cari hesap", url: "/cari-hesap", icon: BookOpenCheck, allow: (p) => p.viewFinance },
-  { title: "Banka & Kasa", url: "/banka-kasa", icon: Landmark, allow: (p) => p.viewFinance },
-  { title: "İcra dosyaları", url: "/icra", icon: Gavel },
-  { title: "Borçlular", url: "/borclular", icon: UserX },
+  { title: "Müvekkiller", url: "/muvekkiller", icon: Users, allow: (p) => p.can("clients") },
+  { title: "Dosyalar", url: "/dosyalar", icon: FolderKanban, allow: (p) => p.can("cases") },
+  { title: "Belgeler", url: "/belgeler", icon: FolderOpen, allow: (p) => p.can("documents") },
+  {
+    title: "Masraflar",
+    url: "/masraflar",
+    icon: Receipt,
+    allow: (p) => p.can("expenses") || p.can("expenses", "create"),
+  },
+  { title: "Tahsilatlar", url: "/tahsilatlar", icon: Wallet, allow: (p) => p.can("fees") },
+  { title: "Cari hesap", url: "/cari-hesap", icon: BookOpenCheck, allow: (p) => p.can("ledger") },
+  { title: "Banka & Kasa", url: "/banka-kasa", icon: Landmark, allow: (p) => p.can("accounts") },
+  { title: "İcra dosyaları", url: "/icra", icon: Gavel, allow: (p) => p.can("enforcements") },
+  { title: "Borçlular", url: "/borclular", icon: UserX, allow: (p) => p.can("enforcements") },
   { title: "Bildirimler", url: "/bildirimler", icon: Bell },
-  { title: "Raporlar", url: "/raporlar", icon: BarChart3, allow: (p) => p.viewReports },
-  { title: "Aktivite geçmişi", url: "/aktivite", icon: History, allow: (p) => p.viewActivity },
+  { title: "Raporlar", url: "/raporlar", icon: BarChart3, allow: (p) => p.can("reports") },
+  { title: "Aktivite geçmişi", url: "/aktivite", icon: History, allow: (p) => p.can("activity") },
   { title: "Ayarlar", url: "/ayarlar", icon: Settings, allow: (p) => p.manageSettings },
 ];
 
@@ -56,5 +56,5 @@ export function pageTitle(pathname: string) {
     .filter((p) => p.url !== "/")
     .sort((a, b) => b.url.length - a.url.length)
     .find((p) => pathname.startsWith(p.url + "/"));
-  return parent?.title ?? "Lex Yönetim";
+  return parent?.title ?? "LexKasa";
 }

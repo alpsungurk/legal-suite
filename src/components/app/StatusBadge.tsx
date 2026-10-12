@@ -49,7 +49,6 @@ const STATUS_TONES: Record<string, Tone> = {
   "Devam ediyor": "blue",
   Borçlu: "red",
   Alacaklı: "green",
-  Avans: "green",
   İade: "amber",
   Müvekkil: "violet",
   Büro: "slate",
@@ -68,7 +67,6 @@ const STATUS_TONES: Record<string, Tone> = {
   // roller
   Admin: "blue",
   Avukat: "violet",
-  Sekreter: "amber",
   // ajanda
   Duruşma: "violet",
   "Süre sonu": "red",

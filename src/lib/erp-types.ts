@@ -1,5 +1,5 @@
 /**
- * Lex Yönetim veri modeli.
+ * LexKasa veri modeli.
  *
  * Tüm kayıtlar `firmId` taşır: bugün tek büro var, ileride çok büroya (ve Supabase'e)
  * geçildiğinde aynı şema satır bazlı yetkiyle kullanılabilir.
@@ -17,7 +17,7 @@ export type BaseEntity = {
 
 /* ───────────────────────── Kullanıcılar ───────────────────────── */
 
-export const USER_ROLES = ["Admin", "Avukat", "Sekreter", "Müvekkil"] as const;
+export const USER_ROLES = ["Admin", "Avukat"] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 
 export type User = BaseEntity & {
@@ -30,8 +30,8 @@ export type User = BaseEntity & {
   active: boolean;
   passwordHash: string;
   passwordSalt: string;
-  /** Müvekkil rolündeki kullanıcının bağlı olduğu müvekkil */
-  clientId?: string;
+  /** Role göre varsayılan izinlere yapılan kişisel istisnalar ("modül.eylem": açık/kapalı) */
+  permissions?: Record<string, boolean>;
 };
 
 /* ───────────────────────── Müvekkil & Dosya ───────────────────────── */
@@ -51,14 +51,28 @@ export type Client = BaseEntity & {
   /** Kurumsal müvekkiller için aylık sabit ücret */
   monthlyFee?: number;
   monthlyFeeStartDate?: ISODate;
-  /** Avans bakiyesi bu tutarın altına düşünce uyarı */
-  advanceThreshold?: number;
-  portalEnabled: boolean;
-  portalShowStatement: boolean;
+  /** Kapatılıp silinen dosyalardan geriye kalan özet (sadece sayılar) */
+  closedCases?: ClosedCasesSummary;
 };
 
-export const CASE_STATUSES = ["Açık", "Derdest", "Karar", "Kanun yolu", "Kapalı"] as const;
-export type CaseStatus = (typeof CASE_STATUSES)[number];
+/** Kapanan dosyaların silindikten sonra müvekkilde kalan toplamları. */
+export type ClosedCasesSummary = {
+  caseCount: number;
+  /** Toplam alacak: kapanan dosyalarda müvekkilin büroya kalan borcu (dosya bazında net) */
+  receivable: number;
+  /** Toplam verecek: kapanan dosyalarda büronun müvekkile kalan borcu (dosya bazında net) */
+  payable: number;
+  /** Kapanan dosyaların toplam ücreti / bunun tahsil edilen kısmı */
+  feeTotal: number;
+  feePaid: number;
+  lastClosedAt: ISODateTime;
+};
+
+/** Varsayılan dosya durumları; Ayarlar > Kategoriler'den değiştirilebilir. */
+export const CASE_STATUSES = ["Açık", "Derdest", "Karar", "Kanun yolu", "Kapalı"];
+/** "Kapalı" dosya kapatmayı tetikler, "Açık" yeni dosyanın varsayılanıdır: silinemez */
+export const LOCKED_CASE_STATUSES = ["Açık", "Kapalı"];
+export type CaseStatus = string;
 
 export type CaseFile = BaseEntity & {
   no: string;
@@ -75,7 +89,6 @@ export type CaseFile = BaseEntity & {
   /** Anlaşılan vekalet ücreti (bilgi amaçlı) */
   agreedFee?: number;
   note?: string;
-  portalVisible: boolean;
 };
 
 /* ───────────────────────── Ekler ───────────────────────── */
@@ -89,8 +102,8 @@ export type AttachmentRef = {
 
 /* ───────────────────────── Finans ───────────────────────── */
 
-export const PAYMENT_METHODS = ["Nakit", "Havale/EFT", "Kredi kartı", "Çek", "Diğer"] as const;
-export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+export const PAYMENT_METHODS = ["Nakit", "Havale/EFT", "Kredi kartı", "Çek", "Diğer"];
+export type PaymentMethod = string;
 
 /** Masraf: dosyaya/müvekkile ya da büroya ait gider. */
 export type Expense = BaseEntity & {
@@ -99,8 +112,10 @@ export type Expense = BaseEntity & {
   amount: number;
   date: ISODate;
   caseId?: string;
+  /** İcra dosyasına ait masraf */
+  enforcementId?: string;
   clientId?: string;
-  /** Müvekkil: avanstan düşer / müvekkile yansıtılır. Büro: büro gideri. */
+  /** Müvekkil: müvekkile yansıtılır (carisine borç yazılır). Büro: büro gideri. */
   chargeTo: "Müvekkil" | "Büro";
   /** Parayı kim ödedi. Müvekkil kendi ödediyse büro kasasından çıkış olmaz. */
   paidBy: "Büro" | "Müvekkil";
@@ -108,18 +123,6 @@ export type Expense = BaseEntity & {
   receipts: AttachmentRef[];
   note?: string;
   createdBy: string;
-};
-
-/** Masraf avansı: müvekkilden masraflar için alınan para (veya iadesi). */
-export type Advance = BaseEntity & {
-  kind: "Avans" | "İade";
-  clientId: string;
-  caseId?: string;
-  amount: number;
-  date: ISODate;
-  method: PaymentMethod;
-  accountId?: string;
-  note?: string;
 };
 
 export type InstallmentPayment = {
@@ -144,8 +147,10 @@ export const FEE_KINDS = [
   "Danışmanlık",
   "Karşı vekalet ücreti",
   "Diğer",
-] as const;
-export type FeeKind = (typeof FEE_KINDS)[number];
+];
+/** "Aylık ücret" otomatik aylık tahakkukta kullanılır: silinemez */
+export const LOCKED_FEE_KINDS = ["Aylık ücret"];
+export type FeeKind = string;
 
 /** Tahsilat planı: müvekkilden alınacak ücret ve taksitleri. */
 export type FeePlan = BaseEntity & {
@@ -178,7 +183,7 @@ export type AccountTx = BaseEntity & {
   date: ISODate;
   /** Pozitif: giriş, negatif: çıkış */
   amount: number;
-  category: "Virman" | "Diğer gelir" | "Diğer gider" | "Müvekkile aktarım";
+  category: "Virman" | "Diğer gelir" | "Diğer gider" | "Müvekkile aktarım" | "Kapanan dosya";
   description: string;
   transferId?: string;
   clientId?: string;
@@ -198,7 +203,6 @@ export type Reminder = BaseEntity & {
   assigneeId: string;
   status: "Bekliyor" | "Tamamlandı" | "İptal";
   note?: string;
-  portalVisible: boolean;
 };
 
 /* ───────────────────────── İcra ───────────────────────── */
@@ -221,17 +225,12 @@ export const ENFORCEMENT_STATUSES = [
   "Ödeme planı",
   "Tahsil edildi",
   "Kapandı",
-] as const;
-export type EnforcementStatus = (typeof ENFORCEMENT_STATUSES)[number];
+];
+/** Varsayılan, otomatik "tahsil edildi" ve kapanış durumları: silinemez */
+export const LOCKED_ENFORCEMENT_STATUSES = ["Derdest", "Tahsil edildi", "Kapandı"];
+export type EnforcementStatus = string;
 
-export const ENFORCEMENT_TYPES = [
-  "İlamsız",
-  "İlamlı",
-  "Kambiyo",
-  "Rehin",
-  "Kira",
-  "Diğer",
-] as const;
+export const ENFORCEMENT_TYPES = ["İlamsız", "İlamlı", "Kambiyo", "Rehin", "Kira", "Diğer"];
 
 export type EnforcementFile = BaseEntity & {
   no: string;
@@ -255,6 +254,10 @@ export type PaymentPromise = BaseEntity & {
   amount: number;
   dueDate: ISODate;
   status: "Bekliyor" | "Tutuldu" | "Tutulmadı" | "İptal";
+  /** Borçluya tanımlanan taksit planına aitse plan kimliği */
+  planId?: string;
+  /** Taksit planındaki sıra (1'den başlar) */
+  installmentNo?: number;
   note?: string;
 };
 
@@ -270,7 +273,7 @@ export type Collection = BaseEntity & {
   note?: string;
 };
 
-export const CONTACT_CHANNELS = ["Telefon", "WhatsApp", "Yüz yüze", "E-posta", "Tebligat"] as const;
+export const CONTACT_CHANNELS = ["Telefon", "WhatsApp", "Yüz yüze", "E-posta", "Tebligat"];
 
 export type ContactLog = BaseEntity & {
   debtorId: string;
@@ -281,7 +284,7 @@ export type ContactLog = BaseEntity & {
   userId: string;
 };
 
-/* ───────────────────────── Belgeler & Portal ───────────────────────── */
+/* ───────────────────────── Belgeler ───────────────────────── */
 
 export type DocumentFile = BaseEntity & {
   name: string;
@@ -291,26 +294,6 @@ export type DocumentFile = BaseEntity & {
   clientId?: string;
   enforcementId?: string;
   uploadedBy: string;
-  visibleToClient: boolean;
-  requestId?: string;
-};
-
-export type DocumentRequest = BaseEntity & {
-  clientId: string;
-  caseId?: string;
-  title: string;
-  note?: string;
-  dueDate?: ISODate;
-  status: "Bekliyor" | "Yüklendi" | "Kapatıldı";
-  documentId?: string;
-};
-
-export type Message = BaseEntity & {
-  clientId: string;
-  authorId: string;
-  body: string;
-  readByFirm: boolean;
-  readByClient: boolean;
 };
 
 /* ───────────────────────── Sistem ───────────────────────── */
@@ -355,6 +338,18 @@ export type Settings = {
   expenseTypes: string[];
   reminderTypes: string[];
   documentCategories: string[];
+  caseStatuses: string[];
+  enforcementStatuses: string[];
+  enforcementTypes: string[];
+  paymentMethods: string[];
+  feeKinds: string[];
+  contactChannels: string[];
+  /** Avukat rolünün varsayılan izinleri ("modül.eylem": açık/kapalı); Admin'in her şeye hakkı vardır */
+  rolePermissions: Record<string, boolean>;
+  /** Seçilebilir mahkemeler (yeni yazılan mahkeme otomatik eklenir) */
+  courts: string[];
+  /** Seçilebilir icra daireleri */
+  enforcementOffices: string[];
 };
 
 export type Collections = {
@@ -362,7 +357,6 @@ export type Collections = {
   clients: Client;
   cases: CaseFile;
   expenses: Expense;
-  advances: Advance;
   plans: FeePlan;
   accounts: Account;
   transactions: AccountTx;
@@ -373,15 +367,37 @@ export type Collections = {
   collections: Collection;
   contacts: ContactLog;
   documents: DocumentFile;
-  docRequests: DocumentRequest;
-  messages: Message;
   notifications: AppNotification;
   activities: ActivityLog;
 };
 
 export type CollectionKey = keyof Collections;
 
-export type ErpState = { version: number; firmId: string; settings: Settings } & {
+/** Silinen kayıtlardan geriye kalan yıllık para toplamları */
+export type YearStats = {
+  /** Müvekkillerden tahsil edilen ücret */
+  feeIncome: number;
+  /** Borçlulardan tahsil edilen (icra) */
+  icraCollected: number;
+  officeExpense: number;
+  clientExpense: number;
+  otherIncome: number;
+  otherExpense: number;
+  closedCases: number;
+};
+
+export type ArchiveData = {
+  years: Record<string, YearStats>;
+  /** En son arşivlenen yıl (bu yıl ve öncesinin ayrıntıları silindi) */
+  archivedThrough?: number;
+};
+
+export type ErpState = {
+  version: number;
+  firmId: string;
+  settings: Settings;
+  archive: ArchiveData;
+} & {
   [K in CollectionKey]: Collections[K][];
 };
 
@@ -422,23 +438,191 @@ export const DEFAULT_DOCUMENT_CATEGORIES = [
 
 /* ───────────────────────── Yetkiler ───────────────────────── */
 
-export function permissionsFor(role: UserRole) {
+export const PERMISSION_ACTIONS = ["view", "create", "edit", "delete"] as const;
+export type PermissionAction = (typeof PERMISSION_ACTIONS)[number];
+
+export const PERMISSION_ACTION_LABELS: Record<PermissionAction, string> = {
+  view: "Görüntüle",
+  create: "Ekle",
+  edit: "Düzenle",
+  delete: "Sil",
+};
+
+export type PermissionModuleKey =
+  | "clients"
+  | "cases"
+  | "documents"
+  | "expenses"
+  | "reminders"
+  | "enforcements"
+  | "fees"
+  | "ledger"
+  | "accounts"
+  | "reports"
+  | "activity";
+
+export type PermissionModule = {
+  key: PermissionModuleKey;
+  label: string;
+  hint: string;
+  /** Bu modülde anlamlı olan eylemler */
+  actions: PermissionAction[];
+  /** Eylemin bu modüldeki özel açıklaması */
+  actionHints?: Partial<Record<PermissionAction, string>>;
+  /** true: Ekle / Düzenle / Sil açılınca Görüntüle de açılır, Görüntüle kapanınca hepsi kapanır */
+  coupled: boolean;
+  /** Yan menüde bu modüle ait sayfa */
+  menu?: string;
+};
+
+export const PERMISSION_MODULES: PermissionModule[] = [
+  {
+    key: "clients",
+    label: "Müvekkiller",
+    hint: "Müvekkil kartları ve sayfaları",
+    actions: ["view", "create", "edit", "delete"],
+    coupled: true,
+    menu: "Müvekkiller",
+  },
+  {
+    key: "cases",
+    label: "Dosyalar",
+    hint: "Dava ve danışmanlık dosyaları",
+    actions: ["view", "create", "edit", "delete"],
+    actionHints: { delete: "Dosyayı kapatır ve siler" },
+    coupled: true,
+    menu: "Dosyalar",
+  },
+  {
+    key: "documents",
+    label: "Belgeler",
+    hint: "Yüklenen belgeler",
+    actions: ["view", "create", "edit", "delete"],
+    coupled: true,
+    menu: "Belgeler",
+  },
+  {
+    key: "expenses",
+    label: "Masraflar",
+    hint: "Kendi girdiği masrafı her zaman görür, düzenler ve siler",
+    actions: ["view", "create", "edit", "delete"],
+    actionHints: {
+      view: "Başkalarının girdiği masrafları da görür",
+      edit: "Başkalarının masrafını da düzenler",
+      delete: "Başkalarının masrafını da siler",
+    },
+    coupled: false,
+    menu: "Masraflar",
+  },
+  {
+    key: "reminders",
+    label: "Ajanda",
+    hint: "Kendine atanan işleri her zaman görür",
+    actions: ["view", "create", "edit", "delete"],
+    actionHints: { view: "Tüm büronun ajandasını görür" },
+    coupled: false,
+  },
+  {
+    key: "enforcements",
+    label: "İcra ve borçlular",
+    hint: "İcra dosyaları, borçlular, taksit tanımlama, tahsilat girme",
+    actions: ["view", "create", "edit", "delete"],
+    coupled: true,
+    menu: "İcra dosyaları, Borçlular",
+  },
+  {
+    key: "fees",
+    label: "Tahsilatlar",
+    hint: "Ücret planları ve taksitler",
+    actions: ["view", "create", "edit", "delete"],
+    actionHints: {
+      create: "Yeni tahsilat planı",
+      edit: "Tahsilat alma, geri alma, plan düzenleme",
+      delete: "Planı silme",
+    },
+    coupled: true,
+    menu: "Tahsilatlar",
+  },
+  {
+    key: "ledger",
+    label: "Cari hesap",
+    hint: "Müvekkil bakiyeleri ve ekstre",
+    actions: ["view"],
+    coupled: true,
+    menu: "Cari hesap",
+  },
+  {
+    key: "accounts",
+    label: "Banka ve kasa",
+    hint: "Hesap bakiyeleri, virman, hareketler",
+    actions: ["view", "create", "edit", "delete"],
+    coupled: true,
+    menu: "Banka & Kasa",
+  },
+  {
+    key: "reports",
+    label: "Raporlar",
+    hint: "Gelir-gider ve yıllık özet",
+    actions: ["view"],
+    coupled: true,
+    menu: "Raporlar",
+  },
+  {
+    key: "activity",
+    label: "Aktivite geçmişi",
+    hint: "Kimin neyi değiştirdiği",
+    actions: ["view"],
+    coupled: true,
+    menu: "Aktivite geçmişi",
+  },
+];
+
+export type PermissionKey = `${PermissionModuleKey}.${PermissionAction}`;
+
+/** Avukat rolünün ilk (varsayılan) izinleri */
+export const DEFAULT_LAWYER_PERMISSIONS: Record<string, boolean> = {
+  "clients.view": true,
+  "clients.create": true,
+  "clients.edit": true,
+  "cases.view": true,
+  "cases.create": true,
+  "cases.edit": true,
+  "documents.view": true,
+  "documents.create": true,
+  "documents.edit": true,
+  "documents.delete": true,
+  "expenses.create": true,
+  "reminders.create": true,
+  "reminders.edit": true,
+  "reminders.delete": true,
+  "enforcements.view": true,
+  "enforcements.create": true,
+  "enforcements.edit": true,
+};
+
+export function permissionKey(module: PermissionModuleKey, action: PermissionAction) {
+  return `${module}.${action}`;
+}
+
+/** Bir kişi için etkin izin: kişisel istisna > rol varsayılanı > kapalı (Admin her şeye sahip) */
+export function permissionsFor(
+  role: UserRole,
+  roleGrants: Record<string, boolean> = DEFAULT_LAWYER_PERMISSIONS,
+  userGrants: Record<string, boolean> = {},
+) {
   const admin = role === "Admin";
-  const secretary = role === "Sekreter";
-  const lawyer = role === "Avukat";
-  const staff = admin || secretary || lawyer;
+  const can = (module: PermissionModuleKey, action: PermissionAction = "view") => {
+    if (admin) return true;
+    const key = permissionKey(module, action);
+    return userGrants[key] ?? roleGrants[key] ?? false;
+  };
   return {
-    isStaff: staff,
-    isPortal: role === "Müvekkil",
+    isAdmin: admin,
+    isStaff: admin || role === "Avukat",
+    /** Kullanıcı yönetimi, ayarlar, yedek ve arşiv yalnızca Admin'dedir */
     manageUsers: admin,
-    manageSettings: admin || secretary,
-    viewFinance: admin || secretary,
-    manageFinance: admin || secretary,
-    addExpense: staff,
-    manageRecords: staff,
-    deleteRecords: admin || secretary,
-    viewActivity: admin,
-    viewReports: admin || secretary,
+    manageSettings: admin,
+    can,
   };
 }
 

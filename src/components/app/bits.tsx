@@ -136,15 +136,15 @@ export function Section({
   return (
     <Card className={cn("overflow-hidden animate-fade-up", className)}>
       {(title || actions) && (
-        <div className="flex items-start justify-between gap-3 border-b border-border/60 px-5 py-4">
-          <div className="min-w-0">
+        <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2 border-b border-border/60 px-4 py-3.5 sm:px-5 sm:py-4">
+          <div className="min-w-0 flex-1 basis-40">
             {title && <h2 className="text-[15px] font-semibold tracking-tight">{title}</h2>}
             {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
           </div>
-          {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+          {actions && <div className="flex max-w-full flex-wrap items-center gap-2">{actions}</div>}
         </div>
       )}
-      <div className={cn("p-5", bodyClassName)}>{children}</div>
+      <div className={cn("min-w-0 p-4 sm:p-5", bodyClassName)}>{children}</div>
     </Card>
   );
 }
@@ -212,7 +212,7 @@ export function NoAccess() {
 
 export function PageShell({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn("mx-auto w-full min-w-0 max-w-[1440px] space-y-6", className)}>
+    <div className={cn("mx-auto w-full min-w-0 max-w-[1440px] space-y-4", className)}>
       {children}
     </div>
   );

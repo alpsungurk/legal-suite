@@ -3,6 +3,10 @@
  */
 import { createSeedState, defaultSettings, emptyState, FIRM_ID } from "@/lib/erp-data";
 import {
+  DEFAULT_LAWYER_PERMISSIONS,
+  LOCKED_CASE_STATUSES,
+  LOCKED_ENFORCEMENT_STATUSES,
+  LOCKED_FEE_KINDS,
   STATE_VERSION,
   type CaseFile,
   type Client,
@@ -47,9 +51,7 @@ export function migrateLegacy(old: Legacy): ErpState {
     ...base,
     id: str(u.id),
     name: str(u.name),
-    role: (["Admin", "Avukat", "Sekreter"].includes(str(u.role))
-      ? u.role
-      : "Avukat") as User["role"],
+    role: (["Admin", "Avukat"].includes(str(u.role)) ? u.role : "Avukat") as User["role"],
     email: str(u.email),
     username: str(u.username) || str(u.name).toLocaleLowerCase("tr").replace(/\s+/g, ""),
     active: true,
@@ -71,8 +73,6 @@ export function migrateLegacy(old: Legacy): ErpState {
     address: str(c.address) || undefined,
     monthlyFee: c.monthlyFee ? num(c.monthlyFee) : undefined,
     monthlyFeeStartDate: str(c.monthlyFeeStartDate) || undefined,
-    portalEnabled: str(c.id) === "cli-ayse",
-    portalShowStatement: true,
   }));
 
   const cases: CaseFile[] = (old.cases ?? []).map((c) => ({
@@ -87,29 +87,13 @@ export function migrateLegacy(old: Legacy): ErpState {
     responsibleIds: [],
     openingDate: str(c.openingDate, today()),
     note: str(c.note) || undefined,
-    portalVisible: true,
   }));
 
   const expenses: Expense[] = [];
   for (const e of old.expenses ?? []) {
     const incoming = e.direction === "Gelen" || (!e.direction && e.payer === "Müvekkil");
     if (incoming) {
-      // Eski "gelen masraf" kaydı = müvekkilden alınan masraf parası → avans
-      if (e.status === "Alındı" && (e.clientId || e.caseId)) {
-        const clientId = str(e.clientId) || cases.find((c) => c.id === e.caseId)?.clientId || "";
-        if (clientId)
-          state.advances.push({
-            ...base,
-            id: `adv-${str(e.id)}`,
-            kind: "Avans",
-            clientId,
-            caseId: str(e.caseId) || undefined,
-            amount: num(e.amount),
-            date: str(e.recordDate) || str(e.date, today()),
-            method: "Havale/EFT",
-            note: str(e.title),
-          });
-      }
+      // Eski "gelen masraf" kaydı (müvekkilden alınan masraf parası) artık tutulmuyor
       continue;
     }
     expenses.push({
@@ -197,7 +181,6 @@ export function migrateLegacy(old: Legacy): ErpState {
     assigneeId: str(r.assigneeId, users[0]?.id ?? ""),
     status: r.status === "Tamamlandı" ? "Tamamlandı" : "Bekliyor",
     note: str(r.note) || undefined,
-    portalVisible: false,
   }));
 
   const settings = defaultSettings();
@@ -216,7 +199,7 @@ export function migrateLegacy(old: Legacy): ErpState {
     expenses,
     plans,
     reminders,
-    // Yeni modüller (banka/kasa, icra, portal) mevcut müvekkillerle eşleşen demo kayıtlarıyla başlar
+    // Yeni modüller (banka/kasa, icra) mevcut müvekkillerle eşleşen demo kayıtlarıyla başlar
     ...seedNewModules(seed, new Set(clients.map((c) => c.id))),
   });
 }
@@ -233,8 +216,6 @@ function seedNewModules(seed: ErpState, clientIds: Set<string>) {
     promises: seed.promises.filter((p) => enfIds.has(p.enforcementId)),
     collections: seed.collections.filter((c) => enfIds.has(c.enforcementId)),
     contacts: seed.contacts.filter((c) => !c.enforcementId || enfIds.has(c.enforcementId)),
-    docRequests: seed.docRequests.filter((r) => clientIds.has(r.clientId)),
-    messages: seed.messages.filter((m) => clientIds.has(m.clientId)),
   };
 }
 
@@ -243,7 +224,6 @@ const COLLECTION_KEYS: CollectionKey[] = [
   "clients",
   "cases",
   "expenses",
-  "advances",
   "plans",
   "accounts",
   "transactions",
@@ -254,8 +234,6 @@ const COLLECTION_KEYS: CollectionKey[] = [
   "collections",
   "contacts",
   "documents",
-  "docRequests",
-  "messages",
   "notifications",
   "activities",
 ];
@@ -267,26 +245,67 @@ export function normalizeState(input: Partial<ErpState>): ErpState {
   for (const key of COLLECTION_KEYS) {
     if (!Array.isArray(out[key])) (out as Record<string, unknown>)[key] = [];
   }
+  // Kaldırılan roller ve modüller: müvekkil portalı kullanıcıları silinir, sekreterler avukat olur
+  const legacyUsers = out.users as Array<{ role: string }>;
+  out.users = legacyUsers
+    .filter((u) => u.role !== "Müvekkil")
+    .map((u) => (u.role === "Sekreter" ? { ...u, role: "Avukat" } : u)) as ErpState["users"];
+  delete (out as unknown as Record<string, unknown>).docRequests;
+  delete (out as unknown as Record<string, unknown>).messages;
+  // Masraf avansı modülü kaldırıldı
+  delete (out as unknown as Record<string, unknown>).advances;
+  // Masraflar büro kasası veya Barokart'tan ödenir; Barokart hesabı yoksa eklenir
+  if (!out.accounts.some((a) => /baro\s*kart/i.test(a.name))) {
+    const stamp = new Date().toISOString();
+    out.accounts = [
+      ...out.accounts,
+      {
+        id: "acc-barokart",
+        firmId: out.firmId,
+        createdAt: stamp,
+        updatedAt: stamp,
+        name: "Barokart",
+        type: "Banka",
+        openingBalance: 0,
+        openingDate: today(),
+        active: true,
+      },
+    ];
+  }
   out.settings = {
     ...empty.settings,
     ...(input.settings ?? {}),
     firm: { ...empty.settings.firm, ...(input.settings?.firm ?? {}) },
   };
+  out.archive = {
+    ...(input.archive ?? {}),
+    years: { ...(input.archive?.years ?? {}) },
+  };
+  // Avukat izinleri: eksik anahtarlar varsayılanla tamamlanır
+  out.settings.rolePermissions = {
+    ...DEFAULT_LAWYER_PERMISSIONS,
+    ...(input.settings?.rolePermissions ?? {}),
+  };
+  // Mahkeme ve icra dairesi listeleri yoksa mevcut kayıtlardan çıkarılır
+  const uniq = (xs: Array<string | undefined>) =>
+    [...new Set(xs.map((x) => x?.trim()).filter((x): x is string => !!x))].sort((a, b) =>
+      a.localeCompare(b, "tr"),
+    );
+  if (!Array.isArray(input.settings?.courts))
+    out.settings.courts = uniq(out.cases.map((c) => c.court));
+  if (!Array.isArray(input.settings?.enforcementOffices))
+    out.settings.enforcementOffices = uniq(out.enforcements.map((e) => e.office));
+  // Programın mantığının dayandığı değerler listede her zaman bulunur
+  const ensure = (list: string[], locked: string[]) => [
+    ...locked.filter((l) => !list.includes(l)),
+    ...list,
+  ];
+  out.settings.caseStatuses = ensure(out.settings.caseStatuses, LOCKED_CASE_STATUSES);
+  out.settings.enforcementStatuses = ensure(
+    out.settings.enforcementStatuses,
+    LOCKED_ENFORCEMENT_STATUSES,
+  );
+  out.settings.feeKinds = ensure(out.settings.feeKinds, LOCKED_FEE_KINDS);
+  if (!out.settings.paymentMethods.length) out.settings.paymentMethods = ["Nakit"];
   return out;
-}
-
-export function loadPersistedState(): ErpState {
-  if (typeof window === "undefined") return createSeedState();
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as ErpState;
-      return normalizeState(parsed);
-    }
-    const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (legacy) return migrateLegacy(JSON.parse(legacy) as Legacy);
-  } catch (err) {
-    console.error("Kayıtlı veri okunamadı, demo verisiyle başlanıyor", err);
-  }
-  return createSeedState();
 }

@@ -1,90 +1,137 @@
 /**
- * Dosya ekleri (makbuz, belge, logo) IndexedDB'de tutulur; kayıtlarda yalnızca
- * `AttachmentRef` saklanır. localStorage'ın ~5 MB sınırına takılmamak için.
+ * Dosya ekleri: künye `attachments` tablosunda, içerik Supabase Storage'da.
  */
 import type { AttachmentRef } from "@/lib/erp-types";
+import { newId } from "@/lib/mappers";
+import { supabase } from "@/lib/supabase";
 
-const DB_NAME = "lex-attachments";
-const STORE = "files";
 export const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024;
+const BUCKET = "attachments";
 
-let dbPromise: Promise<IDBDatabase> | null = null;
-
-function openDb(): Promise<IDBDatabase> {
-  if (dbPromise) return dbPromise;
-  dbPromise = new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = () => req.result.createObjectStore(STORE);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => {
-      dbPromise = null;
-      reject(req.error);
-    };
-  });
-  return dbPromise;
+async function currentOrgId(): Promise<string> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Oturum yok");
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("org_id")
+    .eq("id", user.id)
+    .single();
+  if (error || !data) throw new Error("Büro bulunamadı");
+  return data.org_id as string;
 }
 
-function tx<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>) {
-  return openDb().then(
-    (db) =>
-      new Promise<T>((resolve, reject) => {
-        const req = run(db.transaction(STORE, mode).objectStore(STORE));
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
-      }),
-  );
-}
-
-function newId() {
-  return `att-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-export async function saveAttachment(file: Blob & { name?: string }): Promise<AttachmentRef> {
+export async function saveAttachment(
+  file: Blob & { name?: string },
+  opts?: { entity?: "expense" | "document" | "logo"; entityId?: string },
+): Promise<AttachmentRef> {
   if (file.size > MAX_ATTACHMENT_BYTES) {
     throw new Error("Dosya 15 MB'tan büyük olamaz");
   }
-  const ref: AttachmentRef = {
-    id: newId(),
-    name: file.name ?? "dosya",
-    mime: file.type || "application/octet-stream",
+  const orgId = await currentOrgId();
+  const id = newId();
+  const path = `${orgId}/${id}`;
+  const mime = file.type || "application/octet-stream";
+  const name = file.name ?? "dosya";
+
+  const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, file, {
+    contentType: mime,
+    upsert: false,
+  });
+  if (upErr) throw new Error(upErr.message);
+
+  const { error: rowErr } = await supabase.from("attachments").insert({
+    id,
+    name,
+    mime,
     size: file.size,
-  };
-  await tx("readwrite", (s) => s.put(file, ref.id));
-  return ref;
+    storage_path: path,
+    entity: opts?.entity ?? "document",
+    entity_id: opts?.entityId ?? null,
+  });
+  if (rowErr) {
+    await supabase.storage.from(BUCKET).remove([path]);
+    throw new Error(rowErr.message);
+  }
+
+  return { id, name, mime, size: file.size };
 }
 
-export async function putAttachmentBlob(id: string, blob: Blob) {
-  await tx("readwrite", (s) => s.put(blob, id));
+/** Yedek geri yükleme için blob'u mevcut id ile yazar (Storage + satır) */
+export async function putAttachmentBlob(
+  id: string,
+  blob: Blob,
+  meta?: { name?: string; mime?: string; entity?: "expense" | "document" | "logo"; entityId?: string },
+) {
+  const orgId = await currentOrgId();
+  const path = `${orgId}/${id}`;
+  const mime = meta?.mime || blob.type || "application/octet-stream";
+  const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, blob, {
+    contentType: mime,
+    upsert: true,
+  });
+  if (upErr) throw new Error(upErr.message);
+  const { error } = await supabase.from("attachments").upsert({
+    id,
+    name: meta?.name ?? "dosya",
+    mime,
+    size: blob.size,
+    storage_path: path,
+    entity: meta?.entity ?? "document",
+    entity_id: meta?.entityId ?? null,
+  });
+  if (error) throw new Error(error.message);
 }
 
-export function getAttachment(id: string): Promise<Blob | undefined> {
-  return tx("readonly", (s) => s.get(id) as IDBRequest<Blob | undefined>);
+export async function getAttachment(id: string): Promise<Blob | undefined> {
+  const { data: row, error } = await supabase
+    .from("attachments")
+    .select("storage_path, mime")
+    .eq("id", id)
+    .maybeSingle();
+  if (error || !row) return undefined;
+  const { data, error: dlErr } = await supabase.storage
+    .from(BUCKET)
+    .download(row.storage_path as string);
+  if (dlErr || !data) return undefined;
+  return data;
 }
 
 export async function deleteAttachment(id: string) {
-  await tx("readwrite", (s) => s.delete(id));
+  const { error } = await supabase.from("attachments").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+  // Storage object temizliği cron / storage_cleanup kuyruğu ile yapılır
 }
 
 export async function listAttachmentIds(): Promise<string[]> {
-  const keys = await tx("readonly", (s) => s.getAllKeys());
-  return keys.map(String);
+  const { data, error } = await supabase.from("attachments").select("id");
+  if (error) return [];
+  return (data ?? []).map((r) => r.id as string);
 }
+
+const VIEWABLE = new Set(["application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp"]);
 
 export async function openAttachment(ref: AttachmentRef) {
   const blob = await getAttachment(ref.id);
-  if (!blob) throw new Error("Dosya bu cihazda bulunamadı");
-  const url = URL.createObjectURL(blob);
-  window.open(url, "_blank", "noopener");
+  if (!blob) throw new Error("Dosya bulunamadı");
+  const type = (blob.type || ref.mime || "").toLowerCase();
+  if (!VIEWABLE.has(type)) {
+    await downloadAttachment(ref);
+    return;
+  }
+  const url = URL.createObjectURL(new Blob([blob], { type }));
+  window.open(url, "_blank", "noopener,noreferrer");
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 export async function downloadAttachment(ref: AttachmentRef) {
   const blob = await getAttachment(ref.id);
-  if (!blob) throw new Error("Dosya bu cihazda bulunamadı");
+  if (!blob) throw new Error("Dosya bulunamadı");
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = ref.name;
   a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }

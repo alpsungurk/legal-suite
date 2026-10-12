@@ -26,7 +26,7 @@ import { cn } from "@/lib/utils";
 import type { Reminder } from "@/lib/erp-types";
 
 export const Route = createFileRoute("/takvim")({
-  head: () => ({ meta: [{ title: "Ajanda — Lex Yönetim" }] }),
+  head: () => ({ meta: [{ title: "Ajanda — LexKasa" }] }),
   component: Page,
 });
 
@@ -65,7 +65,9 @@ function Page() {
   const t = today();
   const [cursor, setCursor] = useState(() => t.slice(0, 7));
   const [selected, setSelected] = useState(t);
-  const [scope, setScope] = useState(permissions.viewFinance ? "all" : "mine");
+  const seeAll = permissions.can("reminders");
+  const [scopeState, setScope] = useState(seeAll ? "all" : "mine");
+  const scope = seeAll ? scopeState : "mine";
   const [view, setView] = useState("month");
   const [planId, setPlanId] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
@@ -92,7 +94,7 @@ function Page() {
         reminder: r,
       });
     }
-    if (permissions.viewFinance && scope === "all") {
+    if (permissions.can("fees") && scope === "all") {
       for (const row of allInstallments(state)) {
         if (row.status === "Ödendi") continue;
         out.push({
@@ -121,7 +123,7 @@ function Page() {
     return out.sort(
       (a, b) => a.date.localeCompare(b.date) || (a.time ?? "99").localeCompare(b.time ?? "99"),
     );
-  }, [state, scope, currentUser.id, permissions.viewFinance]);
+  }, [state, scope, currentUser.id, permissions]);
 
   const byDate = useMemo(() => {
     const m = new Map<string, Ev[]>();
@@ -171,15 +173,17 @@ function Page() {
             { value: "list", label: "Liste" },
           ]}
         />
-        <Segmented
-          className="w-auto"
-          value={scope}
-          onChange={setScope}
-          options={[
-            { value: "mine", label: "Benim" },
-            { value: "all", label: "Tüm büro" },
-          ]}
-        />
+        {seeAll && (
+          <Segmented
+            className="w-auto"
+            value={scope}
+            onChange={setScope}
+            options={[
+              { value: "mine", label: "Benim" },
+              { value: "all", label: "Tüm büro" },
+            ]}
+          />
+        )}
         <div className="ml-auto hidden flex-wrap items-center gap-3 text-xs text-muted-foreground lg:flex">
           {(Object.keys(kindDot) as Ev["kind"][]).map((k) => (
             <span key={k} className="flex items-center gap-1.5">
@@ -293,7 +297,7 @@ function Page() {
                       {parseISODate(d).getDate()}
                     </span>
                     <div className="space-y-0.5">
-                      {evs.slice(0, 3).map((e) => (
+                      {evs.slice(0, 2).map((e, idx) => (
                         <div
                           key={e.id}
                           draggable={!!e.reminder}
@@ -306,6 +310,7 @@ function Page() {
                           }}
                           className={cn(
                             "hidden truncate rounded border-l-2 px-1.5 py-0.5 text-[11px] font-medium transition-transform hover:translate-x-0.5 sm:block",
+                            idx > 0 && "sm:hidden xl:block",
                             kindStyle[e.kind],
                             e.done && "opacity-50 line-through",
                             e.reminder && "cursor-grab active:cursor-grabbing",
@@ -316,9 +321,21 @@ function Page() {
                           {e.title}
                         </div>
                       ))}
-                      {evs.length > 3 && (
-                        <p className="hidden px-1 text-[10px] font-medium text-muted-foreground sm:block">
-                          +{evs.length - 3} daha
+                      {/* Hücreye sığmayan kayıtlar için "+N daha"; gün ayrıntısı sağdaki listede */}
+                      {evs.length > 1 && (
+                        <p
+                          className="hidden px-1 text-[10px] font-semibold text-muted-foreground sm:block xl:hidden"
+                          title={evs.map((e) => e.title).join("\n")}
+                        >
+                          +{evs.length - 1} daha…
+                        </p>
+                      )}
+                      {evs.length > 2 && (
+                        <p
+                          className="hidden px-1 text-[10px] font-semibold text-muted-foreground xl:block"
+                          title={evs.map((e) => e.title).join("\n")}
+                        >
+                          +{evs.length - 2} daha…
                         </p>
                       )}
                       <div className="flex flex-wrap gap-0.5 sm:hidden">

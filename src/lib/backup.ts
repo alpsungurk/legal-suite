@@ -30,7 +30,7 @@ export async function exportBackup(state: ErpState) {
   const url = URL.createObjectURL(new Blob([zipped.slice().buffer], { type: "application/zip" }));
   const a = document.createElement("a");
   a.href = url;
-  a.download = `lex-yedek-${today()}.zip`;
+  a.download = `lexkasa-yedek-${today()}.zip`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
   return { attachments: Object.keys(files).length - 1, missing };
@@ -44,7 +44,14 @@ export async function readBackup(file: File): Promise<ErpState> {
   if (file.name.endsWith(".json")) {
     json = strFromU8(buf);
   } else {
-    const entries = unzipSync(buf);
+    let total = 0;
+    const entries = unzipSync(buf, {
+      filter: (f) => {
+        total += f.originalSize;
+        if (total > 1024 * 1024 * 1024) throw new Error("Yedek dosyası beklenenden büyük açılıyor");
+        return true;
+      },
+    });
     if (!entries["state.json"]) throw new Error("Geçersiz yedek dosyası: state.json bulunamadı");
     json = strFromU8(entries["state.json"]);
     attachments = entries;

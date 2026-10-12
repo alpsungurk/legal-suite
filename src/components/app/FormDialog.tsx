@@ -62,6 +62,8 @@ export type FormField = {
   autoFocus?: boolean;
   /** Bölüm başlığı (alanın üstünde gösterilir) */
   section?: string;
+  /** combobox: listede olmayan değer yazılıp eklenebilir */
+  creatable?: boolean;
 };
 
 export type FormErrors = Record<string, string>;
@@ -278,6 +280,7 @@ function FieldBlock({
           placeholder={f.placeholder}
           allowClear={f.allowClear}
           invalid={invalid}
+          creatable={f.creatable}
         />
       );
       break;

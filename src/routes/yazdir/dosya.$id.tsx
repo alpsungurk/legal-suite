@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useErp } from "@/lib/erp-store";
-import { advanceBalance, caseFinance } from "@/lib/finance";
-import { formatDate, formatMoney, sumBy } from "@/lib/format";
+import { caseFinance, clientFinance } from "@/lib/finance";
+import { formatDate, formatMoney } from "@/lib/format";
 import { PrintSheet, PrintTable } from "@/components/app/PrintSheet";
 import { NoAccess } from "@/components/app/bits";
 
@@ -11,16 +11,13 @@ function Page() {
   const { id } = Route.useParams();
   const { state, permissions } = useErp();
   const c = state.cases.find((x) => x.id === id);
-  if (!c || !permissions.viewFinance) return <NoAccess />;
+  if (!c || !permissions.can("expenses")) return <NoAccess />;
   const client = state.clients.find((x) => x.id === c.clientId);
   const expenses = state.expenses
     .filter((e) => e.caseId === c.id)
     .sort((a, b) => a.date.localeCompare(b.date));
-  const advances = state.advances
-    .filter((a) => a.caseId === c.id)
-    .sort((a, b) => a.date.localeCompare(b.date));
   const fin = caseFinance(state, c.id);
-  const adv = client ? advanceBalance(state, client.id) : null;
+  const cari = client ? clientFinance(state, client.id) : null;
 
   return (
     <PrintSheet
@@ -42,10 +39,10 @@ function Page() {
               Müvekkil
             </p>
             <p className="text-sm font-bold">{client?.name}</p>
-            {adv && (
+            {cari && (
               <p className="text-slate-600">
-                Güncel avans bakiyesi:{" "}
-                <strong className="text-slate-900">{formatMoney(adv.balance)}</strong>
+                Güncel cari bakiye:{" "}
+                <strong className="text-slate-900">{formatMoney(cari.balance)}</strong>
               </p>
             )}
           </div>
@@ -66,33 +63,13 @@ function Page() {
         ])}
         foot={["", "", "Toplam masraf", "", "", formatMoney(fin.expenseTotal)]}
       />
-      {advances.length > 0 && (
-        <>
-          <h3 className="mb-2 mt-6 text-sm font-bold text-[#143064]">
-            Bu dosya için alınan avanslar
-          </h3>
-          <PrintTable
-            head={["Tarih", "İşlem", "Yöntem", "Tutar"]}
-            align={["left", "left", "left", "right"]}
-            rows={advances.map((a) => [
-              formatDate(a.date),
-              a.kind,
-              a.method,
-              formatMoney(a.kind === "Avans" ? a.amount : -a.amount),
-            ])}
-            foot={[
-              "",
-              "",
-              "Toplam",
-              formatMoney(sumBy(advances, (a) => (a.kind === "Avans" ? a.amount : -a.amount))),
-            ]}
-          />
-        </>
-      )}
       <div className="avoid-break mt-6 grid grid-cols-3 gap-3 text-center">
         <Box label="Müvekkile yansıyan masraf" value={formatMoney(fin.chargedTotal)} />
-        <Box label="Dosyaya alınan avans" value={formatMoney(fin.advanceTotal)} />
-        <Box label="Fark" value={formatMoney(fin.advanceTotal - fin.chargedTotal)} />
+        <Box
+          label="Müvekkilin kendi ödediği"
+          value={formatMoney(fin.expenseTotal - fin.chargedTotal)}
+        />
+        <Box label="Toplam masraf" value={formatMoney(fin.expenseTotal)} />
       </div>
     </PrintSheet>
   );

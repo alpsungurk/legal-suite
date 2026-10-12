@@ -5,12 +5,12 @@ import {
   CalendarPlus,
   CheckCheck,
   FilePlus2,
+  FileSpreadsheet,
   Gavel,
   KeyRound,
   LogOut,
   Monitor,
   Moon,
-  PiggyBank,
   Plus,
   Receipt,
   Search,
@@ -19,6 +19,7 @@ import {
   UserPlus,
   Wallet,
 } from "lucide-react";
+import { IMPORT_ORDER, IMPORT_SPECS } from "@/lib/import-specs";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -191,28 +192,43 @@ function NotificationsButton() {
 export function QuickAddMenu({ trigger }: { trigger?: React.ReactNode }) {
   const quick = useQuick();
   const { permissions } = useErp();
+  const importKinds = IMPORT_ORDER.filter((k) => IMPORT_SPECS[k].allowed(permissions));
   const items = [
-    { kind: "expense" as const, label: "Masraf", icon: Receipt, show: permissions.addExpense },
+    {
+      kind: "expense" as const,
+      label: "Masraf",
+      icon: Receipt,
+      show: permissions.can("expenses", "create"),
+    },
     {
       kind: "plan" as const,
       label: "Tahsilat planı",
       icon: Wallet,
-      show: permissions.manageFinance,
+      show: permissions.can("fees", "create"),
     },
     {
-      kind: "advance" as const,
-      label: "Masraf avansı",
-      icon: PiggyBank,
-      show: permissions.manageFinance,
+      kind: "reminder" as const,
+      label: "Ajanda kaydı",
+      icon: CalendarPlus,
+      show: permissions.can("reminders", "create"),
     },
-    { kind: "reminder" as const, label: "Ajanda kaydı", icon: CalendarPlus, show: true },
-    { kind: "client" as const, label: "Müvekkil", icon: UserPlus, show: permissions.manageRecords },
-    { kind: "case" as const, label: "Dosya", icon: FilePlus2, show: permissions.manageRecords },
+    {
+      kind: "client" as const,
+      label: "Müvekkil",
+      icon: UserPlus,
+      show: permissions.can("clients", "create"),
+    },
+    {
+      kind: "case" as const,
+      label: "Dosya",
+      icon: FilePlus2,
+      show: permissions.can("cases", "create"),
+    },
     {
       kind: "enforcement" as const,
       label: "İcra dosyası",
       icon: Gavel,
-      show: permissions.manageRecords,
+      show: permissions.can("enforcements", "create"),
     },
   ].filter((i) => i.show);
   return (
@@ -235,6 +251,14 @@ export function QuickAddMenu({ trigger }: { trigger?: React.ReactNode }) {
             <i.icon className="h-4 w-4 text-muted-foreground" /> {i.label}
           </DropdownMenuItem>
         ))}
+        {importKinds.length > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => quick.open("import")} className="gap-2.5 py-2">
+              <FileSpreadsheet className="h-4 w-4 text-muted-foreground" /> Excel ile toplu aktar
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

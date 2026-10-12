@@ -7,6 +7,8 @@ import {
   MessageSquarePlus,
   Pencil,
   Phone,
+  Receipt,
+  CalendarRange,
   Target,
   Trash2,
   TrendingUp,
@@ -18,12 +20,14 @@ import { toast } from "sonner";
 import { useErp } from "@/lib/erp-store";
 import { enforcementSummary, promiseStatus } from "@/lib/finance";
 import { formatDate, formatDateLong, formatMoney, relativeDue } from "@/lib/format";
+import { ExpenseTable } from "@/components/lists/tables";
 import { PageHeader } from "@/components/app/PageHeader";
 import {
   Avatar,
   AvatarStack,
   DetailList,
   Money,
+  NoAccess,
   PageShell,
   ProgressBar,
   Section,
@@ -40,10 +44,11 @@ export const Route = createFileRoute("/icra/$id")({ component: Page });
 
 function Page() {
   const { id } = Route.useParams();
-  const { state, permissions, patch, remove } = useErp();
+  const { state, permissions, patch, remove, currentUser } = useErp();
   const quick = useQuick();
   const confirm = useConfirm();
   const e = state.enforcements.find((x) => x.id === id);
+  if (!permissions.can("enforcements")) return <NoAccess />;
   if (!e) {
     return (
       <PageShell>
@@ -62,9 +67,29 @@ function Page() {
   const s = enforcementSummary(state, e.id);
   const client = state.clients.find((c) => c.id === e.clientId);
   const debtors = state.debtors.filter((d) => e.debtorIds.includes(d.id));
-  const promises = state.promises
-    .filter((p) => p.enforcementId === e.id)
+  const allPromises = state.promises.filter((p) => p.enforcementId === e.id);
+  const promises = allPromises
+    .filter((p) => !p.planId)
     .sort((a, b) => b.dueDate.localeCompare(a.dueDate));
+  // Borçluya tanımlanan taksit planları
+  const plans = [...new Set(allPromises.filter((p) => p.planId).map((p) => p.planId!))].map(
+    (planId) => {
+      const items = allPromises
+        .filter((p) => p.planId === planId)
+        .sort((a, b) => (a.installmentNo ?? 0) - (b.installmentNo ?? 0));
+      return {
+        planId,
+        items,
+        debtorId: items[0].debtorId,
+        total: items.reduce((t, p) => t + p.amount, 0),
+        kept: items.filter((p) => p.status === "Tutuldu").length,
+      };
+    },
+  );
+  const expenses = state.expenses.filter(
+    (x) =>
+      x.enforcementId === e.id && (permissions.can("expenses") || x.createdBy === currentUser.id),
+  );
   const collections = state.collections
     .filter((c) => c.enforcementId === e.id)
     .sort((a, b) => b.date.localeCompare(a.date));
@@ -76,7 +101,11 @@ function Page() {
   const kase = state.cases.find((c) => c.id === e.caseId);
   const debtorName = (did: string) => state.debtors.find((d) => d.id === did)?.name ?? "—";
   const userName = (uid: string) => state.users.find((u) => u.id === uid)?.name ?? "—";
-  const can = permissions.manageRecords;
+  const canCreate = permissions.can("enforcements", "create");
+  const canEdit = permissions.can("enforcements", "edit");
+  const canDelete = permissions.can("enforcements", "delete");
+  const canExpense = permissions.can("expenses", "create");
+  const can = canCreate || canEdit;
 
   return (
     <PageShell>
@@ -101,38 +130,70 @@ function Page() {
         actions={
           can && (
             <>
-              <Button
-                variant="outline"
-                onClick={() =>
-                  quick.open("contact", {
-                    preset: { enforcementId: e.id, debtorId: e.debtorIds[0] },
-                  })
-                }
-              >
-                <MessageSquarePlus /> Görüşme notu
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() =>
-                  quick.open("promise", {
-                    preset: { enforcementId: e.id, debtorId: e.debtorIds[0] },
-                  })
-                }
-              >
-                <CalendarCheck /> Ödeme sözü
-              </Button>
-              <Button variant="outline" onClick={() => quick.open("enforcement", { record: e })}>
-                <Pencil /> Düzenle
-              </Button>
-              <Button
-                onClick={() =>
-                  quick.open("collection", {
-                    preset: { enforcementId: e.id, debtorId: e.debtorIds[0] },
-                  })
-                }
-              >
-                <HandCoins /> Tahsilat gir
-              </Button>
+              {canCreate && (
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    quick.open("contact", {
+                      preset: { enforcementId: e.id, debtorId: e.debtorIds[0] },
+                    })
+                  }
+                >
+                  <MessageSquarePlus /> Görüşme notu
+                </Button>
+              )}
+              {canCreate && (
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    quick.open("debtorPlan", {
+                      preset: { enforcementId: e.id, debtorId: e.debtorIds[0] },
+                    })
+                  }
+                >
+                  <CalendarRange /> Taksit tanımla
+                </Button>
+              )}
+              {canExpense && (
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    quick.open("expense", {
+                      preset: { chargeTo: "Müvekkil", enforcementId: e.id, clientId: e.clientId },
+                    })
+                  }
+                >
+                  <Receipt /> Masraf ekle
+                </Button>
+              )}
+              {canCreate && (
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    quick.open("promise", {
+                      preset: { enforcementId: e.id, debtorId: e.debtorIds[0] },
+                    })
+                  }
+                >
+                  <CalendarCheck /> Ödeme sözü
+                </Button>
+              )}
+              {canEdit && (
+                <Button variant="outline" onClick={() => quick.open("enforcement", { record: e })}>
+                  <Pencil /> Düzenle
+                </Button>
+              )}
+              {canCreate && (
+                <Button
+                  onClick={() =>
+                    quick.open("collection", {
+                      preset: { enforcementId: e.id, debtorId: e.debtorIds[0] },
+                    })
+                  }
+                >
+                  <HandCoins /> Tahsilat gir
+                </Button>
+              )}
             </>
           )
         }
@@ -172,6 +233,84 @@ function Page() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,1fr)]">
         <div className="space-y-4">
+          {plans.length > 0 && (
+            <Section
+              title="Taksitler"
+              description="Borçluya tanımlanan ödeme planları"
+              bodyClassName="p-2"
+            >
+              <div className="space-y-4">
+                {plans.map((pl) => (
+                  <div key={pl.planId}>
+                    <div className="flex items-center justify-between px-3 py-1.5 text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">{debtorName(pl.debtorId)}</span>
+                      <span>
+                        {pl.kept}/{pl.items.length} ödendi · <Money value={pl.total} />
+                      </span>
+                    </div>
+                    <ul className="space-y-1">
+                      {pl.items.map((p) => {
+                        const st = promiseStatus(p);
+                        return (
+                          <li
+                            key={p.id}
+                            className={cn(
+                              "group flex flex-wrap items-center gap-3 rounded-xl px-3 py-2",
+                              st === "Gecikmiş" && "bg-rose-50/60 dark:bg-rose-950/20",
+                            )}
+                          >
+                            <span className="grid h-7 w-7 place-items-center rounded-full bg-secondary text-xs font-semibold">
+                              {p.installmentNo}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium">
+                                <Money value={p.amount} /> · {formatDate(p.dueDate)}
+                              </p>
+                              {p.status === "Bekliyor" && (
+                                <p className="text-xs text-muted-foreground">
+                                  {relativeDue(p.dueDate)}
+                                </p>
+                              )}
+                            </div>
+                            <StatusBadge status={st} />
+                            {can && p.status === "Bekliyor" && (
+                              <Button
+                                size="sm"
+                                variant="soft"
+                                onClick={() =>
+                                  quick.open("collection", {
+                                    preset: {
+                                      enforcementId: e.id,
+                                      debtorId: p.debtorId,
+                                      amount: p.amount,
+                                      promiseId: p.id,
+                                    },
+                                  })
+                                }
+                              >
+                                <CheckCircle2 /> Ödendi
+                              </Button>
+                            )}
+                            {can && (
+                              <Button
+                                size="icon-sm"
+                                variant="ghost"
+                                className="opacity-0 group-hover:opacity-100"
+                                onClick={() => quick.open("promise", { record: p })}
+                              >
+                                <Pencil />
+                              </Button>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </Section>
+          )}
+
           <Section
             title="Ödeme sözleri"
             description="Borçlunun taahhütleri ve gerçekleşme durumu"
@@ -294,7 +433,7 @@ function Page() {
                         >
                           <Pencil />
                         </Button>
-                        {permissions.deleteRecords && (
+                        {canDelete && (
                           <Button
                             size="icon-sm"
                             variant="ghost"
@@ -315,6 +454,41 @@ function Page() {
                   </li>
                 ))}
               </ul>
+            )}
+          </Section>
+
+          <Section title="Masraflar" description="Bu icra dosyası için yapılan masraflar">
+            {expenses.length === 0 ? (
+              <EmptyState
+                icon={Receipt}
+                title="Masraf yok"
+                compact
+                action={
+                  can ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        quick.open("expense", {
+                          preset: {
+                            chargeTo: "Müvekkil",
+                            enforcementId: e.id,
+                            clientId: e.clientId,
+                          },
+                        })
+                      }
+                    >
+                      Masraf ekle
+                    </Button>
+                  ) : undefined
+                }
+              />
+            ) : (
+              <ExpenseTable
+                rows={expenses}
+                hide={{ client: true }}
+                exportName={`${e.no} masraflar`}
+              />
             )}
           </Section>
         </div>

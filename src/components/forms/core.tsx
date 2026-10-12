@@ -2,9 +2,11 @@ import { toast } from "sonner";
 import { FormDialog, type FormField } from "@/components/app/FormDialog";
 import { useErp } from "@/lib/erp-store";
 import { useOptions } from "@/lib/options";
-import { CASE_STATUSES, USER_ROLES, type CaseFile, type Client, type User } from "@/lib/erp-types";
+import { USER_ROLES, type CaseFile, type Client, type User } from "@/lib/erp-types";
 import { today } from "@/lib/format";
-import { createPasswordRecord, passwordProblem } from "@/lib/auth";
+import { useCloseCase } from "@/components/forms/close-case";
+import { passwordProblem } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
 
 export type FormProps<T> = {
   open: boolean;
@@ -48,33 +50,12 @@ export function ClientForm({ open, onOpenChange, record, preset, onSaved }: Form
       type: "date",
       visible: (v) => corporate(v) && Number(v.monthlyFee) > 0,
     },
-    {
-      name: "advanceThreshold",
-      label: "Avans uyarı limiti",
-      type: "money",
-      hint: "Masraf avansı bu tutarın altına düşünce uyarı verilir",
-    },
     { name: "status", label: "Durum", type: "select", options: ["Aktif", "Pasif"] },
-    {
-      name: "portalEnabled",
-      label: "Müvekkil portalı",
-      type: "switch",
-      hint: "Müvekkil kendi dosyalarını, duruşmalarını ve belgelerini görebilir",
-    },
-    {
-      name: "portalShowStatement",
-      label: "Portalda cari ekstre gösterilsin",
-      type: "switch",
-      visible: (v) => !!v.portalEnabled,
-    },
     { name: "notes", label: "Notlar", type: "textarea" },
   ];
   const initial = {
     kind: "Bireysel",
     status: "Aktif",
-    portalEnabled: false,
-    portalShowStatement: true,
-    advanceThreshold: 0,
     ...preset,
     ...record,
   };
@@ -83,7 +64,7 @@ export function ClientForm({ open, onOpenChange, record, preset, onSaved }: Form
       open={open}
       onOpenChange={onOpenChange}
       title={record ? "Müvekkili düzenle" : "Yeni müvekkil"}
-      description="İletişim, finans ve portal ayarları"
+      description="İletişim ve finans bilgileri"
       fields={fields}
       initial={initial}
       onSubmit={(v) => {
@@ -100,10 +81,7 @@ export function ClientForm({ open, onOpenChange, record, preset, onSaved }: Form
           monthlyFee: isCorp && Number(v.monthlyFee) > 0 ? Number(v.monthlyFee) : undefined,
           monthlyFeeStartDate:
             isCorp && Number(v.monthlyFee) > 0 ? v.monthlyFeeStartDate || today() : undefined,
-          advanceThreshold: Number(v.advanceThreshold) || 0,
           status: v.status,
-          portalEnabled: !!v.portalEnabled,
-          portalShowStatement: !!v.portalShowStatement,
           notes: v.notes || undefined,
         });
         toast.success(record ? "Müvekkil güncellendi" : "Müvekkil eklendi");
@@ -126,7 +104,8 @@ function nextCaseNo(cases: CaseFile[]) {
 }
 
 export function CaseForm({ open, onOpenChange, record, preset, onSaved }: FormProps<CaseFile>) {
-  const { save, state, currentUser } = useErp();
+  const { save, state, currentUser, permissions, rememberOption } = useErp();
+  const closeCase = useCloseCase();
   const o = useOptions();
   const fields: FormField[] = [
     { name: "no", label: "Büro dosya no", required: true },
@@ -147,8 +126,16 @@ export function CaseForm({ open, onOpenChange, record, preset, onSaved }: FormPr
       required: true,
       placeholder: "Müvekkil seçin",
     },
-    { name: "status", label: "Durum", type: "select", options: [...CASE_STATUSES] },
-    { name: "court", label: "Mahkeme / Merci", placeholder: "Örn. İstanbul 3. Asliye Hukuk" },
+    { name: "status", label: "Durum", type: "select", options: o.caseStatuses },
+    {
+      name: "court",
+      label: "Mahkeme / Merci",
+      type: "combobox",
+      options: o.courts,
+      creatable: true,
+      allowClear: true,
+      placeholder: "Listeden seçin veya yazın",
+    },
     { name: "esasNo", label: "Esas no", placeholder: "Örn. 2026/412 E." },
     { name: "opposingParty", label: "Karşı taraf", span: 2 },
     {
@@ -171,7 +158,6 @@ export function CaseForm({ open, onOpenChange, record, preset, onSaved }: FormPr
       type: "money",
       hint: "Bilgi amaçlı; tahsilat planını ayrıca oluşturun",
     },
-    { name: "portalVisible", label: "Müvekkil portalında göster", type: "switch" },
     { name: "note", label: "Not", type: "textarea" },
   ];
   const initial = {
@@ -180,7 +166,6 @@ export function CaseForm({ open, onOpenChange, record, preset, onSaved }: FormPr
     status: "Açık",
     responsibleIds: currentUser.role === "Avukat" ? [currentUser.id] : [],
     openingDate: today(),
-    portalVisible: true,
     ...preset,
     ...record,
   };
@@ -197,7 +182,17 @@ export function CaseForm({ open, onOpenChange, record, preset, onSaved }: FormPr
           ? { no: "Bu dosya numarası kullanılıyor" }
           : undefined
       }
-      onSubmit={(v) => {
+      onSubmit={async (v) => {
+        // Mevcut dosya "Kapalı" yapılırsa dosya silinir, müvekkilde yalnızca toplamlar kalır
+        if (
+          permissions.can("cases", "delete") &&
+          record &&
+          v.status === "Kapalı" &&
+          record.status !== "Kapalı"
+        ) {
+          return closeCase(record.id);
+        }
+        rememberOption("courts", v.court);
         const prevResp = new Set(record?.responsibleIds ?? []);
         const added = (v.responsibleIds as string[]).filter((id) => !prevResp.has(id));
         const item = save(
@@ -216,7 +211,6 @@ export function CaseForm({ open, onOpenChange, record, preset, onSaved }: FormPr
             openingDate: v.openingDate,
             closingDate: v.status === "Kapalı" ? v.closingDate || today() : undefined,
             agreedFee: Number(v.agreedFee) || undefined,
-            portalVisible: !!v.portalVisible,
             note: v.note || undefined,
           },
           added.length
@@ -239,34 +233,26 @@ export function CaseForm({ open, onOpenChange, record, preset, onSaved }: FormPr
 /* ───────────── Kullanıcı ───────────── */
 
 export function UserForm({ open, onOpenChange, record, preset, onSaved }: FormProps<User>) {
-  const { save, state } = useErp();
-  const o = useOptions();
+  const { save, setUserPassword, isUsernameAvailable, reloadFromServer } = useErp();
   const fields: FormField[] = [
     { name: "name", label: "Ad soyad", required: true, span: 2, autoFocus: !record },
     { name: "role", label: "Rol", type: "select", options: [...USER_ROLES], required: true },
     {
-      name: "clientId",
-      label: "Bağlı müvekkil",
-      type: "combobox",
-      options: o.allClients,
-      required: true,
-      visible: (v) => v.role === "Müvekkil",
-    },
-    {
       name: "title",
       label: "Ünvan",
       placeholder: "Örn. Avukat",
-      visible: (v) => v.role !== "Müvekkil",
     },
     { name: "username", label: "Kullanıcı adı", required: true },
     { name: "email", label: "E-posta", type: "email", required: true },
     { name: "phone", label: "Telefon", type: "tel" },
     {
       name: "password",
-      label: record ? "Yeni şifre (opsiyonel)" : "Şifre",
+      label: record ? "Yeni şifre (opsiyonel)" : "Geçici şifre (opsiyonel)",
       type: "text",
-      required: !record,
-      hint: "En az 6 karakter",
+      required: false,
+      hint: record
+        ? "Doldurursanız şifre güncellenir (en az 8 karakter)"
+        : "Boş bırakılırsa davet e-postası gider; doldurulursa geçici şifre atanır",
     },
     { name: "active", label: "Hesap aktif", type: "switch" },
   ];
@@ -274,7 +260,7 @@ export function UserForm({ open, onOpenChange, record, preset, onSaved }: FormPr
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={record ? "Kullanıcıyı düzenle" : "Yeni kullanıcı"}
+      title={record ? "Kullanıcıyı düzenle" : "Kullanıcı davet et"}
       fields={fields}
       initial={{ role: "Avukat", active: true, ...preset, ...record, password: "" }}
       validate={(v) => {
@@ -282,36 +268,65 @@ export function UserForm({ open, onOpenChange, record, preset, onSaved }: FormPr
         const uname = String(v.username ?? "")
           .trim()
           .toLocaleLowerCase("tr");
-        if (
-          state.users.some(
-            (u) => u.username.toLocaleLowerCase("tr") === uname && u.id !== record?.id,
-          )
-        ) {
+        if (!isUsernameAvailable(uname, record?.id)) {
           errs.username = "Bu kullanıcı adı alınmış";
         }
         if (v.password) {
-          const p = passwordProblem(v.password);
+          const p = passwordProblem(String(v.password));
           if (p) errs.password = p;
         }
         return errs;
       }}
       onSubmit={async (v) => {
-        const pw = v.password ? await createPasswordRecord(v.password) : undefined;
-        const item = save("users", {
-          id: record?.id,
-          name: v.name.trim(),
-          role: v.role,
-          clientId: v.role === "Müvekkil" ? v.clientId : undefined,
-          title: v.role === "Müvekkil" ? undefined : v.title || undefined,
-          username: v.username.trim().toLocaleLowerCase("tr"),
-          email: v.email.trim(),
-          phone: v.phone || undefined,
-          active: !!v.active,
-          passwordHash: pw?.passwordHash ?? record?.passwordHash ?? "",
-          passwordSalt: pw?.passwordSalt ?? record?.passwordSalt ?? "",
+        if (record) {
+          const item = save("users", {
+            id: record.id,
+            name: v.name.trim(),
+            role: v.role,
+            title: v.title || undefined,
+            username: v.username.trim().toLocaleLowerCase("tr"),
+            email: v.email.trim(),
+            phone: v.phone || undefined,
+            active: !!v.active,
+            passwordHash: "",
+            passwordSalt: "",
+            permissions: record.permissions,
+          });
+          if (v.password) {
+            const r = await setUserPassword(record.id, String(v.password));
+            if (!r.ok) {
+              toast.error(r.error);
+              return;
+            }
+          }
+          toast.success("Kullanıcı güncellendi");
+          onSaved?.(item);
+          return;
+        }
+
+        const { data, error } = await supabase.functions.invoke("invite-user", {
+          body: {
+            action: "invite",
+            name: v.name.trim(),
+            username: v.username.trim().toLocaleLowerCase("tr"),
+            email: v.email.trim(),
+            phone: v.phone || null,
+            title: v.title || null,
+            role: v.role === "Admin" ? "admin" : "avukat",
+            password: v.password ? String(v.password) : null,
+          },
         });
-        toast.success(record ? "Kullanıcı güncellendi" : "Kullanıcı oluşturuldu");
-        onSaved?.(item);
+        if (error || data?.error) {
+          toast.error(error?.message || String(data?.error) || "Davet başarısız");
+          return;
+        }
+        await reloadFromServer();
+        toast.success(
+          v.password
+            ? "Kullanıcı oluşturuldu"
+            : "Davet e-postası gönderildi",
+        );
+        onSaved?.(data?.user as User);
       }}
     />
   );

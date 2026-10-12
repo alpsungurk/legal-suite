@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
   AlertTriangle,
   CalendarCheck,
+  FileSpreadsheet,
   Gavel,
   HandCoins,
   Pencil,
@@ -14,18 +15,18 @@ import { useErp } from "@/lib/erp-store";
 import { enforcementSummary, promiseStatus } from "@/lib/finance";
 import { formatDate, formatMoney, relativeDue, sumBy } from "@/lib/format";
 import { PageHeader } from "@/components/app/PageHeader";
-import { AvatarStack, Money, PageShell, ProgressBar } from "@/components/app/bits";
+import { AvatarStack, Money, PageShell, ProgressBar, NoAccess } from "@/components/app/bits";
 import { StatGrid, StatTile } from "@/components/app/StatTile";
 import { DataTable, type Column } from "@/components/app/DataTable";
 import { StatusBadge } from "@/components/app/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { useQuick } from "@/components/forms/quick";
-import { ENFORCEMENT_STATUSES, type EnforcementFile } from "@/lib/erp-types";
+import type { EnforcementFile } from "@/lib/erp-types";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/icra/")({
-  head: () => ({ meta: [{ title: "İcra dosyaları — Lex Yönetim" }] }),
+  head: () => ({ meta: [{ title: "İcra dosyaları — LexKasa" }] }),
   component: Page,
 });
 
@@ -131,6 +132,7 @@ function Page() {
     },
   ];
 
+  if (!permissions.can("enforcements")) return <NoAccess />;
   return (
     <PageShell>
       <PageHeader
@@ -138,8 +140,14 @@ function Page() {
         description="Takipler, borçlular, ödeme sözleri ve tahsilatlar"
         icon={Gavel}
         actions={
-          permissions.manageRecords && (
+          permissions.can("enforcements", "create") && (
             <>
+              <Button
+                variant="outline"
+                onClick={() => quick.open("import", { kind: "enforcements" })}
+              >
+                <FileSpreadsheet /> Excel ile aktar
+              </Button>
               <Button variant="outline" onClick={() => quick.open("promise")}>
                 <CalendarCheck /> Ödeme sözü
               </Button>
@@ -195,7 +203,7 @@ function Page() {
           {
             id: "status",
             label: "Durum",
-            options: [...ENFORCEMENT_STATUSES],
+            options: state.settings.enforcementStatuses,
             get: (r) => r.e.status,
           },
           {
@@ -210,7 +218,7 @@ function Page() {
         exportName="İcra dosyaları"
         onRowClick={(r) => navigate({ to: "/icra/$id", params: { id: r.e.id } })}
         rowActions={
-          permissions.manageRecords
+          permissions.can("enforcements", "create")
             ? (r) => (
                 <>
                   <DropdownMenuItem

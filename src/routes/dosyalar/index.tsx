@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { FolderKanban, Plus } from "lucide-react";
+import { FileSpreadsheet, FolderKanban, Plus } from "lucide-react";
 import { useErp } from "@/lib/erp-store";
 import { PageHeader } from "@/components/app/PageHeader";
-import { PageShell } from "@/components/app/bits";
+import { PageShell, NoAccess } from "@/components/app/bits";
 import { StatGrid, StatTile } from "@/components/app/StatTile";
 import { Segmented } from "@/components/app/fields";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { useQuick } from "@/components/forms/quick";
 import { addDays, today } from "@/lib/format";
 
 export const Route = createFileRoute("/dosyalar/")({
-  head: () => ({ meta: [{ title: "Dosyalar — Lex Yönetim" }] }),
+  head: () => ({ meta: [{ title: "Dosyalar — LexKasa" }] }),
   component: Page,
 });
 
@@ -35,6 +35,7 @@ function Page() {
       r.type === "Duruşma" && r.status === "Bekliyor" && r.date >= today() && r.date <= weekEnd,
   );
 
+  if (!permissions.can("cases")) return <NoAccess />;
   return (
     <PageShell>
       <PageHeader
@@ -42,16 +43,21 @@ function Page() {
         description="Dava, icra, danışmanlık ve arabuluculuk dosyaları"
         icon={FolderKanban}
         actions={
-          permissions.manageRecords && (
-            <Button
-              onClick={() =>
-                quick.open("case", {
-                  onSaved: (c) => navigate({ to: "/dosyalar/$id", params: { id: c.id } }),
-                })
-              }
-            >
-              <Plus /> Yeni dosya
-            </Button>
+          permissions.can("cases", "create") && (
+            <>
+              <Button variant="outline" onClick={() => quick.open("import", { kind: "cases" })}>
+                <FileSpreadsheet /> Excel ile aktar
+              </Button>
+              <Button
+                onClick={() =>
+                  quick.open("case", {
+                    onSaved: (c) => navigate({ to: "/dosyalar/$id", params: { id: c.id } }),
+                  })
+                }
+              >
+                <Plus /> Yeni dosya
+              </Button>
+            </>
           )
         }
       />

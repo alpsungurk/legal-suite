@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   CalendarCheck,
+  CalendarRange,
   Gavel,
   HandCoins,
   Mail,
@@ -14,7 +15,15 @@ import { useErp } from "@/lib/erp-store";
 import { debtorSummary, enforcementSummary, promiseStatus } from "@/lib/finance";
 import { formatDate, formatMoney, relativeDue } from "@/lib/format";
 import { PageHeader } from "@/components/app/PageHeader";
-import { Avatar, DetailList, Money, PageShell, ProgressBar, Section } from "@/components/app/bits";
+import {
+  Avatar,
+  DetailList,
+  Money,
+  NoAccess,
+  PageShell,
+  ProgressBar,
+  Section,
+} from "@/components/app/bits";
 import { StatGrid, StatTile } from "@/components/app/StatTile";
 import { ReliabilityBadge, StatusBadge } from "@/components/app/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -33,6 +42,7 @@ function Page() {
   const { state, permissions } = useErp();
   const quick = useQuick();
   const d = state.debtors.find((x) => x.id === id);
+  if (!permissions.can("enforcements")) return <NoAccess />;
   if (!d) {
     return (
       <PageShell>
@@ -92,10 +102,22 @@ function Page() {
                 </Button>
               </>
             )}
-            {permissions.manageRecords && (
+            {permissions.can("enforcements", "edit") && (
+              <Button variant="outline" onClick={() => quick.open("debtor", { record: d })}>
+                <Pencil /> Düzenle
+              </Button>
+            )}
+            {permissions.can("enforcements", "create") && (
               <>
-                <Button variant="outline" onClick={() => quick.open("debtor", { record: d })}>
-                  <Pencil /> Düzenle
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    quick.open("debtorPlan", {
+                      preset: { enforcementId: s.files[0]?.id, debtorId: d.id },
+                    })
+                  }
+                >
+                  <CalendarRange /> Taksit tanımla
                 </Button>
                 <Button
                   onClick={() =>

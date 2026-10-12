@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import { useRouter, useRouterState } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
+import { useErp } from "@/lib/erp-store";
 
-/** Sayfa yüklenirken üstte görünen ince ilerleme çubuğu (kısa geçişlerde hiç görünmez). */
+/** Sayfa veya sunucu verisi yüklenirken üstte ince ilerleme çubuğu. */
 export function NavProgress() {
-  const loading = useRouterState({ select: (s) => s.status === "pending" || s.isLoading });
+  const routeLoading = useRouterState({ select: (s) => s.status === "pending" || s.isLoading });
+  const { loading: dataLoading, hydrated } = useErp();
+  const loading = routeLoading || (hydrated && dataLoading);
   const [show, setShow] = useState(false);
   useEffect(() => {
     if (!loading) {
@@ -30,7 +33,7 @@ export function NavProgress() {
 /** Yeni sayfanın kodu henüz yüklenmediyse eski sayfa yerine gösterilen iskelet. */
 export function PageSkeleton() {
   return (
-    <div className="mx-auto w-full max-w-[1440px] space-y-6" aria-busy>
+    <div className="mx-auto w-full max-w-[1440px] space-y-6 py-2" aria-busy role="status">
       <div className="flex items-center gap-3">
         <div className="skeleton h-10 w-10 rounded-xl" />
         <div className="space-y-2">
@@ -40,10 +43,14 @@ export function PageSkeleton() {
       </div>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {Array.from({ length: 4 }, (_, i) => (
-          <div key={i} className="skeleton h-[118px] rounded-2xl" />
+          <div key={i} className="skeleton h-[8.25rem] rounded-2xl" />
         ))}
       </div>
-      <div className="skeleton h-[420px] rounded-2xl" />
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <div className="skeleton h-72 rounded-2xl" />
+        <div className="skeleton h-72 rounded-2xl" />
+      </div>
+      <div className="skeleton h-48 rounded-2xl" />
     </div>
   );
 }

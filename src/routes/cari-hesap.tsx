@@ -11,14 +11,14 @@ import { StatusBadge } from "@/components/app/StatusBadge";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 
 export const Route = createFileRoute("/cari-hesap")({
-  head: () => ({ meta: [{ title: "Cari hesap — Lex Yönetim" }] }),
+  head: () => ({ meta: [{ title: "Cari hesap — LexKasa" }] }),
   component: Page,
 });
 
 function Page() {
   const { state, permissions } = useErp();
   const navigate = useNavigate();
-  if (!permissions.viewFinance) return <NoAccess />;
+  if (!permissions.can("ledger")) return <NoAccess />;
 
   const rows = state.clients.map((c) => {
     const { entries } = clientLedger(state, c.id);
@@ -72,14 +72,14 @@ function Page() {
       cell: (r) => <Money value={r.credit} className="text-emerald-600 dark:text-emerald-400" />,
     },
     {
-      id: "adv",
-      header: "Avans bakiyesi",
+      id: "exp",
+      header: "Yansıyan masraf",
       align: "right",
       money: true,
       hideBelow: "lg",
-      sort: (r) => r.fin.advance.balance,
-      export: (r) => r.fin.advance.balance,
-      cell: (r) => <Money value={r.fin.advance.balance} className="text-muted-foreground" />,
+      sort: (r) => r.fin.expenseCharged,
+      export: (r) => r.fin.expenseCharged,
+      cell: (r) => <Money value={r.fin.expenseCharged} className="text-muted-foreground" />,
     },
     {
       id: "fee",
@@ -115,7 +115,7 @@ function Page() {
     <PageShell>
       <PageHeader
         title="Cari hesap"
-        description="Masraf, avans, ücret ve icra tahsilatlarını tek bakiyede birleştiren müvekkil hesapları"
+        description="Masraf, ücret ve icra tahsilatlarını tek bakiyede birleştiren müvekkil hesapları"
         icon={BookOpenCheck}
       />
       <StatGrid>
@@ -131,7 +131,7 @@ function Page() {
           value={formatMoney(Math.abs(sumBy(creditors, (r) => r.fin.balance)))}
           icon={TrendingDown}
           tone="green"
-          hint={`${creditors.length} alacaklı (avans/icra fazlası)`}
+          hint={`${creditors.length} alacaklı (icra / ödeme fazlası)`}
         />
         <StatTile
           label="Net pozisyon"
@@ -209,9 +209,9 @@ function Page() {
         )}
       />
       <p className="text-xs text-muted-foreground">
-        Borç: müvekkile yansıtılan masraflar ve tahakkuk eden ücretler. Alacak: alınan avanslar,
-        ücret tahsilatları ve müvekkil adına yapılan icra tahsilatları. Bakiye pozitifse müvekkil
-        borçlu, negatifse alacaklıdır.
+        Borç: müvekkile yansıtılan masraflar ve tahakkuk eden ücretler. Alacak: ücret tahsilatları
+        ve müvekkil adına yapılan icra tahsilatları. Bakiye pozitifse müvekkil borçlu, negatifse
+        alacaklıdır.
       </p>
     </PageShell>
   );

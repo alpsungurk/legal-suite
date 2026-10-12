@@ -1,0 +1,723 @@
+/**
+ * UI (camelCase) ↔ Postgres (snake_case) dönüşümleri.
+ */
+import { defaultSettings } from "@/lib/erp-data";
+import type {
+  Account,
+  AccountTx,
+  ActivityLog,
+  AppNotification,
+  AttachmentRef,
+  CaseFile,
+  Client,
+  Collection,
+  ContactLog,
+  Debtor,
+  DocumentFile,
+  EnforcementFile,
+  Expense,
+  FeePlan,
+  FirmProfile,
+  Installment,
+  InstallmentPayment,
+  PaymentPromise,
+  Reminder,
+  Settings,
+  User,
+  UserRole,
+  YearStats,
+} from "@/lib/erp-types";
+
+export function roleToDb(role: UserRole): "admin" | "avukat" {
+  return role === "Admin" ? "admin" : "avukat";
+}
+
+export function roleFromDb(role: string): UserRole {
+  return role === "admin" ? "Admin" : "Avukat";
+}
+
+export function newId() {
+  return crypto.randomUUID();
+}
+
+function iso(v: string | null | undefined): string {
+  return v ?? "";
+}
+
+function dateOnly(v: string | null | undefined): string {
+  if (!v) return "";
+  return v.slice(0, 10);
+}
+
+function timeOnly(v: string | null | undefined): string | undefined {
+  if (!v) return undefined;
+  return v.length >= 5 ? v.slice(0, 5) : v;
+}
+
+function num(v: unknown, fallback = 0): number {
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function optNum(v: unknown): number | undefined {
+  if (v == null || v === "") return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function optStr(v: unknown): string | undefined {
+  if (v == null || v === "") return undefined;
+  return String(v);
+}
+
+/* ───── Attachment ───── */
+
+export function attachmentFromRow(r: Record<string, unknown>): AttachmentRef {
+  return {
+    id: String(r.id),
+    name: String(r.name ?? "dosya"),
+    mime: String(r.mime ?? "application/octet-stream"),
+    size: num(r.size),
+  };
+}
+
+/* ───── Profile / User ───── */
+
+export function userFromProfile(r: Record<string, unknown>): User {
+  return {
+    id: String(r.id),
+    firmId: String(r.org_id),
+    createdAt: iso(r.created_at as string),
+    updatedAt: iso(r.updated_at as string),
+    name: String(r.name ?? ""),
+    role: roleFromDb(String(r.role ?? "avukat")),
+    email: String(r.email ?? ""),
+    username: String(r.username ?? ""),
+    phone: optStr(r.phone),
+    title: optStr(r.title),
+    active: r.active !== false,
+    passwordHash: "",
+    passwordSalt: "",
+    permissions: (r.permissions as Record<string, boolean>) ?? {},
+  };
+}
+
+export function profileToRow(u: Partial<User> & { id?: string }) {
+  const row: Record<string, unknown> = {};
+  if (u.name != null) row.name = u.name;
+  if (u.username != null) row.username = u.username.trim().toLocaleLowerCase("tr");
+  if (u.email != null) row.email = u.email;
+  if (u.phone !== undefined) row.phone = u.phone || null;
+  if (u.title !== undefined) row.title = u.title || null;
+  if (u.role != null) row.role = roleToDb(u.role);
+  if (u.active != null) row.active = u.active;
+  if (u.permissions != null) row.permissions = u.permissions;
+  return row;
+}
+
+/* ───── Settings ───── */
+
+export function settingsFromRow(r: Record<string, unknown> | null): Settings {
+  const base = defaultSettings();
+  if (!r) return base;
+  const firm = (r.firm as Partial<FirmProfile>) ?? {};
+  return {
+    firm: {
+      ...base.firm,
+      ...firm,
+      name: firm.name || base.firm.name,
+      legalName: firm.legalName || firm.name || base.firm.legalName,
+    },
+    caseTypes: (r.case_types as string[]) ?? base.caseTypes,
+    caseStatuses: (r.case_statuses as string[]) ?? base.caseStatuses,
+    expenseTypes: (r.expense_types as string[]) ?? base.expenseTypes,
+    reminderTypes: (r.reminder_types as string[]) ?? base.reminderTypes,
+    documentCategories: (r.document_categories as string[]) ?? base.documentCategories,
+    feeKinds: (r.fee_kinds as string[]) ?? base.feeKinds,
+    paymentMethods: (r.payment_methods as string[]) ?? base.paymentMethods,
+    enforcementStatuses: (r.enforcement_statuses as string[]) ?? base.enforcementStatuses,
+    enforcementTypes: (r.enforcement_types as string[]) ?? base.enforcementTypes,
+    contactChannels: (r.contact_channels as string[]) ?? base.contactChannels,
+    courts: (r.courts as string[]) ?? [],
+    enforcementOffices: (r.enforcement_offices as string[]) ?? [],
+    rolePermissions: (r.role_permissions as Record<string, boolean>) ?? base.rolePermissions,
+  };
+}
+
+export function settingsToRow(s: Partial<Settings>) {
+  const row: Record<string, unknown> = {};
+  if (s.firm != null) row.firm = s.firm;
+  if (s.caseTypes != null) row.case_types = s.caseTypes;
+  if (s.caseStatuses != null) row.case_statuses = s.caseStatuses;
+  if (s.expenseTypes != null) row.expense_types = s.expenseTypes;
+  if (s.reminderTypes != null) row.reminder_types = s.reminderTypes;
+  if (s.documentCategories != null) row.document_categories = s.documentCategories;
+  if (s.feeKinds != null) row.fee_kinds = s.feeKinds;
+  if (s.paymentMethods != null) row.payment_methods = s.paymentMethods;
+  if (s.enforcementStatuses != null) row.enforcement_statuses = s.enforcementStatuses;
+  if (s.enforcementTypes != null) row.enforcement_types = s.enforcementTypes;
+  if (s.contactChannels != null) row.contact_channels = s.contactChannels;
+  if (s.courts != null) row.courts = s.courts;
+  if (s.enforcementOffices != null) row.enforcement_offices = s.enforcementOffices;
+  if (s.rolePermissions != null) row.role_permissions = s.rolePermissions;
+  return row;
+}
+
+/* ───── Clients ───── */
+
+export function clientFromRow(r: Record<string, unknown>): Client {
+  const closedCount = num(r.closed_case_count);
+  return {
+    id: String(r.id),
+    firmId: String(r.org_id),
+    createdAt: iso(r.created_at as string),
+    updatedAt: iso(r.updated_at as string),
+    name: String(r.name ?? ""),
+    kind: (r.kind as Client["kind"]) || "Bireysel",
+    email: String(r.email ?? ""),
+    phone: String(r.phone ?? ""),
+    status: (r.status as Client["status"]) || "Aktif",
+    identity: optStr(r.identity),
+    taxOffice: optStr(r.tax_office),
+    address: optStr(r.address),
+    notes: optStr(r.notes),
+    monthlyFee: optNum(r.monthly_fee),
+    monthlyFeeStartDate: optStr(r.monthly_fee_start_date)
+      ? dateOnly(r.monthly_fee_start_date as string)
+      : undefined,
+    closedCases:
+      closedCount > 0
+        ? {
+            caseCount: closedCount,
+            receivable: num(r.closed_receivable),
+            payable: num(r.closed_payable),
+            feeTotal: num(r.closed_fee_total),
+            feePaid: num(r.closed_fee_paid),
+            lastClosedAt: iso(r.closed_last_at as string) || new Date().toISOString(),
+          }
+        : undefined,
+  };
+}
+
+export function clientToRow(c: Partial<Client>) {
+  const row: Record<string, unknown> = {};
+  if (c.name != null) row.name = c.name;
+  if (c.kind != null) row.kind = c.kind;
+  if (c.email != null) row.email = c.email;
+  if (c.phone != null) row.phone = c.phone;
+  if (c.status != null) row.status = c.status;
+  if (c.identity !== undefined) row.identity = c.identity || null;
+  if (c.taxOffice !== undefined) row.tax_office = c.taxOffice || null;
+  if (c.address !== undefined) row.address = c.address || null;
+  if (c.notes !== undefined) row.notes = c.notes || null;
+  if (c.monthlyFee !== undefined) row.monthly_fee = c.monthlyFee ?? null;
+  if (c.monthlyFeeStartDate !== undefined)
+    row.monthly_fee_start_date = c.monthlyFeeStartDate || null;
+  if (c.closedCases) {
+    row.closed_case_count = c.closedCases.caseCount;
+    row.closed_receivable = c.closedCases.receivable;
+    row.closed_payable = c.closedCases.payable;
+    row.closed_fee_total = c.closedCases.feeTotal;
+    row.closed_fee_paid = c.closedCases.feePaid;
+    row.closed_last_at = c.closedCases.lastClosedAt;
+  }
+  return row;
+}
+
+/* ───── Cases ───── */
+
+export function caseFromRow(r: Record<string, unknown>): CaseFile {
+  return {
+    id: String(r.id),
+    firmId: String(r.org_id),
+    createdAt: iso(r.created_at as string),
+    updatedAt: iso(r.updated_at as string),
+    no: String(r.no ?? ""),
+    title: String(r.title ?? ""),
+    clientId: optStr(r.client_id),
+    court: optStr(r.court),
+    esasNo: optStr(r.esas_no),
+    type: String(r.type ?? "Dava"),
+    status: String(r.status ?? "Açık"),
+    responsibleIds: (r.responsible_ids as string[]) ?? [],
+    opposingParty: optStr(r.opposing_party),
+    openingDate: dateOnly(r.opening_date as string),
+    closingDate: optStr(r.closing_date) ? dateOnly(r.closing_date as string) : undefined,
+    agreedFee: optNum(r.agreed_fee),
+    note: optStr(r.note),
+  };
+}
+
+export function caseToRow(c: Partial<CaseFile>) {
+  const row: Record<string, unknown> = {};
+  if (c.no != null) row.no = c.no;
+  if (c.title != null) row.title = c.title;
+  if (c.clientId !== undefined) row.client_id = c.clientId || null;
+  if (c.court !== undefined) row.court = c.court || null;
+  if (c.esasNo !== undefined) row.esas_no = c.esasNo || null;
+  if (c.type != null) row.type = c.type;
+  if (c.status != null) row.status = c.status;
+  if (c.responsibleIds != null) row.responsible_ids = c.responsibleIds;
+  if (c.opposingParty !== undefined) row.opposing_party = c.opposingParty || null;
+  if (c.openingDate != null) row.opening_date = c.openingDate;
+  if (c.closingDate !== undefined) row.closing_date = c.closingDate || null;
+  if (c.agreedFee !== undefined) row.agreed_fee = c.agreedFee ?? null;
+  if (c.note !== undefined) row.note = c.note || null;
+  return row;
+}
+
+/* ───── Accounts ───── */
+
+export function accountFromRow(r: Record<string, unknown>): Account {
+  return {
+    id: String(r.id),
+    firmId: String(r.org_id),
+    createdAt: iso(r.created_at as string),
+    updatedAt: iso(r.updated_at as string),
+    name: String(r.name ?? ""),
+    type: (r.type as Account["type"]) || "Kasa",
+    bankName: optStr(r.bank_name),
+    iban: optStr(r.iban),
+    openingBalance: num(r.opening_balance),
+    openingDate: dateOnly(r.opening_date as string),
+    active: r.active !== false,
+  };
+}
+
+export function accountToRow(a: Partial<Account>) {
+  const row: Record<string, unknown> = {};
+  if (a.name != null) row.name = a.name;
+  if (a.type != null) row.type = a.type;
+  if (a.bankName !== undefined) row.bank_name = a.bankName || null;
+  if (a.iban !== undefined) row.iban = a.iban || null;
+  if (a.openingBalance != null) row.opening_balance = a.openingBalance;
+  if (a.openingDate != null) row.opening_date = a.openingDate;
+  if (a.active != null) row.active = a.active;
+  return row;
+}
+
+/* ───── Transactions ───── */
+
+export function txFromRow(r: Record<string, unknown>): AccountTx {
+  return {
+    id: String(r.id),
+    firmId: String(r.org_id),
+    createdAt: iso(r.created_at as string),
+    updatedAt: iso(r.updated_at as string),
+    accountId: String(r.account_id),
+    date: dateOnly(r.date as string),
+    amount: num(r.amount),
+    category: r.category as AccountTx["category"],
+    description: String(r.description ?? ""),
+    transferId: optStr(r.transfer_id),
+    clientId: optStr(r.client_id),
+  };
+}
+
+export function txToRow(t: Partial<AccountTx>) {
+  const row: Record<string, unknown> = {};
+  if (t.accountId != null) row.account_id = t.accountId;
+  if (t.date != null) row.date = t.date;
+  if (t.amount != null) row.amount = t.amount;
+  if (t.category != null) row.category = t.category;
+  if (t.description != null) row.description = t.description;
+  if (t.transferId !== undefined) row.transfer_id = t.transferId || null;
+  if (t.clientId !== undefined) row.client_id = t.clientId || null;
+  return row;
+}
+
+/* ───── Debtors ───── */
+
+export function debtorFromRow(r: Record<string, unknown>): Debtor {
+  return {
+    id: String(r.id),
+    firmId: String(r.org_id),
+    createdAt: iso(r.created_at as string),
+    updatedAt: iso(r.updated_at as string),
+    name: String(r.name ?? ""),
+    kind: (r.kind as Debtor["kind"]) || "Bireysel",
+    identity: optStr(r.identity),
+    phone: optStr(r.phone),
+    email: optStr(r.email),
+    address: optStr(r.address),
+    assets: optStr(r.assets),
+    notes: optStr(r.notes),
+  };
+}
+
+export function debtorToRow(d: Partial<Debtor>) {
+  const row: Record<string, unknown> = {};
+  if (d.name != null) row.name = d.name;
+  if (d.kind != null) row.kind = d.kind;
+  if (d.identity !== undefined) row.identity = d.identity || null;
+  if (d.phone !== undefined) row.phone = d.phone || null;
+  if (d.email !== undefined) row.email = d.email || null;
+  if (d.address !== undefined) row.address = d.address || null;
+  if (d.assets !== undefined) row.assets = d.assets || null;
+  if (d.notes !== undefined) row.notes = d.notes || null;
+  return row;
+}
+
+/* ───── Enforcements ───── */
+
+export function enforcementFromRow(
+  r: Record<string, unknown>,
+  debtorIds: string[] = [],
+): EnforcementFile {
+  return {
+    id: String(r.id),
+    firmId: String(r.org_id),
+    createdAt: iso(r.created_at as string),
+    updatedAt: iso(r.updated_at as string),
+    no: String(r.no ?? ""),
+    office: String(r.office ?? ""),
+    type: String(r.type ?? "İlamsız"),
+    clientId: String(r.client_id),
+    debtorIds,
+    principal: num(r.principal),
+    interest: num(r.interest),
+    costs: num(r.costs),
+    status: String(r.status ?? "Derdest"),
+    openingDate: dateOnly(r.opening_date as string),
+    responsibleIds: (r.responsible_ids as string[]) ?? [],
+    caseId: optStr(r.case_id),
+    note: optStr(r.note),
+  };
+}
+
+export function enforcementToRow(e: Partial<EnforcementFile>) {
+  const row: Record<string, unknown> = {};
+  if (e.no != null) row.no = e.no;
+  if (e.office != null) row.office = e.office;
+  if (e.type != null) row.type = e.type;
+  if (e.clientId != null) row.client_id = e.clientId;
+  if (e.principal != null) row.principal = e.principal;
+  if (e.interest != null) row.interest = e.interest;
+  if (e.costs != null) row.costs = e.costs;
+  if (e.status != null) row.status = e.status;
+  if (e.openingDate != null) row.opening_date = e.openingDate;
+  if (e.responsibleIds != null) row.responsible_ids = e.responsibleIds;
+  if (e.caseId !== undefined) row.case_id = e.caseId || null;
+  if (e.note !== undefined) row.note = e.note || null;
+  return row;
+}
+
+/* ───── Promises / Collections / Contacts ───── */
+
+export function promiseFromRow(r: Record<string, unknown>): PaymentPromise {
+  return {
+    id: String(r.id),
+    firmId: String(r.org_id),
+    createdAt: iso(r.created_at as string),
+    updatedAt: iso(r.updated_at as string),
+    enforcementId: String(r.enforcement_id),
+    debtorId: String(r.debtor_id),
+    amount: num(r.amount),
+    dueDate: dateOnly(r.due_date as string),
+    status: r.status as PaymentPromise["status"],
+    planId: optStr(r.plan_id),
+    installmentNo: optNum(r.installment_no),
+    note: optStr(r.note),
+  };
+}
+
+export function promiseToRow(p: Partial<PaymentPromise>) {
+  const row: Record<string, unknown> = {};
+  if (p.enforcementId != null) row.enforcement_id = p.enforcementId;
+  if (p.debtorId != null) row.debtor_id = p.debtorId;
+  if (p.amount != null) row.amount = p.amount;
+  if (p.dueDate != null) row.due_date = p.dueDate;
+  if (p.status != null) row.status = p.status;
+  if (p.planId !== undefined) row.plan_id = p.planId || null;
+  if (p.installmentNo !== undefined) row.installment_no = p.installmentNo ?? null;
+  if (p.note !== undefined) row.note = p.note || null;
+  return row;
+}
+
+export function collectionFromRow(r: Record<string, unknown>): Collection {
+  return {
+    id: String(r.id),
+    firmId: String(r.org_id),
+    createdAt: iso(r.created_at as string),
+    updatedAt: iso(r.updated_at as string),
+    enforcementId: String(r.enforcement_id),
+    debtorId: String(r.debtor_id),
+    amount: num(r.amount),
+    date: dateOnly(r.date as string),
+    method: String(r.method ?? "Havale/EFT"),
+    accountId: optStr(r.account_id),
+    promiseId: optStr(r.promise_id),
+    transferredToClient: Boolean(r.transferred_to_client),
+    note: optStr(r.note),
+  };
+}
+
+export function collectionToRow(c: Partial<Collection>) {
+  const row: Record<string, unknown> = {};
+  if (c.enforcementId != null) row.enforcement_id = c.enforcementId;
+  if (c.debtorId != null) row.debtor_id = c.debtorId;
+  if (c.amount != null) row.amount = c.amount;
+  if (c.date != null) row.date = c.date;
+  if (c.method != null) row.method = c.method;
+  if (c.accountId !== undefined) row.account_id = c.accountId || null;
+  if (c.promiseId !== undefined) row.promise_id = c.promiseId || null;
+  if (c.transferredToClient != null) row.transferred_to_client = c.transferredToClient;
+  if (c.note !== undefined) row.note = c.note || null;
+  return row;
+}
+
+export function contactFromRow(r: Record<string, unknown>): ContactLog {
+  return {
+    id: String(r.id),
+    firmId: String(r.org_id),
+    createdAt: iso(r.created_at as string),
+    updatedAt: iso(r.updated_at as string),
+    debtorId: String(r.debtor_id),
+    enforcementId: optStr(r.enforcement_id),
+    date: dateOnly(r.date as string),
+    channel: String(r.channel ?? ""),
+    note: String(r.note ?? ""),
+    userId: String(r.user_id ?? r.created_by ?? ""),
+  };
+}
+
+export function contactToRow(c: Partial<ContactLog>) {
+  const row: Record<string, unknown> = {};
+  if (c.debtorId != null) row.debtor_id = c.debtorId;
+  if (c.enforcementId !== undefined) row.enforcement_id = c.enforcementId || null;
+  if (c.date != null) row.date = c.date;
+  if (c.channel != null) row.channel = c.channel;
+  if (c.note != null) row.note = c.note;
+  if (c.userId != null) row.user_id = c.userId;
+  return row;
+}
+
+/* ───── Expenses ───── */
+
+export function expenseFromRow(
+  r: Record<string, unknown>,
+  receipts: AttachmentRef[] = [],
+): Expense {
+  return {
+    id: String(r.id),
+    firmId: String(r.org_id),
+    createdAt: iso(r.created_at as string),
+    updatedAt: iso(r.updated_at as string),
+    title: String(r.title ?? ""),
+    type: String(r.type ?? ""),
+    amount: num(r.amount),
+    date: dateOnly(r.date as string),
+    caseId: optStr(r.case_id),
+    enforcementId: optStr(r.enforcement_id),
+    clientId: optStr(r.client_id),
+    chargeTo: (r.charge_to as Expense["chargeTo"]) || "Müvekkil",
+    paidBy: (r.paid_by as Expense["paidBy"]) || "Büro",
+    accountId: optStr(r.account_id),
+    receipts,
+    note: optStr(r.note),
+    createdBy: String(r.created_by ?? ""),
+  };
+}
+
+export function expenseToRow(e: Partial<Expense>) {
+  const row: Record<string, unknown> = {};
+  if (e.title != null) row.title = e.title;
+  if (e.type != null) row.type = e.type;
+  if (e.amount != null) row.amount = e.amount;
+  if (e.date != null) row.date = e.date;
+  if (e.caseId !== undefined) row.case_id = e.caseId || null;
+  if (e.enforcementId !== undefined) row.enforcement_id = e.enforcementId || null;
+  if (e.clientId !== undefined) row.client_id = e.clientId || null;
+  if (e.chargeTo != null) row.charge_to = e.chargeTo;
+  if (e.paidBy != null) row.paid_by = e.paidBy;
+  if (e.accountId !== undefined) row.account_id = e.accountId || null;
+  if (e.note !== undefined) row.note = e.note || null;
+  return row;
+}
+
+/* ───── Fee plans ───── */
+
+export function paymentFromRow(r: Record<string, unknown>): InstallmentPayment {
+  return {
+    id: String(r.id),
+    date: dateOnly(r.date as string),
+    amount: num(r.amount),
+    method: String(r.method ?? ""),
+    accountId: optStr(r.account_id),
+    note: optStr(r.note),
+  };
+}
+
+export function installmentFromRow(
+  r: Record<string, unknown>,
+  payments: InstallmentPayment[] = [],
+): Installment {
+  return {
+    id: String(r.id),
+    dueDate: dateOnly(r.due_date as string),
+    amount: num(r.amount),
+    payments,
+  };
+}
+
+export function planFromRow(
+  r: Record<string, unknown>,
+  installments: Installment[] = [],
+): FeePlan {
+  return {
+    id: String(r.id),
+    firmId: String(r.org_id),
+    createdAt: iso(r.created_at as string),
+    updatedAt: iso(r.updated_at as string),
+    title: String(r.title ?? ""),
+    kind: String(r.kind ?? "Vekalet ücreti"),
+    clientId: String(r.client_id),
+    caseId: optStr(r.case_id),
+    date: dateOnly(r.date as string),
+    total: num(r.total),
+    period: optStr(r.period),
+    cancelled: Boolean(r.cancelled),
+    note: optStr(r.note),
+    installments,
+  };
+}
+
+export function planToRow(p: Partial<FeePlan>) {
+  const row: Record<string, unknown> = {};
+  if (p.title != null) row.title = p.title;
+  if (p.kind != null) row.kind = p.kind;
+  if (p.clientId != null) row.client_id = p.clientId;
+  if (p.caseId !== undefined) row.case_id = p.caseId || null;
+  if (p.date != null) row.date = p.date;
+  if (p.total != null) row.total = p.total;
+  if (p.period !== undefined) row.period = p.period || null;
+  if (p.cancelled != null) row.cancelled = p.cancelled;
+  if (p.note !== undefined) row.note = p.note || null;
+  return row;
+}
+
+/* ───── Reminders / Documents / Notifications / Activities ───── */
+
+export function reminderFromRow(r: Record<string, unknown>): Reminder {
+  return {
+    id: String(r.id),
+    firmId: String(r.org_id),
+    createdAt: iso(r.created_at as string),
+    updatedAt: iso(r.updated_at as string),
+    title: String(r.title ?? ""),
+    type: String(r.type ?? ""),
+    date: dateOnly(r.date as string),
+    time: timeOnly(r.time as string),
+    location: optStr(r.location),
+    caseId: optStr(r.case_id),
+    clientId: optStr(r.client_id),
+    enforcementId: optStr(r.enforcement_id),
+    assigneeId: String(r.assignee_id),
+    status: r.status as Reminder["status"],
+    note: optStr(r.note),
+  };
+}
+
+export function reminderToRow(r: Partial<Reminder>) {
+  const row: Record<string, unknown> = {};
+  if (r.title != null) row.title = r.title;
+  if (r.type != null) row.type = r.type;
+  if (r.date != null) row.date = r.date;
+  if (r.time !== undefined) row.time = r.time || null;
+  if (r.location !== undefined) row.location = r.location || null;
+  if (r.caseId !== undefined) row.case_id = r.caseId || null;
+  if (r.clientId !== undefined) row.client_id = r.clientId || null;
+  if (r.enforcementId !== undefined) row.enforcement_id = r.enforcementId || null;
+  if (r.assigneeId != null) row.assignee_id = r.assigneeId;
+  if (r.status != null) row.status = r.status;
+  if (r.note !== undefined) row.note = r.note || null;
+  return row;
+}
+
+export function documentFromRow(
+  r: Record<string, unknown>,
+  attachment: AttachmentRef,
+): DocumentFile {
+  return {
+    id: String(r.id),
+    firmId: String(r.org_id),
+    createdAt: iso(r.created_at as string),
+    updatedAt: iso(r.updated_at as string),
+    name: String(r.name ?? ""),
+    category: String(r.category ?? "Diğer"),
+    attachment,
+    caseId: optStr(r.case_id),
+    clientId: optStr(r.client_id),
+    enforcementId: optStr(r.enforcement_id),
+    uploadedBy: String(r.uploaded_by ?? ""),
+  };
+}
+
+export function documentToRow(d: Partial<DocumentFile> & { attachmentId?: string }) {
+  const row: Record<string, unknown> = {};
+  if (d.name != null) row.name = d.name;
+  if (d.category != null) row.category = d.category;
+  if (d.attachmentId != null) row.attachment_id = d.attachmentId;
+  else if (d.attachment?.id) row.attachment_id = d.attachment.id;
+  if (d.caseId !== undefined) row.case_id = d.caseId || null;
+  if (d.clientId !== undefined) row.client_id = d.clientId || null;
+  if (d.enforcementId !== undefined) row.enforcement_id = d.enforcementId || null;
+  if (d.uploadedBy != null) row.uploaded_by = d.uploadedBy;
+  return row;
+}
+
+export function notificationFromRow(r: Record<string, unknown>): AppNotification {
+  return {
+    id: String(r.id),
+    firmId: String(r.org_id),
+    createdAt: iso(r.created_at as string),
+    updatedAt: iso(r.updated_at as string),
+    userId: String(r.user_id),
+    title: String(r.title ?? ""),
+    detail: String(r.detail ?? ""),
+    type: String(r.type ?? ""),
+    read: Boolean(r.read),
+    link: optStr(r.link),
+  };
+}
+
+export function notificationToRow(n: Partial<AppNotification>) {
+  const row: Record<string, unknown> = {};
+  if (n.userId != null) row.user_id = n.userId;
+  if (n.title != null) row.title = n.title;
+  if (n.detail != null) row.detail = n.detail;
+  if (n.type != null) row.type = n.type;
+  if (n.read != null) row.read = n.read;
+  if (n.link !== undefined) row.link = n.link || null;
+  return row;
+}
+
+export function activityFromRow(r: Record<string, unknown>): ActivityLog {
+  return {
+    id: String(r.id),
+    firmId: String(r.org_id),
+    createdAt: iso(r.created_at as string),
+    updatedAt: iso(r.created_at as string),
+    actorId: String(r.actor_id ?? ""),
+    action: r.action as ActivityLog["action"],
+    entity: String(r.entity ?? ""),
+    entityId: optStr(r.entity_id),
+    detail: String(r.detail ?? ""),
+    changes: r.changes as ActivityLog["changes"],
+  };
+}
+
+export function yearStatsFromRow(r: Record<string, unknown>): { year: number; stats: YearStats } {
+  return {
+    year: num(r.year),
+    stats: {
+      feeIncome: num(r.fee_income),
+      icraCollected: num(r.icra_collected),
+      officeExpense: num(r.office_expense),
+      clientExpense: num(r.client_expense),
+      otherIncome: num(r.other_income),
+      otherExpense: num(r.other_expense),
+      closedCases: num(r.closed_cases),
+    },
+  };
+}

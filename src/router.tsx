@@ -2,8 +2,11 @@ import { QueryClient } from "@tanstack/react-query";
 import { createRouter } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
 import { PageSkeleton } from "./components/layout/navigation";
+import { initSentry } from "./lib/sentry";
 
 export const getRouter = () => {
+  // Hata izleme (yalnızca tarayıcıda ve DSN tanımlıysa)
+  initSentry();
   const queryClient = new QueryClient();
 
   const router = createRouter({

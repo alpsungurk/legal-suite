@@ -26,51 +26,66 @@ export function StatTile({
   const body = (
     <div
       className={cn(
-        "group relative h-full overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-soft sm:p-5",
-        to && "interactive-card cursor-pointer",
+        "stat-card group @container relative flex h-full min-h-[8.25rem] min-w-0 flex-col",
+        "rounded-2xl border border-border/80 bg-card p-3.5 shadow-soft sm:p-4",
+        to && "cursor-pointer",
         className,
       )}
     >
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-[13px] font-medium text-muted-foreground">{label}</p>
-        {Icon && (
-          <span
-            className={cn(
-              "grid h-9 w-9 shrink-0 place-items-center rounded-xl transition-transform duration-300 group-hover:scale-110",
-              toneSoftClass(tone),
-            )}
-          >
-            <Icon className="h-[18px] w-[18px]" />
-          </span>
-        )}
-      </div>
-      <p className="money mt-2 text-2xl font-bold tracking-tight sm:text-[1.65rem]">{value}</p>
-      {hint && (
-        <p
-          className={cn(
-            "mt-1 text-xs font-medium",
-            hintTone ? toneTextClass(hintTone) : "text-muted-foreground",
-          )}
-        >
-          {hint}
+      <div className="flex h-9 items-center justify-between gap-2">
+        <p className="min-w-0 truncate text-xs font-medium leading-none text-muted-foreground @[11rem]:text-[13px]">
+          {label}
         </p>
-      )}
+        <span
+          className={cn(
+            "stat-card-icon grid h-9 w-9 shrink-0 place-items-center rounded-xl",
+            Icon ? toneSoftClass(tone) : "invisible",
+          )}
+          aria-hidden={!Icon}
+        >
+          {Icon ? <Icon className="h-[18px] w-[18px]" /> : null}
+        </span>
+      </div>
+
+      <p
+        className="money mt-3 break-words font-bold leading-none tracking-tight"
+        style={{ fontSize: "clamp(1.15rem, 9.5cqw, 1.65rem)" }}
+      >
+        {value}
+      </p>
+
+      <p
+        className={cn(
+          "mt-auto pt-2 line-clamp-2 min-h-[2.25rem] text-[11px] font-medium leading-snug @[11rem]:text-xs",
+          hintTone ? toneTextClass(hintTone) : "text-muted-foreground",
+        )}
+      >
+        {hint ?? "\u00a0"}
+      </p>
     </div>
   );
+
   return to ? (
     <Link
       to={to}
-      className="block h-full rounded-2xl focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30"
+      className="stat-tile-cell block h-full min-w-0 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30"
     >
       {body}
     </Link>
   ) : (
-    body
+    <div className="stat-tile-cell h-full min-w-0">{body}</div>
   );
 }
 
 export function StatGrid({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn("stagger grid grid-cols-2 gap-3 lg:grid-cols-4", className)}>{children}</div>
+    <div
+      className={cn(
+        "stagger grid auto-rows-fr grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] gap-3 lg:grid-cols-4",
+        className,
+      )}
+    >
+      {children}
+    </div>
   );
 }

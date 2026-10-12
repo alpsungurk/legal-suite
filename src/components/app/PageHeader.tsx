@@ -1,5 +1,5 @@
-import { Link } from "@tanstack/react-router";
-import { ChevronRight, type LucideIcon } from "lucide-react";
+import { Link, useRouter } from "@tanstack/react-router";
+import { ArrowLeft, ChevronRight, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +22,16 @@ export function PageHeader({
   meta?: ReactNode;
   className?: string;
 }) {
+  const router = useRouter();
+  /** Önceki sayfaya döner; geçmiş yoksa (adres doğrudan açıldıysa) üst sayfaya gider. */
+  const goBack = () => {
+    const parent = crumbs?.filter((c) => c.to).at(-1)?.to;
+    // Yalnızca uygulama içinde bir önceki sayfa varsa geri gidilir (index 0 = ilk sayfa)
+    const index = (router.history.location.state as { __TSR_index?: number } | undefined)
+      ?.__TSR_index;
+    if (typeof index === "number" && index > 0) router.history.back();
+    else if (parent) void router.navigate({ to: parent });
+  };
   return (
     <header
       className={cn(
@@ -32,6 +42,13 @@ export function PageHeader({
       <div className="min-w-0 space-y-1.5">
         {crumbs && crumbs.length > 0 && (
           <nav className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+            <button
+              type="button"
+              onClick={goBack}
+              className="mr-1.5 inline-flex h-6 items-center gap-1 rounded-md border border-border/80 bg-card px-2 font-medium text-foreground transition-colors hover:bg-secondary"
+            >
+              <ArrowLeft className="h-3 w-3" /> Geri
+            </button>
             {crumbs.map((c, i) => (
               <span key={i} className="flex items-center gap-1">
                 {i > 0 && <ChevronRight className="h-3 w-3 opacity-60" />}

@@ -4,22 +4,24 @@ import { AttachmentList } from "@/components/app/files";
 import { useErp } from "@/lib/erp-store";
 import { useOptions } from "@/lib/options";
 import {
-  CONTACT_CHANNELS,
-  ENFORCEMENT_STATUSES,
-  ENFORCEMENT_TYPES,
-  PAYMENT_METHODS,
   type Collection,
   type ContactLog,
   type Debtor,
   type DocumentFile,
-  type DocumentRequest,
   type EnforcementFile,
   type PaymentPromise,
   type Reminder,
   type AttachmentRef,
 } from "@/lib/erp-types";
-import { addDays, formatMoney, today } from "@/lib/format";
-import { caseClientId } from "@/lib/finance";
+import { addDays, formatMoney, round2, splitAmount, sum, today } from "@/lib/format";
+import { caseClientId, defaultIncomeAccountId, enforcementSummary } from "@/lib/finance";
+import { PERIODS, stepDate } from "@/components/forms/finance";
+import { MoneyInput } from "@/components/app/fields";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Money } from "@/components/app/bits";
+import { Plus, Trash2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { FormProps } from "@/components/forms/core";
 
 /* ───────────── Ajanda ───────────── */
@@ -75,12 +77,6 @@ export function ReminderForm({ open, onOpenChange, record, preset, onSaved }: Fo
           options: ["Bekliyor", "Tamamlandı", "İptal"],
           visible: () => !!record,
         },
-        {
-          name: "portalVisible",
-          label: "Müvekkil portalında göster",
-          type: "switch",
-          visible: (v) => !!v.clientId,
-        },
         { name: "note", label: "Not", type: "textarea" },
       ]}
       initial={{
@@ -88,7 +84,6 @@ export function ReminderForm({ open, onOpenChange, record, preset, onSaved }: Fo
         date: today(),
         assigneeId: currentUser.id,
         status: "Bekliyor",
-        portalVisible: false,
         ...preset,
         ...record,
       }}
@@ -108,7 +103,6 @@ export function ReminderForm({ open, onOpenChange, record, preset, onSaved }: Fo
             enforcementId: record?.enforcementId ?? preset?.enforcementId,
             assigneeId: v.assigneeId,
             status: v.status ?? "Bekliyor",
-            portalVisible: !!v.portalVisible && !!v.clientId,
             note: v.note || undefined,
           },
           assigneeChanged
@@ -179,7 +173,7 @@ export function EnforcementForm({
   preset,
   onSaved,
 }: FormProps<EnforcementFile>) {
-  const { save, currentUser } = useErp();
+  const { save, currentUser, rememberOption } = useErp();
   const o = useOptions();
   return (
     <FormDialog
@@ -199,10 +193,13 @@ export function EnforcementForm({
           name: "office",
           label: "İcra dairesi",
           required: true,
-          placeholder: "Örn. İstanbul 14. İcra Dairesi",
+          type: "combobox",
+          options: o.enforcementOffices,
+          creatable: true,
+          placeholder: "Listeden seçin veya yazın",
         },
-        { name: "type", label: "Takip türü", type: "select", options: [...ENFORCEMENT_TYPES] },
-        { name: "status", label: "Durum", type: "select", options: [...ENFORCEMENT_STATUSES] },
+        { name: "type", label: "Takip türü", type: "select", options: o.enforcementTypes },
+        { name: "status", label: "Durum", type: "select", options: o.enforcementStatuses },
         {
           name: "clientId",
           label: "Alacaklı müvekkil",
@@ -244,7 +241,7 @@ export function EnforcementForm({
         { name: "note", label: "Not", type: "textarea" },
       ]}
       initial={{
-        type: "İlamsız",
+        type: o.enforcementTypes.includes("İlamsız") ? "İlamsız" : o.enforcementTypes[0],
         status: "Derdest",
         openingDate: today(),
         debtorIds: [],
@@ -255,6 +252,7 @@ export function EnforcementForm({
         ...record,
       }}
       onSubmit={(v) => {
+        rememberOption("enforcementOffices", v.office);
         const item = save("enforcements", {
           id: record?.id,
           no: v.no.trim(),
@@ -343,6 +341,237 @@ export function PromiseForm({ open, onOpenChange, record, preset }: FormProps<Pa
   );
 }
 
+/* ───────────── Borçlu taksit planı ───────────── */
+
+type DebtorRow = { dueDate: string; amount: number };
+
+function regenDebtorRows(v: FormValues): DebtorRow[] {
+  const total = Number(v.total) || 0;
+  const down = Math.min(Number(v.downPayment) || 0, total);
+  const count = Math.max(1, Math.min(Number(v.count) || 1, 60));
+  const rows: DebtorRow[] = [];
+  if (down > 0) rows.push({ dueDate: v.startDate, amount: down });
+  splitAmount(round2(total - down), count).forEach((amount, i) =>
+    rows.push({ dueDate: stepDate(v.firstDue || v.startDate, v.period, i), amount }),
+  );
+  return rows;
+}
+
+/** Borçluya icra dosyası için taksit tanımlar; her taksit vadesi takip edilen bir kayıt olur. */
+export function DebtorPlanForm({
+  open,
+  onOpenChange,
+  preset,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  preset?: { enforcementId?: string; debtorId?: string; total?: number };
+}) {
+  const { createDebtorPlan, state } = useErp();
+  const enfOpts = state.enforcements.map((e) => ({ value: e.id, label: e.no }));
+  const debtorsOf = (enfId?: string) => {
+    const ef = state.enforcements.find((e) => e.id === enfId);
+    return state.debtors
+      .filter((d) => ef?.debtorIds.includes(d.id))
+      .map((d) => ({ value: d.id, label: d.name }));
+  };
+  const remainingOf = (enfId?: string) => (enfId ? enforcementSummary(state, enfId).remaining : 0);
+  const regenOn = (name: string) => (val: unknown, v: FormValues) => ({
+    rows: regenDebtorRows({ ...v, [name]: val }),
+  });
+  const base: FormValues = {
+    enforcementId: preset?.enforcementId,
+    debtorId: preset?.debtorId ?? debtorsOf(preset?.enforcementId)[0]?.value,
+    total: preset?.total ?? remainingOf(preset?.enforcementId),
+    downPayment: 0,
+    count: 6,
+    period: "Aylık",
+    startDate: today(),
+    firstDue: addDays(today(), 30),
+  };
+  return (
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Borçluya taksit tanımla"
+      description="Borçlunun ödeme planını taksitlere bölün; her taksit vadesinde takip edilir ve icra dosyasında görünür."
+      wide
+      fields={[
+        {
+          name: "enforcementId",
+          label: "İcra dosyası",
+          type: "combobox",
+          options: enfOpts,
+          required: true,
+          onChange: (val, v) => ({
+            debtorId: debtorsOf(String(val))[0]?.value,
+            total: remainingOf(String(val)),
+            rows: regenDebtorRows({ ...v, total: remainingOf(String(val)) }),
+          }),
+        },
+        {
+          name: "debtorId",
+          label: "Borçlu",
+          type: "combobox",
+          options: state.debtors.map((d) => ({ value: d.id, label: d.name })),
+          required: true,
+        },
+        {
+          name: "total",
+          label: "Taksitlendirilecek tutar",
+          type: "money",
+          required: true,
+          onChange: regenOn("total"),
+        },
+        {
+          name: "downPayment",
+          label: "Peşinat",
+          type: "money",
+          onChange: regenOn("downPayment"),
+        },
+        {
+          name: "count",
+          label: "Taksit sayısı",
+          type: "number",
+          onChange: regenOn("count"),
+        },
+        {
+          name: "startDate",
+          label: "Peşinat / başlangıç tarihi",
+          type: "date",
+          required: true,
+          onChange: regenOn("startDate"),
+        },
+        {
+          name: "firstDue",
+          label: "İlk taksit vadesi",
+          type: "date",
+          onChange: regenOn("firstDue"),
+        },
+        {
+          name: "period",
+          label: "Sıklık",
+          type: "select",
+          options: [...PERIODS],
+          onChange: regenOn("period"),
+        },
+        { name: "note", label: "Not", type: "textarea" },
+      ]}
+      initial={{ ...base, rows: regenDebtorRows(base) }}
+      validate={(v) => {
+        const rows: DebtorRow[] = v.rows ?? [];
+        if (!rows.length) return { _form: "En az bir taksit olmalı" };
+        if (rows.some((r) => !r.dueDate || r.amount <= 0))
+          return { _form: "Her taksitin tarihi ve tutarı olmalı" };
+        const rowSum = sum(rows.map((r) => r.amount));
+        if (Math.abs(rowSum - round2(Number(v.total) || 0)) > 0.009)
+          return {
+            _form: `Taksitlerin toplamı (${formatMoney(rowSum)}) tutarla (${formatMoney(Number(v.total) || 0)}) eşleşmiyor.`,
+          };
+        return undefined;
+      }}
+      onSubmit={(v) => {
+        createDebtorPlan({
+          enforcementId: v.enforcementId,
+          debtorId: v.debtorId,
+          rows: v.rows,
+          note: v.note || undefined,
+        });
+        toast.success(`${(v.rows as DebtorRow[]).length} taksit tanımlandı`);
+      }}
+    >
+      {(v, set) => {
+        const rows: DebtorRow[] = v.rows ?? [];
+        const total = round2(Number(v.total) || 0);
+        const rowSum = sum(rows.map((r) => r.amount));
+        const diff = round2(total - rowSum);
+        const update = (i: number, patch: Partial<DebtorRow>) =>
+          set({ rows: rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)) });
+        return (
+          <div className="overflow-hidden rounded-xl border border-border/80">
+            <div className="flex items-center justify-between border-b border-border/60 bg-muted/40 px-4 py-2.5">
+              <p className="text-[13px] font-semibold">Taksit tablosu</p>
+              <p
+                className={cn(
+                  "text-xs font-medium",
+                  Math.abs(diff) > 0.009 ? "text-destructive" : "text-muted-foreground",
+                )}
+              >
+                Toplam <Money value={rowSum} className="font-semibold text-foreground" />
+                {Math.abs(diff) > 0.009 && <> · fark {formatMoney(diff)}</>}
+              </p>
+            </div>
+            <div className="max-h-64 divide-y divide-border/60 overflow-y-auto">
+              {rows.map((r, i) => (
+                <div
+                  key={i}
+                  className="grid grid-cols-[2rem_1fr_1fr_2rem] items-center gap-2 px-3 py-2"
+                >
+                  <span className="grid h-7 w-7 place-items-center rounded-full bg-secondary text-xs font-semibold">
+                    {i + 1}
+                  </span>
+                  <Input
+                    type="date"
+                    value={r.dueDate}
+                    onChange={(e) => update(i, { dueDate: e.target.value })}
+                    className="h-9"
+                  />
+                  <MoneyInput value={r.amount} onChange={(n) => update(i, { amount: n })} />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    disabled={rows.length <= 1}
+                    onClick={() => set({ rows: rows.filter((_, idx) => idx !== i) })}
+                    className="text-muted-foreground hover:text-destructive"
+                    aria-label="Taksiti sil"
+                  >
+                    <Trash2 />
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-2 border-t border-border/60 bg-muted/20 px-3 py-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  set({
+                    rows: [
+                      ...rows,
+                      {
+                        dueDate: stepDate(rows[rows.length - 1]?.dueDate ?? today(), "Aylık", 1),
+                        amount: diff > 0 ? diff : 0,
+                      },
+                    ],
+                  })
+                }
+              >
+                <Plus /> Taksit ekle
+              </Button>
+              {Math.abs(diff) > 0.009 && rows.length > 0 && (
+                <Button
+                  type="button"
+                  variant="soft"
+                  size="sm"
+                  onClick={() =>
+                    update(rows.length - 1, {
+                      amount: round2(rows[rows.length - 1].amount + diff),
+                    })
+                  }
+                >
+                  Farkı son taksite ekle
+                </Button>
+              )}
+            </div>
+          </div>
+        );
+      }}
+    </FormDialog>
+  );
+}
+
 export function CollectionForm({ open, onOpenChange, record, preset }: FormProps<Collection>) {
   const { save, patch, state } = useErp();
   const o = useOptions();
@@ -375,7 +604,7 @@ export function CollectionForm({ open, onOpenChange, record, preset }: FormProps
         { name: "debtorId", label: "Borçlu", type: "combobox", options: o.debtors, required: true },
         { name: "amount", label: "Tutar", type: "money", required: true, autoFocus: true },
         { name: "date", label: "Tarih", type: "date", required: true },
-        { name: "method", label: "Yöntem", type: "select", options: [...PAYMENT_METHODS] },
+        { name: "method", label: "Yöntem", type: "select", options: o.paymentMethods },
         {
           name: "accountId",
           label: "Yatırılan hesap",
@@ -396,9 +625,9 @@ export function CollectionForm({ open, onOpenChange, record, preset }: FormProps
       ]}
       initial={{
         date: today(),
-        method: "Havale/EFT",
+        method: o.paymentMethods.includes("Havale/EFT") ? "Havale/EFT" : o.paymentMethods[0],
         transferredToClient: false,
-        accountId: state.accounts.find((a) => a.type === "Banka")?.id,
+        accountId: defaultIncomeAccountId(state),
         ...preset,
         ...record,
       }}
@@ -422,7 +651,23 @@ export function CollectionForm({ open, onOpenChange, record, preset }: FormProps
           note: v.note || undefined,
         });
         if (v.promiseId) patch("promises", v.promiseId, { status: "Tutuldu" });
-        toast.success("Tahsilat kaydedildi");
+        // Alacağın tamamı tahsil edildiyse icra dosyası kendiliğinden "Tahsil edildi" olur
+        const ef = state.enforcements.find((e) => e.id === v.enforcementId);
+        const others = state.collections
+          .filter((c) => c.enforcementId === v.enforcementId && c.id !== record?.id)
+          .reduce((t, c) => t + c.amount, 0);
+        const claim = ef ? ef.principal + ef.interest + ef.costs : 0;
+        if (
+          ef &&
+          claim > 0 &&
+          others + Number(v.amount) >= claim - 0.005 &&
+          !["Tahsil edildi", "Kapandı"].includes(ef.status)
+        ) {
+          patch("enforcements", ef.id, { status: "Tahsil edildi" });
+          toast.success("Tahsilat kaydedildi", {
+            description: `Alacağın tamamı tahsil edildi; ${ef.no} "Tahsil edildi" yapıldı.`,
+          });
+        } else toast.success("Tahsilat kaydedildi");
       }}
     />
   );
@@ -445,7 +690,7 @@ export function ContactForm({ open, onOpenChange, record, preset }: FormProps<Co
           options: o.enforcements,
           allowClear: true,
         },
-        { name: "channel", label: "Kanal", type: "segmented", options: [...CONTACT_CHANNELS] },
+        { name: "channel", label: "Kanal", type: "segmented", options: o.contactChannels },
         { name: "date", label: "Tarih", type: "date", required: true },
         { name: "note", label: "Görüşme özeti", type: "textarea", required: true },
       ]}
@@ -468,15 +713,9 @@ export function ContactForm({ open, onOpenChange, record, preset }: FormProps<Co
 
 /* ───────────── Belgeler ───────────── */
 
-export function DocumentForm({
-  open,
-  onOpenChange,
-  record,
-  preset,
-}: FormProps<DocumentFile> & { preset?: Partial<DocumentFile> & { requestId?: string } }) {
-  const { save, patch, state, currentUser } = useErp();
+export function DocumentForm({ open, onOpenChange, record, preset }: FormProps<DocumentFile>) {
+  const { save, state, currentUser } = useErp();
   const o = useOptions();
-  const isPortal = currentUser.role === "Müvekkil";
   return (
     <FormDialog
       open={open}
@@ -488,11 +727,7 @@ export function DocumentForm({
           name: "caseId",
           label: "Dosya",
           type: "combobox",
-          options: isPortal
-            ? o.cases.filter(
-                (c) => state.cases.find((x) => x.id === c.value)?.clientId === currentUser.clientId,
-              )
-            : o.cases,
+          options: o.cases,
           allowClear: true,
           onChange: (val) => (val ? { clientId: caseClientId(state, String(val)) } : {}),
         },
@@ -502,21 +737,12 @@ export function DocumentForm({
           type: "combobox",
           options: o.allClients,
           allowClear: true,
-          visible: () => !isPortal,
-        },
-        {
-          name: "visibleToClient",
-          label: "Müvekkil portalında göster",
-          type: "switch",
-          visible: () => !isPortal,
         },
         { name: "name", label: "Belge adı", visible: () => !!record, span: 2 },
       ]}
       initial={{
         category: "Diğer",
         files: [] as AttachmentRef[],
-        visibleToClient: isPortal,
-        clientId: isPortal ? currentUser.clientId : undefined,
         ...preset,
         ...record,
       }}
@@ -533,46 +759,20 @@ export function DocumentForm({
             category: v.category,
             caseId: v.caseId || undefined,
             clientId: v.clientId || undefined,
-            visibleToClient: !!v.visibleToClient,
           });
           toast.success("Belge güncellendi");
           return;
         }
-        let firstId: string | undefined;
         for (const file of v.files as AttachmentRef[]) {
-          const doc = save(
-            "documents",
-            {
-              name: file.name,
-              category: v.category,
-              attachment: file,
-              caseId: v.caseId || undefined,
-              clientId: (isPortal ? currentUser.clientId : v.clientId) || undefined,
-              uploadedBy: currentUser.id,
-              visibleToClient: isPortal ? true : !!v.visibleToClient,
-              requestId: preset?.requestId,
-            },
-            isPortal
-              ? {
-                  notify: {
-                    userIds: [
-                      ...state.users
-                        .filter((u) => u.role === "Admin" || u.role === "Sekreter")
-                        .map((u) => u.id),
-                      ...state.cases
-                        .filter((c) => c.clientId === currentUser.clientId)
-                        .flatMap((c) => c.responsibleIds),
-                    ],
-                    title: "Müvekkil belge yükledi",
-                    link: "/belgeler",
-                  },
-                }
-              : undefined,
-          );
-          firstId ??= doc.id;
+          save("documents", {
+            name: file.name,
+            category: v.category,
+            attachment: file,
+            caseId: v.caseId || undefined,
+            clientId: v.clientId || undefined,
+            uploadedBy: currentUser.id,
+          });
         }
-        if (preset?.requestId)
-          patch("docRequests", preset.requestId, { status: "Yüklendi", documentId: firstId });
         toast.success("Belge yüklendi");
       }}
     >
@@ -582,58 +782,5 @@ export function DocumentForm({
         ) : null
       }
     </FormDialog>
-  );
-}
-
-export function DocRequestForm({ open, onOpenChange, record, preset }: FormProps<DocumentRequest>) {
-  const { save } = useErp();
-  const o = useOptions();
-  return (
-    <FormDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title={record ? "Belge talebini düzenle" : "Müvekkilden belge iste"}
-      description="Talep müvekkil portalında görünür; müvekkil belgeyi doğrudan yükleyebilir."
-      fields={[
-        {
-          name: "clientId",
-          label: "Müvekkil",
-          type: "combobox",
-          options: o.allClients,
-          required: true,
-        },
-        { name: "caseId", label: "Dosya", type: "combobox", options: o.cases, allowClear: true },
-        {
-          name: "title",
-          label: "İstenen belge",
-          required: true,
-          span: 2,
-          placeholder: "Örn. Fatura suretleri",
-        },
-        { name: "dueDate", label: "Son tarih", type: "date" },
-        {
-          name: "status",
-          label: "Durum",
-          type: "select",
-          options: ["Bekliyor", "Yüklendi", "Kapatıldı"],
-          visible: () => !!record,
-        },
-        { name: "note", label: "Açıklama", type: "textarea" },
-      ]}
-      initial={{ dueDate: addDays(today(), 7), status: "Bekliyor", ...preset, ...record }}
-      onSubmit={(v) => {
-        save("docRequests", {
-          id: record?.id,
-          clientId: v.clientId,
-          caseId: v.caseId || undefined,
-          title: v.title.trim(),
-          dueDate: v.dueDate || undefined,
-          note: v.note || undefined,
-          status: v.status ?? "Bekliyor",
-          documentId: record?.documentId,
-        });
-        toast.success("Belge talebi oluşturuldu");
-      }}
-    />
   );
 }

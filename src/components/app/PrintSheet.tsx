@@ -1,29 +1,9 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { Printer, Scale, X } from "lucide-react";
+import { useEffect, type ReactNode } from "react";
+import { Printer, X } from "lucide-react";
 import { useErp } from "@/lib/erp-store";
-import { getAttachment } from "@/lib/attachments";
 import { formatDateLong, formatIban, today } from "@/lib/format";
 import { Button } from "@/components/ui/button";
-
-function useLogoUrl() {
-  const { state } = useErp();
-  const logo = state.settings.firm.logo;
-  const [url, setUrl] = useState<string>();
-  useEffect(() => {
-    if (!logo) return setUrl(undefined);
-    let u: string | undefined;
-    void getAttachment(logo.id).then((b) => {
-      if (b) {
-        u = URL.createObjectURL(b);
-        setUrl(u);
-      }
-    });
-    return () => {
-      if (u) URL.revokeObjectURL(u);
-    };
-  }, [logo]);
-  return url;
-}
+import { BrandImg, useFirmLogoUrl } from "@/components/app/Brand";
 
 /** A4 yazdırma şablonu: büro başlığı, içerik ve alt bilgi. */
 export function PrintSheet({
@@ -39,7 +19,7 @@ export function PrintSheet({
 }) {
   const { state } = useErp();
   const firm = state.settings.firm;
-  const logo = useLogoUrl();
+  const logo = useFirmLogoUrl();
   useEffect(() => {
     document.title = `${title} — ${firm.name}`;
   }, [title, firm.name]);
@@ -64,9 +44,7 @@ export function PrintSheet({
             {logo ? (
               <img src={logo} alt="" className="h-14 max-w-[160px] object-contain" />
             ) : (
-              <span className="grid h-12 w-12 place-items-center rounded-xl bg-[#143064] text-[#d4b483]">
-                <Scale className="h-6 w-6" />
-              </span>
+              <BrandImg variant="horizontal" className="h-12 max-w-[180px]" />
             )}
             <div>
               <p className="text-base font-bold text-[#143064]">{firm.legalName || firm.name}</p>

@@ -42,6 +42,6 @@ export async function verifyPassword(password: string, salt: string, hash: strin
 }
 
 export function passwordProblem(password: string): string | null {
-  if (password.length < 6) return "Şifre en az 6 karakter olmalı";
+  if (password.length < 8) return "Şifre en az 8 karakter olmalı";
   return null;
 }

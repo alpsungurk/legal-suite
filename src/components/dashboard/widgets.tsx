@@ -157,7 +157,6 @@ function CashTooltip({ active, payload }: TooltipProps) {
       <div className="my-2 border-t border-border/60" />
       <Row label="Net" value={d.net} bold />
       <Row label="Müvekkil masrafı" value={d.clientExpense} muted />
-      <Row label="Alınan avans" value={d.advances} muted />
     </div>
   );
 }
@@ -197,9 +196,6 @@ const alertIcon: Record<Alert["category"], LucideIcon> = {
   Taksit: Wallet,
   "Ödeme sözü": Gavel,
   Ajanda: Clock,
-  Avans: AlertTriangle,
-  Belge: FileWarning,
-  Mesaj: MessageSquare,
 };
 
 const toneStyle: Record<Alert["tone"], string> = {
@@ -213,8 +209,8 @@ export function AlertsPanel({ limit = 7 }: { limit?: number }) {
   const { state, currentUser, permissions } = useErp();
   const navigate = useNavigate();
   const alerts = useMemo(
-    () => computeAlerts(state, currentUser, permissions.viewFinance),
-    [state, currentUser, permissions.viewFinance],
+    () => computeAlerts(state, currentUser, permissions.can("fees"), permissions.can("reminders")),
+    [state, currentUser, permissions],
   );
   const urgent = alerts.filter((a) => a.tone === "danger").length;
   return (
@@ -298,7 +294,7 @@ export function UpcomingInstallments() {
       description={`Geciken ve 14 gün içinde vadesi gelen · ${formatMoney(total)}`}
       actions={
         <Button variant="ghost" size="sm" asChild>
-          <Link to="/taksitler">
+          <Link to="/tahsilatlar">
             Tümü <ArrowRight />
           </Link>
         </Button>
@@ -375,8 +371,10 @@ export function DateChip({ date, danger }: { date: string; danger?: boolean }) {
 export function AgendaWidget({ mineOnly }: { mineOnly?: boolean }) {
   const { state, currentUser } = useErp();
   const quick = useQuick();
+  const [range, setRange] = useState<"today" | "week">("week");
   const t = today();
-  const horizon = addDays(t, 7);
+  const horizon = range === "today" ? t : addDays(t, 7);
+  const rangeLabel = range === "today" ? "Bugün" : "Bu hafta";
   const items = state.reminders
     .filter(
       (r) =>
@@ -390,29 +388,32 @@ export function AgendaWidget({ mineOnly }: { mineOnly?: boolean }) {
   const userOf = (id: string) => state.users.find((u) => u.id === id);
   return (
     <Section
-      title={mineOnly ? "Ajandam" : "Bu hafta"}
+      title={mineOnly ? "Ajandam" : rangeLabel}
       description="Duruşmalar, süreler ve görevler"
       actions={
-        <Button variant="ghost" size="sm" asChild>
-          <Link to="/takvim">
-            Takvim <ArrowRight />
-          </Link>
-        </Button>
+        <div className="flex items-center gap-1">
+          <Segmented
+            size="sm"
+            className="w-auto"
+            value={range}
+            onChange={(v) => setRange(v as "today" | "week")}
+            options={[
+              { value: "today", label: "Bugün" },
+              { value: "week", label: "Bu hafta" },
+            ]}
+          />
+          <Button variant="ghost" size="sm" asChild>
+            <Link to="/takvim">
+              Takvim <ArrowRight />
+            </Link>
+          </Button>
+        </div>
       }
       className="h-full"
       bodyClassName="p-2"
     >
       {items.length === 0 ? (
-        <EmptyState
-          icon={CalendarCheck2}
-          title="Bu hafta için kayıt yok"
-          compact
-          action={
-            <Button size="sm" variant="outline" onClick={() => quick.open("reminder")}>
-              Ajandaya ekle
-            </Button>
-          }
-        />
+        <EmptyState icon={CalendarCheck2} title={`${rangeLabel} için kayıt yok`} compact />
       ) : (
         <ul className="stagger">
           {items.map((r) => {

@@ -27,7 +27,7 @@ import { useConfirm } from "@/components/app/confirm";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/banka-kasa")({
-  head: () => ({ meta: [{ title: "Banka & Kasa — Lex Yönetim" }] }),
+  head: () => ({ meta: [{ title: "Banka & Kasa — LexKasa" }] }),
   component: Page,
 });
 
@@ -37,7 +37,7 @@ function Page() {
   const confirm = useConfirm();
   const balances = accountBalances(state);
   const [selected, setSelected] = useState<string>(balances[0]?.account.id ?? "");
-  if (!permissions.viewFinance) return <NoAccess />;
+  if (!permissions.can("accounts")) return <NoAccess />;
 
   const acc = state.accounts.find((a) => a.id === selected) ?? state.accounts[0];
   const ledger = acc ? accountLedger(state, acc.id) : { entries: [], balance: 0 };
@@ -226,16 +226,7 @@ function Page() {
               {
                 id: "src",
                 label: "Kaynak",
-                options: [
-                  "Açılış",
-                  "Avans",
-                  "Masraf",
-                  "Tahsilat",
-                  "İcra",
-                  "Virman",
-                  "Aktarım",
-                  "Diğer",
-                ],
+                options: ["Açılış", "Masraf", "Tahsilat", "İcra", "Virman", "Aktarım", "Diğer"],
                 get: (e) => e.source,
               },
             ]}

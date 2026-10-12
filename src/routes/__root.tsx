@@ -10,16 +10,17 @@ import {
   useNavigate,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
-import { Plus, Scale } from "lucide-react";
+import { Plus } from "lucide-react";
+import { PageLoader } from "@/components/app/Loader";
+import { BRAND } from "@/lib/brand";
 
 import appCss from "../styles.css?url";
-import { reportLovableError } from "../lib/lovable-error-reporting";
+import { reportRuntimeError } from "../lib/runtime-error";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { QuickAddMenu, THEME_INIT_SCRIPT, Topbar } from "@/components/layout/Topbar";
 import { CommandPalette } from "@/components/layout/CommandPalette";
 import { NavProgress, useWarmRoutes } from "@/components/layout/navigation";
-import { PortalShell } from "@/components/layout/PortalShell";
 import { Toaster } from "@/components/ui/sonner";
 import { ErpProvider, useErp } from "@/lib/erp-store";
 import { ConfirmProvider } from "@/components/app/confirm";
@@ -43,11 +44,13 @@ function NotFoundComponent() {
   );
 }
 
-function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
+function ErrorComponent({ error, reset }: { error: unknown; reset: () => void }) {
   console.error(error);
   const router = useRouter();
   useEffect(() => {
-    reportLovableError(error, { boundary: "tanstack_root_error_component" });
+    reportRuntimeError(error instanceof Error ? error : new Error(String(error)), {
+      boundary: "tanstack_root_error_component",
+    });
   }, [error]);
 
   return (
@@ -82,19 +85,36 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
-      { title: "Lex Yönetim — Hukuk Bürosu Yönetim Sistemi" },
+      { title: "LexKasa" },
+      { name: "application-name", content: "LexKasa" },
+      { name: "apple-mobile-web-app-title", content: "LexKasa" },
+      // Özel panel: arama / önizleme / AI tarayıcıları dizinlemesin
       {
-        name: "description",
-        content:
-          "Hukuk büroları için masraf, masraf avansı, tahsilat, taksit, cari hesap, banka/kasa, icra takibi ve müvekkil portalı.",
+        name: "robots",
+        content: "noindex, nofollow, noarchive, nosnippet, noimageindex, notranslate, none",
       },
+      { name: "googlebot", content: "noindex, nofollow, noarchive, nosnippet" },
+      { name: "bingbot", content: "noindex, nofollow, noarchive, nosnippet" },
+      { name: "referrer", content: "no-referrer" },
       { name: "theme-color", content: "#143064" },
-      { property: "og:title", content: "Lex Yönetim — Hukuk Bürosu Yönetim Sistemi" },
+      { name: "description", content: "LexKasa — özel büro paneli" },
+      { property: "og:site_name", content: BRAND.name },
+      { property: "og:title", content: BRAND.name },
+      { property: "og:description", content: BRAND.tagline },
       { property: "og:type", content: "website" },
+      { property: "og:image", content: BRAND.logo },
+      { name: "twitter:card", content: "summary" },
+      { name: "twitter:title", content: BRAND.name },
+      { name: "twitter:description", content: BRAND.tagline },
+      { name: "twitter:image", content: BRAND.logo },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "icon", href: BRAND.favicon.ico, type: "image/x-icon" },
+      { rel: "icon", href: BRAND.favicon.png32, type: "image/png", sizes: "32x32" },
+      { rel: "icon", href: BRAND.favicon.png16, type: "image/png", sizes: "16x16" },
+      { rel: "apple-touch-icon", href: BRAND.favicon.apple },
+      { rel: "manifest", href: BRAND.favicon.manifest },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
@@ -124,56 +144,53 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
-type Area = "auth" | "print" | "portal" | "staff";
+type Area = "auth" | "print" | "staff";
 
 function areaOf(pathname: string): Area {
-  if (pathname === "/giris") return "auth";
+  if (pathname === "/giris" || pathname === "/sifre-sifirla") return "auth";
   if (pathname.startsWith("/yazdir")) return "print";
-  if (pathname === "/portal" || pathname.startsWith("/portal/")) return "portal";
   return "staff";
 }
 
 function Splash() {
-  return (
-    <div className="grid min-h-screen place-items-center bg-background">
-      <div className="flex flex-col items-center gap-3 animate-fade-up">
-        <div className="grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br from-[#d4b483] to-[#a67c42] text-[#0c1c3f] shadow-lg">
-          <Scale className="h-6 w-6 animate-pulse" />
-        </div>
-        <div className="h-1 w-24 overflow-hidden rounded-full bg-secondary">
-          <div className="skeleton h-full w-full" />
-        </div>
-      </div>
-    </div>
-  );
+  return <PageLoader label="Veriler yükleniyor…" />;
 }
 
 function AuthGate({ children }: { children: (area: Area) => ReactNode }) {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { isAuthenticated, hydrated, permissions } = useErp();
+  const { isAuthenticated, hydrated } = useErp();
   const area = areaOf(pathname);
 
+  const here = useRouterState({ select: (s) => s.location.href });
+  const wanted = useRouterState({
+    select: (s) => (s.location.search as Record<string, unknown>).yonlendir as string | undefined,
+  });
+  // Giriş sonrası, gitmek istenen sayfaya dönülür (yalnızca uygulama içi yollar)
+  const back =
+    typeof wanted === "string" && /^\/(?![/\\])/.test(wanted) && !wanted.startsWith("/giris")
+      ? wanted
+      : "/";
+
+  // /sifre-sifirla: recovery oturumu açıkken de kalınmalı
+  const isReset = pathname === "/sifre-sifirla";
   const target: string | null = !hydrated
     ? null
-    : !isAuthenticated
-      ? area === "auth"
-        ? null
-        : "/giris"
-      : area === "auth"
-        ? permissions.isPortal
-          ? "/portal"
-          : "/"
-        : permissions.isPortal && area === "staff"
-          ? "/portal"
-          : !permissions.isPortal && area === "portal"
-            ? "/"
-            : null;
+    : isReset
+      ? null
+      : !isAuthenticated
+        ? area === "auth"
+          ? null
+          : `/giris?yonlendir=${encodeURIComponent(here)}`
+        : area === "auth"
+          ? back
+          : null;
 
   useEffect(() => {
-    if (target) navigate({ to: target, replace: true });
+    if (target) void navigate({ href: target, replace: true });
   }, [target, navigate]);
 
+  // Auth alanında loader gösterme (giriş formu kendi spinner'ını kullanır)
   if (!hydrated || target) return area === "auth" && !target ? <>{children(area)}</> : <Splash />;
   return <>{children(area)}</>;
 }
@@ -223,10 +240,6 @@ function RootComponent() {
               {(area) =>
                 area === "auth" || area === "print" ? (
                   <Outlet />
-                ) : area === "portal" ? (
-                  <PortalShell>
-                    <Outlet />
-                  </PortalShell>
                 ) : (
                   <StaffShell>
                     <Outlet />

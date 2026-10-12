@@ -38,7 +38,7 @@ TanStack Start + React 19, Tailwind CSS v4, shadcn/ui, Recharts.
 
 ## Veri
 
-Veriler şu an tarayıcıda saklanır (kayıtlar `localStorage`, dosya ekleri IndexedDB).
+Veriler Supabase üzerinde tutulur (Auth + Postgres + Storage). Kurulum: `supabase/README.md`.
 Ayarlar › Yedekleme bölümünden tüm veri ve ekler tek bir .zip olarak indirilip geri yüklenebilir.
 Her kayıt `firmId` taşır ve veri erişimi `src/lib/erp-store.tsx` üzerinden geçer; çok büroya ve
 Supabase'e geçişte bu katman değiştirilecek.

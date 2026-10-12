@@ -12,7 +12,13 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { useErp } from "@/lib/erp-store";
-import { accountBalances, allInstallments, monthlySeries, receivableAging } from "@/lib/finance";
+import {
+  accountBalances,
+  allInstallments,
+  monthlySeries,
+  receivableAging,
+  yearlySummary,
+} from "@/lib/finance";
 import {
   addDays,
   formatDate,
@@ -24,6 +30,7 @@ import {
 } from "@/lib/format";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Avatar, Money, NoAccess, PageShell, Section } from "@/components/app/bits";
+import { StatusBadge } from "@/components/app/StatusBadge";
 import { StatGrid, StatTile } from "@/components/app/StatTile";
 import { Segmented } from "@/components/app/fields";
 import { Button } from "@/components/ui/button";
@@ -33,7 +40,7 @@ import { CashflowChart } from "@/components/dashboard/widgets";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/raporlar")({
-  head: () => ({ meta: [{ title: "Raporlar — Lex Yönetim" }] }),
+  head: () => ({ meta: [{ title: "Raporlar — LexKasa" }] }),
   component: Page,
 });
 
@@ -123,7 +130,7 @@ function Page() {
 
     // Avukat iş yükü
     const byLawyer = state.users
-      .filter((u) => u.role !== "Müvekkil" && u.active)
+      .filter((u) => u.active)
       .map((u) => ({
         user: u,
         openCases: state.cases.filter(
@@ -184,7 +191,7 @@ function Page() {
     };
   }, [state, from, to]);
 
-  if (!permissions.viewReports) return <NoAccess />;
+  if (!permissions.can("reports")) return <NoAccess />;
 
   const exportAll = () =>
     downloadWorkbook(`Rapor ${from} ${to}`, [
@@ -443,6 +450,42 @@ function Page() {
               value={r.open}
               className={r.open ? "font-medium text-rose-600" : "text-muted-foreground"}
             />,
+          ])}
+        />
+      </Section>
+
+      <Section
+        title="Yıllık özet"
+        description="Her yılın para toplamları; arşivlenen (ayrıntısı silinen) yıllar da dahil"
+        bodyClassName="p-0"
+      >
+        <ReportTable
+          head={[
+            "Yıl",
+            "Ücret tahsilatı",
+            "İcra tahsilatı",
+            "Diğer gelir",
+            "Büro gideri",
+            "Müvekkil masrafı",
+            "Kapanan dosya",
+            "Net",
+          ]}
+          rows={yearlySummary(state).map((y) => [
+            <span className="flex items-center gap-2 font-medium">
+              {y.year}
+              {y.hasArchive && (
+                <StatusBadge tone="slate" dot={false} className="h-5 px-2 text-[10px]">
+                  arşiv
+                </StatusBadge>
+              )}
+            </span>,
+            <Money value={y.feeIncome} />,
+            <Money value={y.icraCollected} className="text-muted-foreground" />,
+            <Money value={y.otherIncome} className="text-muted-foreground" />,
+            <Money value={y.officeExpense} className="text-muted-foreground" />,
+            <Money value={y.clientExpense} className="text-muted-foreground" />,
+            y.closedCases,
+            <Money value={y.net} colored className="font-semibold" />,
           ])}
         />
       </Section>

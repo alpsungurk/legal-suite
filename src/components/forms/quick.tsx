@@ -6,7 +6,6 @@ import { createContext, useCallback, useContext, useState, type ReactNode } from
 import { CaseForm, ClientForm, UserForm } from "@/components/forms/core";
 import {
   AccountForm,
-  AdvanceForm,
   ExpenseForm,
   PaymentForm,
   PlanForm,
@@ -17,23 +16,23 @@ import {
   CollectionForm,
   ContactForm,
   DebtorForm,
-  DocRequestForm,
+  DebtorPlanForm,
   DocumentForm,
   EnforcementForm,
   PromiseForm,
   ReminderForm,
 } from "@/components/forms/other";
+import { ImportDialog } from "@/components/import/ImportDialog";
+import type { ImportKind } from "@/lib/import-specs";
 import type {
   Account,
   AccountTx,
-  Advance,
   CaseFile,
   Client,
   Collection,
   ContactLog,
   Debtor,
   DocumentFile,
-  DocumentRequest,
   EnforcementFile,
   Expense,
   FeePlan,
@@ -53,7 +52,6 @@ type Kinds = {
   case: Spec<CaseFile>;
   user: Spec<User>;
   expense: Spec<Expense>;
-  advance: Spec<Advance>;
   plan: Spec<FeePlan>;
   payment: { plan: FeePlan; installmentId?: string };
   account: Spec<Account>;
@@ -63,10 +61,11 @@ type Kinds = {
   debtor: Spec<Debtor>;
   enforcement: Spec<EnforcementFile>;
   promise: Spec<PaymentPromise>;
+  import: { kind?: ImportKind };
+  debtorPlan: { preset?: { enforcementId?: string; debtorId?: string; total?: number } };
   collection: Spec<Collection>;
   contact: Spec<ContactLog>;
-  document: Spec<DocumentFile> & { preset?: Partial<DocumentFile> & { requestId?: string } };
-  docRequest: Spec<DocumentRequest>;
+  document: Spec<DocumentFile>;
 };
 
 export type QuickKind = keyof Kinds;
@@ -99,7 +98,6 @@ export function QuickActionsProvider({ children }: { children: ReactNode }) {
       {active?.kind === "case" && <CaseForm key={seq} {...common} {...active.props} />}
       {active?.kind === "user" && <UserForm key={seq} {...common} {...active.props} />}
       {active?.kind === "expense" && <ExpenseForm key={seq} {...common} {...active.props} />}
-      {active?.kind === "advance" && <AdvanceForm key={seq} {...common} {...active.props} />}
       {active?.kind === "plan" && <PlanForm key={seq} {...common} {...active.props} />}
       {active?.kind === "payment" && <PaymentForm key={seq} {...common} {...active.props} />}
       {active?.kind === "account" && <AccountForm key={seq} {...common} {...active.props} />}
@@ -111,10 +109,11 @@ export function QuickActionsProvider({ children }: { children: ReactNode }) {
         <EnforcementForm key={seq} {...common} {...active.props} />
       )}
       {active?.kind === "promise" && <PromiseForm key={seq} {...common} {...active.props} />}
+      {active?.kind === "import" && <ImportDialog key={seq} {...common} {...active.props} />}
+      {active?.kind === "debtorPlan" && <DebtorPlanForm key={seq} {...common} {...active.props} />}
       {active?.kind === "collection" && <CollectionForm key={seq} {...common} {...active.props} />}
       {active?.kind === "contact" && <ContactForm key={seq} {...common} {...active.props} />}
       {active?.kind === "document" && <DocumentForm key={seq} {...common} {...active.props} />}
-      {active?.kind === "docRequest" && <DocRequestForm key={seq} {...common} {...active.props} />}
     </Ctx.Provider>
   );
 }

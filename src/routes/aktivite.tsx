@@ -17,7 +17,7 @@ import {
 import type { ActivityLog } from "@/lib/erp-types";
 
 export const Route = createFileRoute("/aktivite")({
-  head: () => ({ meta: [{ title: "Aktivite geçmişi — Lex Yönetim" }] }),
+  head: () => ({ meta: [{ title: "Aktivite geçmişi — LexKasa" }] }),
   component: Page,
 });
 
@@ -43,7 +43,6 @@ const FIELD_LABELS: Record<string, string> = {
   email: "E-posta",
   role: "Rol",
   active: "Aktif",
-  portalEnabled: "Portal",
   dueDate: "Vade",
   principal: "Asıl alacak",
 };
@@ -51,7 +50,7 @@ const FIELD_LABELS: Record<string, string> = {
 function Page() {
   const { state, permissions } = useErp();
   const [selected, setSelected] = useState<ActivityLog | null>(null);
-  if (!permissions.viewActivity) return <NoAccess />;
+  if (!permissions.can("activity")) return <NoAccess />;
   const userName = (id: string) => state.users.find((u) => u.id === id)?.name ?? "Sistem";
 
   const columns: Column<ActivityLog>[] = [

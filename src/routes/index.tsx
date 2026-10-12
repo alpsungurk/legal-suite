@@ -27,9 +27,10 @@ import {
   UpcomingInstallments,
 } from "@/components/dashboard/widgets";
 import { QuickAddMenu } from "@/components/layout/Topbar";
+import { ContentLoader } from "@/components/app/Loader";
 
 export const Route = createFileRoute("/")({
-  head: () => ({ meta: [{ title: "Gösterge paneli — Lex Yönetim" }] }),
+  head: () => ({ meta: [{ title: "Gösterge paneli — LexKasa" }] }),
   component: Dashboard,
 });
 
@@ -42,7 +43,7 @@ function greeting() {
 }
 
 function Dashboard() {
-  const { currentUser, permissions } = useErp();
+  const { currentUser, permissions, hydrated } = useErp();
   const firstName = currentUser.name.replace(/^Av\.\s*/, "").split(" ")[0];
   return (
     <PageShell>
@@ -61,13 +62,22 @@ function Dashboard() {
           }
         />
       </header>
-      {permissions.viewFinance ? <FinanceDashboard /> : <LawyerDashboard />}
+      {!hydrated ? (
+        <ContentLoader />
+      ) : permissions.can("fees") || permissions.can("accounts") || permissions.can("ledger") ? (
+        <FinanceDashboard />
+      ) : (
+        <LawyerDashboard />
+      )}
     </PageShell>
   );
 }
 
 function FinanceDashboard() {
-  const { state } = useErp();
+  const { state, permissions: perm } = useErp();
+  const seeFees = perm.can("fees");
+  const seeAccounts = perm.can("accounts");
+  const seeExpenses = perm.can("expenses");
   const t = today();
   const monthStart = `${t.slice(0, 7)}-01`;
   const prevStart = (() => {
@@ -97,116 +107,124 @@ function FinanceDashboard() {
   return (
     <>
       <StatGrid>
-        <StatTile
-          label="Bu ay tahsilat"
-          value={formatMoney(thisMonth)}
-          icon={TrendingUp}
-          tone="green"
-          hint={
-            change == null
-              ? "Geçen ay tahsilat yok"
-              : `${change >= 0 ? "▲" : "▼"} %${Math.abs(change)} geçen aya göre`
-          }
-          hintTone={change == null ? undefined : change >= 0 ? "green" : "red"}
-          to="/tahsilatlar"
-        />
-        <StatTile
-          label="Bekleyen alacak"
-          value={formatMoney(receivable)}
-          icon={Wallet}
-          tone="blue"
-          hint={overdue ? `${formatMoney(overdue)} vadesi geçmiş` : "Geciken alacak yok"}
-          hintTone={overdue ? "red" : "green"}
-          to="/taksitler"
-        />
-        <StatTile
-          label="Kasa + banka"
-          value={formatMoney(cash)}
-          icon={Landmark}
-          tone="violet"
-          hint={`${state.accounts.filter((a) => a.active).length} aktif hesap`}
-          to="/banka-kasa"
-        />
-        <StatTile
-          label="Bu ay masraf"
-          value={formatMoney(monthExpense)}
-          icon={Receipt}
-          tone="amber"
-          hint="Dosya + büro giderleri"
-          to="/masraflar"
-        />
+        {seeFees && (
+          <StatTile
+            label="Bu ay tahsilat"
+            value={formatMoney(thisMonth)}
+            icon={TrendingUp}
+            tone="green"
+            hint={
+              change == null
+                ? "Geçen ay tahsilat yok"
+                : `${change >= 0 ? "▲" : "▼"} %${Math.abs(change)} geçen aya göre`
+            }
+            hintTone={change == null ? undefined : change >= 0 ? "green" : "red"}
+            to="/tahsilatlar"
+          />
+        )}
+        {seeFees && (
+          <StatTile
+            label="Bekleyen alacak"
+            value={formatMoney(receivable)}
+            icon={Wallet}
+            tone="blue"
+            hint={overdue ? `${formatMoney(overdue)} vadesi geçmiş` : "Geciken alacak yok"}
+            hintTone={overdue ? "red" : "green"}
+            to="/tahsilatlar"
+          />
+        )}
+        {seeAccounts && (
+          <StatTile
+            label="Kasa + banka"
+            value={formatMoney(cash)}
+            icon={Landmark}
+            tone="violet"
+            hint={`${state.accounts.filter((a) => a.active).length} aktif hesap`}
+            to="/banka-kasa"
+          />
+        )}
+        {seeExpenses && (
+          <StatTile
+            label="Bu ay masraf"
+            value={formatMoney(monthExpense)}
+            icon={Receipt}
+            tone="amber"
+            hint="Dosya + büro giderleri"
+            to="/masraflar"
+          />
+        )}
       </StatGrid>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(340px,1fr)]">
-        <CashflowChart />
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.65fr)_minmax(340px,1fr)]">
+        {seeFees && seeAccounts ? <CashflowChart /> : null}
         <AlertsPanel />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <UpcomingInstallments />
-        <AgendaWidget />
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        {seeFees && <UpcomingInstallments />}
+        <AgendaWidget mineOnly={!perm.can("reminders")} />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <ExpenseBreakdown />
-        <AdvanceWatch />
-        <RecentActivity />
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+        {seeExpenses && <ExpenseBreakdown />}
+        {perm.can("ledger") && <ClientBalances />}
+        {perm.can("activity") && <RecentActivity />}
       </div>
     </>
   );
 }
 
-function AdvanceWatch() {
+/** Büroya en çok borcu olan müvekkiller */
+function ClientBalances() {
   const { state } = useErp();
   const rows = state.clients
-    .filter((c) => c.status === "Aktif")
     .map((c) => ({ client: c, fin: clientFinance(state, c.id) }))
-    .filter((r) => r.fin.advance.received > 0 || r.fin.advance.spent > 0)
-    .sort((a, b) => a.fin.advance.balance - b.fin.advance.balance)
+    .filter((r) => r.fin.balance > 0.005)
+    .sort((a, b) => b.fin.balance - a.fin.balance)
     .slice(0, 6);
+  const max = rows[0]?.fin.balance ?? 0;
   return (
     <Section
-      title="Masraf avansları"
-      description="Bakiyesi en düşük müvekkiller"
+      title="Cari bakiyeler"
+      description="Büroya borcu en yüksek müvekkiller"
       actions={
         <Button variant="ghost" size="sm" asChild>
-          <Link to="/avanslar">
+          <Link to="/cari-hesap">
             Tümü <ArrowRight />
           </Link>
         </Button>
       }
       className="h-full"
     >
-      <ul className="space-y-3.5">
-        {rows.map(({ client, fin }) => {
-          const used = fin.advance.received > 0 ? fin.advance.spent / fin.advance.received : 1;
-          return (
+      {rows.length === 0 ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">Borçlu müvekkil yok.</p>
+      ) : (
+        <ul className="space-y-3.5">
+          {rows.map(({ client, fin }) => (
             <li key={client.id}>
               <Link to="/muvekkiller/$id" params={{ id: client.id }} className="group block">
                 <div className="mb-1.5 flex items-center justify-between gap-2 text-sm">
                   <span className="truncate font-medium group-hover:text-primary">
                     {client.name}
                   </span>
-                  <Money value={fin.advance.balance} colored className="font-semibold" />
+                  <Money value={fin.balance} className="font-semibold" />
                 </div>
-                <ProgressBar
-                  value={used}
-                  tone={used >= 1 ? "red" : used > 0.8 ? "amber" : "green"}
-                />
+                <ProgressBar value={max ? fin.balance / max : 0} tone="amber" />
                 <p className="mt-1 text-[11px] text-muted-foreground">
-                  {formatMoney(fin.advance.spent)} / {formatMoney(fin.advance.received)} kullanıldı
+                  {formatMoney(fin.expenseCharged)} masraf · {formatMoney(fin.feeRemaining)} ücret
+                  alacağı
                 </p>
               </Link>
             </li>
-          );
-        })}
-      </ul>
+          ))}
+        </ul>
+      )}
     </Section>
   );
 }
 
 function LawyerDashboard() {
-  const { state, currentUser } = useErp();
+  const { state, currentUser, permissions } = useErp();
   const t = today();
   const weekEnd = addDays(t, 7);
   const myCases = state.cases.filter(
@@ -265,64 +283,66 @@ function LawyerDashboard() {
         />
       </StatGrid>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(340px,1fr)]">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.65fr)_minmax(340px,1fr)]">
         <AgendaWidget mineOnly />
         <AlertsPanel />
       </div>
 
-      <Section
-        title="Dosyalarım"
-        description="Sorumlu olduğunuz açık dosyalar"
-        actions={
-          <Button variant="ghost" size="sm" asChild>
-            <Link to="/dosyalar">
-              Tümü <ArrowRight />
-            </Link>
-          </Button>
-        }
-        bodyClassName="p-3"
-      >
-        <div className="stagger grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {myCases.map((c) => {
-            const client = state.clients.find((x) => x.id === c.clientId);
-            const next = state.reminders
-              .filter((r) => r.caseId === c.id && r.status === "Bekliyor" && r.date >= t)
-              .sort((a, b) => a.date.localeCompare(b.date))[0];
-            return (
-              <Link
-                key={c.id}
-                to="/dosyalar/$id"
-                params={{ id: c.id }}
-                className="interactive-card rounded-xl border border-border/80 bg-card p-4"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold text-primary">{c.no}</p>
-                    <p className="truncate font-semibold">{c.title}</p>
-                    <p className="truncate text-xs text-muted-foreground">{client?.name}</p>
-                  </div>
-                  <StatusBadge status={c.status} />
-                </div>
-                <div className="mt-3 flex items-center gap-2 border-t border-border/60 pt-3 text-xs text-muted-foreground">
-                  <CalendarClock className="h-3.5 w-3.5" />
-                  {next ? (
-                    <span className="truncate">
-                      {next.type} · {formatDateLong(next.date)}
-                    </span>
-                  ) : (
-                    "Yaklaşan kayıt yok"
-                  )}
-                </div>
+      {permissions.can("cases") && (
+        <Section
+          title="Dosyalarım"
+          description="Sorumlu olduğunuz açık dosyalar"
+          actions={
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/dosyalar">
+                Tümü <ArrowRight />
               </Link>
-            );
-          })}
-          {myCases.length === 0 && (
-            <p className="col-span-full py-6 text-center text-sm text-muted-foreground">
-              Size atanmış açık dosya yok.
-            </p>
-          )}
-        </div>
-      </Section>
+            </Button>
+          }
+          bodyClassName="p-3"
+        >
+          <div className="stagger grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {myCases.map((c) => {
+              const client = state.clients.find((x) => x.id === c.clientId);
+              const next = state.reminders
+                .filter((r) => r.caseId === c.id && r.status === "Bekliyor" && r.date >= t)
+                .sort((a, b) => a.date.localeCompare(b.date))[0];
+              return (
+                <Link
+                  key={c.id}
+                  to="/dosyalar/$id"
+                  params={{ id: c.id }}
+                  className="rounded-xl border border-border/60 bg-secondary/20 p-4 transition-colors hover:bg-secondary/40"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-primary">{c.no}</p>
+                      <p className="truncate font-semibold">{c.title}</p>
+                      <p className="truncate text-xs text-muted-foreground">{client?.name}</p>
+                    </div>
+                    <StatusBadge status={c.status} />
+                  </div>
+                  <div className="mt-3 flex items-center gap-2 border-t border-border/60 pt-3 text-xs text-muted-foreground">
+                    <CalendarClock className="h-3.5 w-3.5" />
+                    {next ? (
+                      <span className="truncate">
+                        {next.type} · {formatDateLong(next.date)}
+                      </span>
+                    ) : (
+                      "Yaklaşan kayıt yok"
+                    )}
+                  </div>
+                </Link>
+              );
+            })}
+            {myCases.length === 0 && (
+              <p className="col-span-full py-6 text-center text-sm text-muted-foreground">
+                Size atanmış açık dosya yok.
+              </p>
+            )}
+          </div>
+        </Section>
+      )}
     </>
   );
 }

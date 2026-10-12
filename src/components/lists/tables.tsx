@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useErp } from "@/lib/erp-store";
-import type { Advance, CaseFile, DocumentFile, Expense, FeePlan, Reminder } from "@/lib/erp-types";
+import type { CaseFile, DocumentFile, Expense, FeePlan, Reminder } from "@/lib/erp-types";
 import {
   caseLabel,
   clientLedger,
@@ -47,6 +47,11 @@ function useNames() {
 
 /* ───────────── Masraflar ───────────── */
 
+/** Müvekkil kendisi ödediyse ya da büro bir hesaptan ödediyse "Ödendi". */
+function expensePaidLabel(e: Expense) {
+  return e.paidBy === "Müvekkil" || e.accountId ? "Ödendi" : "Bekliyor";
+}
+
 export function ExpenseTable({
   rows,
   hide = {},
@@ -62,7 +67,8 @@ export function ExpenseTable({
   const n = useNames();
   const quick = useQuick();
   const confirm = useConfirm();
-  const canEdit = (e: Expense) => permissions.manageFinance || e.createdBy === currentUser.id;
+  const canEdit = (e: Expense) =>
+    permissions.can("expenses", "edit") || e.createdBy === currentUser.id;
 
   const columns: Column<Expense>[] = [
     {
@@ -100,7 +106,7 @@ export function ExpenseTable({
       export: (e) =>
         e.chargeTo === "Büro"
           ? "Büro"
-          : `${n.case(e.caseId)?.no ?? ""} ${n.client(recordClientId(state, e))?.name ?? ""}`,
+          : `${n.case(e.caseId)?.no ?? state.enforcements.find((x) => x.id === e.enforcementId)?.no ?? ""} ${n.client(recordClientId(state, e))?.name ?? ""}`,
       cell: (e) =>
         e.chargeTo === "Büro" ? (
           <StatusBadge status="Büro" tone="slate" dot={false}>
@@ -109,6 +115,11 @@ export function ExpenseTable({
         ) : (
           <div className="min-w-0 text-sm">
             {e.caseId && <TextLink to={`/dosyalar/${e.caseId}`}>{n.case(e.caseId)?.no}</TextLink>}
+            {e.enforcementId && (
+              <TextLink to={`/icra/${e.enforcementId}`}>
+                İcra {state.enforcements.find((x) => x.id === e.enforcementId)?.no}
+              </TextLink>
+            )}
             {!hide.client && (
               <p className="truncate text-xs text-muted-foreground">
                 {n.client(recordClientId(state, e))?.name}
@@ -128,6 +139,12 @@ export function ExpenseTable({
           {e.paidBy === "Büro" ? (n.account(e.accountId)?.name ?? "Büro") : "Müvekkil ödedi"}
         </span>
       ),
+    },
+    {
+      id: "status",
+      header: "Durum",
+      export: (e) => expensePaidLabel(e),
+      cell: (e) => <StatusBadge status={expensePaidLabel(e)} />,
     },
     {
       id: "receipt",
@@ -156,6 +173,7 @@ export function ExpenseTable({
         e.title,
         e.type,
         n.case(e.caseId)?.no,
+        state.enforcements.find((x) => x.id === e.enforcementId)?.no,
         n.client(recordClientId(state, e))?.name,
         e.note,
       ]}
@@ -180,7 +198,7 @@ export function ExpenseTable({
       exportName={exportName}
       toolbar={toolbar}
       onRowClick={(e) => quick.open("expense", { record: e })}
-      selectable={permissions.deleteRecords}
+      selectable={permissions.can("expenses", "delete")}
       bulkActions={(sel, clear) => (
         <DropdownLikeButton
           onClick={async () => {
@@ -220,7 +238,7 @@ export function ExpenseTable({
             >
               <RotateCcw /> Kopyala (tekrarla)
             </DropdownMenuItem>
-            {(permissions.deleteRecords || e.createdBy === currentUser.id) && (
+            {(permissions.can("expenses", "delete") || e.createdBy === currentUser.id) && (
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
@@ -272,133 +290,6 @@ function DropdownLikeButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-/* ───────────── Avanslar ───────────── */
-
-export function AdvanceTable({ rows, hide = {} }: { rows: Advance[]; hide?: Hide }) {
-  const { permissions, remove } = useErp();
-  const n = useNames();
-  const quick = useQuick();
-  const confirm = useConfirm();
-  const columns: Column<Advance>[] = [
-    {
-      id: "date",
-      header: "Tarih",
-      sort: (a) => a.date,
-      export: (a) => formatDate(a.date),
-      cell: (a) => <span className="text-muted-foreground">{formatDate(a.date)}</span>,
-    },
-    {
-      id: "kind",
-      header: "İşlem",
-      export: (a) => a.kind,
-      cell: (a) => <StatusBadge status={a.kind} />,
-    },
-  ];
-  if (!hide.client)
-    columns.push({
-      id: "client",
-      header: "Müvekkil",
-      sort: (a) => n.client(a.clientId)?.name ?? "",
-      export: (a) => n.client(a.clientId)?.name,
-      cell: (a) => (
-        <TextLink to={`/muvekkiller/${a.clientId}`}>{n.client(a.clientId)?.name}</TextLink>
-      ),
-    });
-  columns.push(
-    {
-      id: "case",
-      header: "Dosya",
-      hideBelow: "md",
-      export: (a) => n.case(a.caseId)?.no ?? "Genel",
-      cell: (a) => (
-        <span className="text-sm text-muted-foreground">
-          {a.caseId ? caseLabel(n.case(a.caseId)) : "Genel avans"}
-        </span>
-      ),
-    },
-    {
-      id: "account",
-      header: "Hesap",
-      hideBelow: "lg",
-      export: (a) => n.account(a.accountId)?.name,
-      cell: (a) => (
-        <span className="text-sm text-muted-foreground">
-          {n.account(a.accountId)?.name ?? "—"} · {a.method}
-        </span>
-      ),
-    },
-    {
-      id: "amount",
-      header: "Tutar",
-      align: "right",
-      money: true,
-      sort: (a) => a.amount,
-      export: (a) => (a.kind === "Avans" ? a.amount : -a.amount),
-      cell: (a) => (
-        <Money
-          value={a.kind === "Avans" ? a.amount : -a.amount}
-          signed
-          colored
-          className="font-semibold"
-        />
-      ),
-    },
-  );
-  return (
-    <DataTable
-      rows={rows}
-      columns={columns}
-      getId={(a) => a.id}
-      searchText={(a) => [n.client(a.clientId)?.name, n.case(a.caseId)?.no, a.note]}
-      initialSort={{ id: "date", desc: true }}
-      exportName="Masraf avansları"
-      dateRange={{ label: "Tarih", get: (a) => a.date }}
-      onRowClick={
-        permissions.manageFinance ? (a) => quick.open("advance", { record: a }) : undefined
-      }
-      rowActions={
-        permissions.manageFinance
-          ? (a) => (
-              <>
-                <DropdownMenuItem onClick={() => quick.open("advance", { record: a })}>
-                  <Pencil /> Düzenle
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="text-destructive focus:text-destructive"
-                  onClick={async () => {
-                    if (await confirm({ title: "Avans kaydı silinsin mi?" })) {
-                      remove("advances", a.id);
-                      toast.success("Kayıt silindi");
-                    }
-                  }}
-                >
-                  <Trash2 /> Sil
-                </DropdownMenuItem>
-              </>
-            )
-          : undefined
-      }
-      mobileCard={(a) => (
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="truncate font-medium">{n.client(a.clientId)?.name}</p>
-            <p className="text-xs text-muted-foreground">
-              {formatDate(a.date)} · {a.kind}
-            </p>
-          </div>
-          <Money
-            value={a.kind === "Avans" ? a.amount : -a.amount}
-            signed
-            colored
-            className="font-semibold"
-          />
-        </div>
-      )}
-    />
-  );
-}
-
 /* ───────────── Tahsilat planları ───────────── */
 
 export function PlanTable({
@@ -410,7 +301,7 @@ export function PlanTable({
   hide?: Hide;
   onOpen?: (p: FeePlan) => void;
 }) {
-  const { permissions, remove, patch } = useErp();
+  const { state, permissions, remove, patch } = useErp();
   const n = useNames();
   const quick = useQuick();
   const confirm = useConfirm();
@@ -542,13 +433,7 @@ export function PlanTable({
         {
           id: "kind",
           label: "Tür",
-          options: [
-            "Vekalet ücreti",
-            "Aylık ücret",
-            "Danışmanlık",
-            "Karşı vekalet ücreti",
-            "Diğer",
-          ],
+          options: state.settings.feeKinds,
           get: (r) => r.plan.kind,
         },
       ]}
@@ -557,7 +442,7 @@ export function PlanTable({
       exportName="Tahsilat planları"
       onRowClick={(r) => onOpen?.(r.plan)}
       rowActions={
-        permissions.manageFinance
+        permissions.can("fees", "edit")
           ? (r) => (
               <>
                 {r.s.remaining > 0 && !r.plan.cancelled && (
@@ -574,7 +459,7 @@ export function PlanTable({
                   {r.plan.cancelled ? <Undo2 /> : <Ban />}{" "}
                   {r.plan.cancelled ? "İptali geri al" : "İptal et"}
                 </DropdownMenuItem>
-                {permissions.deleteRecords && (
+                {permissions.can("fees", "delete") && (
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
@@ -730,14 +615,14 @@ export function CaseTable({
         {
           id: "status",
           label: "Durum",
-          options: ["Açık", "Derdest", "Karar", "Kanun yolu", "Kapalı"],
+          options: state.settings.caseStatuses,
           get: (c) => c.status,
         },
         { id: "type", label: "Tür", options: state.settings.caseTypes, get: (c) => c.type },
         {
           id: "resp",
           label: "Sorumlu",
-          options: state.users.filter((u) => u.role !== "Müvekkil").map((u) => u.name),
+          options: state.users.map((u) => u.name),
           get: (c) => c.responsibleIds.map((id) => n.user(id)?.name ?? ""),
         },
       ]}
@@ -746,13 +631,15 @@ export function CaseTable({
       exportName={exportName}
       onRowClick={(c) => navigate({ to: "/dosyalar/$id", params: { id: c.id } })}
       rowActions={
-        permissions.manageRecords
+        permissions.can("cases", "edit") || permissions.can("cases", "delete")
           ? (c) => (
               <>
-                <DropdownMenuItem onClick={() => quick.open("case", { record: c })}>
-                  <Pencil /> Düzenle
-                </DropdownMenuItem>
-                {permissions.deleteRecords && (
+                {permissions.can("cases", "edit") && (
+                  <DropdownMenuItem onClick={() => quick.open("case", { record: c })}>
+                    <Pencil /> Düzenle
+                  </DropdownMenuItem>
+                )}
+                {permissions.can("cases", "delete") && (
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
@@ -881,10 +768,12 @@ export function ReminderTable({ rows }: { rows: Reminder[] }) {
               <CheckCircle2 /> Tamamlandı
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem onClick={() => quick.open("reminder", { record: r })}>
-            <Pencil /> Düzenle
-          </DropdownMenuItem>
-          {permissions.manageRecords && (
+          {permissions.can("reminders", "edit") && (
+            <DropdownMenuItem onClick={() => quick.open("reminder", { record: r })}>
+              <Pencil /> Düzenle
+            </DropdownMenuItem>
+          )}
+          {permissions.can("reminders", "delete") && (
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -970,18 +859,6 @@ export function DocumentTable({ rows, hide = {} }: { rows: DocumentFile[]; hide?
         </span>
       ),
     },
-    {
-      id: "portal",
-      header: "Portal",
-      hideBelow: "md",
-      export: (d) => (d.visibleToClient ? "Görünür" : "Gizli"),
-      cell: (d) => (
-        <StatusBadge
-          status={d.visibleToClient ? "Görünür" : "Gizli"}
-          tone={d.visibleToClient ? "green" : "slate"}
-        />
-      ),
-    },
   );
   return (
     <DataTable
@@ -1008,16 +885,13 @@ export function DocumentTable({ rows, hide = {} }: { rows: DocumentFile[]; hide?
           <DropdownMenuItem onClick={() => run(() => downloadAttachment(d.attachment))}>
             <Download /> İndir
           </DropdownMenuItem>
-          {permissions.manageRecords && (
+          {permissions.can("documents", "edit") && (
+            <DropdownMenuItem onClick={() => quick.open("document", { record: d })}>
+              <Pencil /> Düzenle
+            </DropdownMenuItem>
+          )}
+          {permissions.can("documents", "delete") && (
             <>
-              <DropdownMenuItem
-                onClick={() => patch("documents", d.id, { visibleToClient: !d.visibleToClient })}
-              >
-                <Eye /> {d.visibleToClient ? "Portalda gizle" : "Portalda göster"}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => quick.open("document", { record: d })}>
-                <Pencil /> Düzenle
-              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive"

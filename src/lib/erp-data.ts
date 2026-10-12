@@ -3,6 +3,13 @@
  * yaklaşan duruşmalar, geciken taksitler vb. canlı görünür.
  */
 import {
+  DEFAULT_LAWYER_PERMISSIONS,
+  CASE_STATUSES,
+  CONTACT_CHANNELS,
+  ENFORCEMENT_STATUSES,
+  ENFORCEMENT_TYPES,
+  FEE_KINDS,
+  PAYMENT_METHODS,
   DEFAULT_CASE_TYPES,
   DEFAULT_DOCUMENT_CATEGORIES,
   DEFAULT_EXPENSE_TYPES,
@@ -11,20 +18,17 @@ import {
   type Account,
   type AccountTx,
   type ActivityLog,
-  type Advance,
   type AppNotification,
   type CaseFile,
   type Client,
   type Collection,
   type ContactLog,
   type Debtor,
-  type DocumentRequest,
   type EnforcementFile,
   type ErpState,
   type Expense,
   type FeePlan,
   type Installment,
-  type Message,
   type PaymentPromise,
   type Reminder,
   type Settings,
@@ -34,6 +38,13 @@ import { addDays, addMonths, splitAmount, today } from "@/lib/format";
 
 export const FIRM_ID = "firm-main";
 
+/**
+ * Demo büro (örnek veri + demo hesaplar) yalnızca geliştirmede ya da VITE_DEMO=1 ile açılır.
+ * Canlıda demo hesap ve hazır şifre bulunmaz; ilk girişte kendi büronuzu oluşturursunuz.
+ */
+/** Yalnızca VITE_DEMO=1 ile açılır; varsayılan kapalı (Supabase canlı veri). */
+export const DEMO_ENABLED = import.meta.env.VITE_DEMO === "1";
+
 /** Demo hesapların şifresi: 123456 */
 export const DEMO_PASSWORD = "123456";
 const SEED_SALT = "lexseed0000000000000000000000001";
@@ -42,8 +53,6 @@ const SEED_HASH = "7e8a30ccccd27dc77394c5edd467ab138148581f5e84b5a22e355825628e1
 export const DEMO_ACCOUNTS = [
   { username: "admin", label: "Admin" },
   { username: "avukat", label: "Avukat" },
-  { username: "sekreter", label: "Sekreter" },
-  { username: "muvekkil", label: "Müvekkil portalı" },
 ];
 
 export function defaultSettings(): Settings {
@@ -65,6 +74,15 @@ export function defaultSettings(): Settings {
     expenseTypes: [...DEFAULT_EXPENSE_TYPES],
     reminderTypes: [...DEFAULT_REMINDER_TYPES],
     documentCategories: [...DEFAULT_DOCUMENT_CATEGORIES],
+    rolePermissions: { ...DEFAULT_LAWYER_PERMISSIONS },
+    caseStatuses: [...CASE_STATUSES],
+    enforcementStatuses: [...ENFORCEMENT_STATUSES],
+    enforcementTypes: [...ENFORCEMENT_TYPES],
+    paymentMethods: [...PAYMENT_METHODS],
+    feeKinds: [...FEE_KINDS],
+    contactChannels: [...CONTACT_CHANNELS],
+    courts: [],
+    enforcementOffices: [],
   };
 }
 
@@ -73,11 +91,11 @@ export function emptyState(): ErpState {
     version: STATE_VERSION,
     firmId: FIRM_ID,
     settings: defaultSettings(),
+    archive: { years: {} },
     users: [],
     clients: [],
     cases: [],
     expenses: [],
-    advances: [],
     plans: [],
     accounts: [],
     transactions: [],
@@ -88,8 +106,6 @@ export function emptyState(): ErpState {
     collections: [],
     contacts: [],
     documents: [],
-    docRequests: [],
-    messages: [],
     notifications: [],
     activities: [],
   };
@@ -139,33 +155,9 @@ export function createSeedState(): ErpState {
       username: "avukat2",
       title: "Avukat",
     }),
-    user({
-      id: "usr-leyla",
-      name: "Leyla Demir",
-      role: "Sekreter",
-      email: "leyla@lexhukuk.com",
-      username: "sekreter",
-      title: "Büro Sorumlusu",
-    }),
-    user({
-      id: "usr-portal-ayse",
-      name: "Ayşe Demir",
-      role: "Müvekkil",
-      email: "ayse.demir@email.com",
-      username: "muvekkil",
-      clientId: "cli-ayse",
-    }),
   ];
 
-  const client = (
-    c: Omit<Client, keyof typeof base | "portalEnabled" | "portalShowStatement"> &
-      Partial<Pick<Client, "portalEnabled" | "portalShowStatement">>,
-  ): Client => ({
-    ...base,
-    portalEnabled: false,
-    portalShowStatement: true,
-    ...c,
-  });
+  const client = (c: Omit<Client, keyof typeof base>): Client => ({ ...base, ...c });
 
   const clients: Client[] = [
     client({
@@ -177,8 +169,6 @@ export function createSeedState(): ErpState {
       status: "Aktif",
       identity: "12345678901",
       address: "Kadıköy / İstanbul",
-      advanceThreshold: 1000,
-      portalEnabled: true,
     }),
     client({
       id: "cli-kaya",
@@ -192,7 +182,6 @@ export function createSeedState(): ErpState {
       address: "Levent / İstanbul",
       monthlyFee: 25000,
       monthlyFeeStartDate: addMonths(t, -3).slice(0, 8) + "01",
-      advanceThreshold: 5000,
     }),
     client({
       id: "cli-mehmet",
@@ -201,7 +190,6 @@ export function createSeedState(): ErpState {
       email: "mehmet.kaya@email.com",
       phone: "0535 217 09 40",
       status: "Aktif",
-      advanceThreshold: 1500,
     }),
     client({
       id: "cli-selma",
@@ -218,7 +206,6 @@ export function createSeedState(): ErpState {
       email: "fatma.oz@email.com",
       phone: "0536 104 38 18",
       status: "Aktif",
-      advanceThreshold: 500,
     }),
     client({
       id: "cli-deniz",
@@ -231,17 +218,10 @@ export function createSeedState(): ErpState {
       taxOffice: "Kozyatağı",
       monthlyFee: 15000,
       monthlyFeeStartDate: addMonths(t, -2).slice(0, 8) + "01",
-      advanceThreshold: 3000,
     }),
   ];
 
-  const kase = (
-    c: Omit<CaseFile, keyof typeof base | "portalVisible"> & { portalVisible?: boolean },
-  ): CaseFile => ({
-    ...base,
-    portalVisible: true,
-    ...c,
-  });
+  const kase = (c: Omit<CaseFile, keyof typeof base>): CaseFile => ({ ...base, ...c });
 
   const cases: CaseFile[] = [
     kase({
@@ -356,6 +336,15 @@ export function createSeedState(): ErpState {
     },
     {
       ...base,
+      id: "acc-barokart",
+      name: "Barokart",
+      type: "Banka",
+      openingBalance: 0,
+      openingDate: d(-200),
+      active: true,
+    },
+    {
+      ...base,
       id: "acc-isbank",
       name: "İş Bankası Ticari",
       type: "Banka",
@@ -376,60 +365,6 @@ export function createSeedState(): ErpState {
       openingDate: d(-200),
       active: true,
     },
-  ];
-
-  const advance = (a: Omit<Advance, keyof typeof base>): Advance => ({ ...base, ...a });
-  const advances: Advance[] = [
-    advance({
-      id: "adv-1",
-      kind: "Avans",
-      clientId: "cli-ayse",
-      caseId: "case-128",
-      amount: 8000,
-      date: d(-85),
-      method: "Havale/EFT",
-      accountId: "acc-garanti",
-      note: "Dava açılış avansı",
-    }),
-    advance({
-      id: "adv-2",
-      kind: "Avans",
-      clientId: "cli-mehmet",
-      caseId: "case-127",
-      amount: 4000,
-      date: d(-90),
-      method: "Nakit",
-      accountId: "acc-kasa",
-    }),
-    advance({
-      id: "adv-3",
-      kind: "Avans",
-      clientId: "cli-kaya",
-      amount: 25000,
-      date: d(-100),
-      method: "Havale/EFT",
-      accountId: "acc-garanti",
-      note: "Genel masraf avansı",
-    }),
-    advance({
-      id: "adv-4",
-      kind: "Avans",
-      clientId: "cli-fatma",
-      caseId: "case-098",
-      amount: 3000,
-      date: d(-60),
-      method: "Havale/EFT",
-      accountId: "acc-garanti",
-    }),
-    advance({
-      id: "adv-5",
-      kind: "Avans",
-      clientId: "cli-deniz",
-      amount: 10000,
-      date: d(-15),
-      method: "Havale/EFT",
-      accountId: "acc-garanti",
-    }),
   ];
 
   const expense = (
@@ -778,12 +713,10 @@ export function createSeedState(): ErpState {
   ];
 
   const reminder = (
-    r: Omit<Reminder, keyof typeof base | "portalVisible" | "status"> &
-      Partial<Pick<Reminder, "portalVisible" | "status">>,
+    r: Omit<Reminder, keyof typeof base | "status"> & Partial<Pick<Reminder, "status">>,
   ): Reminder => ({
     ...base,
     status: "Bekliyor",
-    portalVisible: false,
     ...r,
   });
   const reminders: Reminder[] = [
@@ -797,7 +730,6 @@ export function createSeedState(): ErpState {
       caseId: "case-128",
       clientId: "cli-ayse",
       assigneeId: "usr-selin",
-      portalVisible: true,
     }),
     reminder({
       id: "rem-2",
@@ -835,7 +767,6 @@ export function createSeedState(): ErpState {
       caseId: "case-098",
       clientId: "cli-fatma",
       assigneeId: "usr-buse",
-      portalVisible: true,
     }),
     reminder({
       id: "rem-6",
@@ -881,7 +812,6 @@ export function createSeedState(): ErpState {
       caseId: "case-127",
       clientId: "cli-mehmet",
       assigneeId: "usr-buse",
-      portalVisible: true,
     }),
   ];
 
@@ -1093,44 +1023,6 @@ export function createSeedState(): ErpState {
     },
   ];
 
-  const docRequests: DocumentRequest[] = [
-    {
-      ...base,
-      id: "req-1",
-      clientId: "cli-ayse",
-      caseId: "case-128",
-      title: "Fatura ve irsaliye suretleri",
-      note: "Alacağı ispat için tüm faturaların taranmış hali",
-      dueDate: d(5),
-      status: "Bekliyor",
-    },
-  ];
-
-  const messages: Message[] = [
-    {
-      ...base,
-      id: "msg-1",
-      clientId: "cli-ayse",
-      authorId: "usr-selin",
-      body: "Merhaba Ayşe Hanım, yarınki duruşma saat 10:30'da. 10:00'da adliye girişinde buluşalım.",
-      readByFirm: true,
-      readByClient: false,
-      createdAt: ago(60 * 20),
-      updatedAt: ago(60 * 20),
-    },
-    {
-      ...base,
-      id: "msg-2",
-      clientId: "cli-ayse",
-      authorId: "usr-portal-ayse",
-      body: "Teşekkürler, orada olacağım. Faturaları bu akşam yüklerim.",
-      readByFirm: false,
-      readByClient: true,
-      createdAt: ago(60 * 3),
-      updatedAt: ago(60 * 3),
-    },
-  ];
-
   const notification = (
     n: Omit<AppNotification, keyof typeof base | "read"> & { read?: boolean; at: string },
   ): AppNotification => {
@@ -1192,13 +1084,19 @@ export function createSeedState(): ErpState {
     },
   ];
 
+  const settings = defaultSettings();
+  const uniq = (xs: Array<string | undefined>) =>
+    [...new Set(xs.filter((x): x is string => !!x))].sort((a, b) => a.localeCompare(b, "tr"));
+  settings.courts = uniq(cases.map((c) => c.court));
+  settings.enforcementOffices = uniq(enforcements.map((e) => e.office));
+
   return {
     ...emptyState(),
+    settings,
     users,
     clients,
     cases,
     expenses,
-    advances,
     plans,
     accounts,
     transactions,
@@ -1209,8 +1107,6 @@ export function createSeedState(): ErpState {
     collections,
     contacts,
     documents: [],
-    docRequests,
-    messages,
     notifications,
     activities,
   };

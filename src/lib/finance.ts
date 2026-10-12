@@ -3,6 +3,7 @@
  * saklanmaz, böylece veriler her zaman tutarlı kalır.
  */
 import type {
+  AccountTx,
   CaseFile,
   Collection,
   ErpState,
@@ -12,6 +13,7 @@ import type {
   ISODate,
   PaymentPromise,
   User,
+  YearStats,
 } from "@/lib/erp-types";
 import {
   addDays,
@@ -33,6 +35,11 @@ export function caseClientId(state: ErpState, caseId?: string) {
 
 export function recordClientId(state: ErpState, rec: { clientId?: string; caseId?: string }) {
   return rec.clientId ?? caseClientId(state, rec.caseId);
+}
+
+/** Dosya no + mahkeme adı (mahkeme yoksa konu). */
+export function caseCourtLabel(c: CaseFile) {
+  return `${c.no} · ${c.court || c.title}`;
 }
 
 export function caseLabel(c?: CaseFile) {
@@ -151,25 +158,24 @@ export function applyPaymentToPlan(
   return { ...plan, installments: plan.installments.map((i) => byId.get(i.id)!) };
 }
 
-/* ───────────── Masraf avansı ───────────── */
+/* ───────────── Masraflar ───────────── */
 
-/** Müvekkile yansıyan ve büronun ödediği masraf: avanstan düşer. */
+/** Müvekkile yansıyan ve büronun ödediği masraf: müvekkilin carisine borç yazılır. */
 export function isClientCharged(e: Expense) {
   return e.chargeTo === "Müvekkil" && e.paidBy === "Büro";
 }
 
-export function advanceBalance(state: ErpState, clientId: string, caseId?: string) {
-  const inScope = (r: { clientId?: string; caseId?: string }) =>
-    recordClientId(state, r) === clientId && (!caseId || r.caseId === caseId);
-  const received = sumBy(
-    state.advances.filter((a) => inScope(a)),
-    (a) => (a.kind === "Avans" ? a.amount : -a.amount),
-  );
-  const spent = sumBy(
-    state.expenses.filter((e) => inScope(e) && isClientCharged(e)),
+/** Büronun müvekkil adına ödediği (müvekkile yansıyan) masraflar */
+export function chargedExpenses(state: ErpState, clientId: string, caseId?: string) {
+  return sumBy(
+    state.expenses.filter(
+      (e) =>
+        isClientCharged(e) &&
+        recordClientId(state, e) === clientId &&
+        (!caseId || e.caseId === caseId),
+    ),
     (e) => e.amount,
   );
-  return { received, spent, balance: round2(received - spent) };
 }
 
 /* ───────────── Cari hesap ───────────── */
@@ -178,13 +184,12 @@ export type LedgerEntry = {
   id: string;
   date: ISODate;
   kind:
-    | "Avans"
-    | "Avans iadesi"
     | "Masraf"
     | "Ücret tahakkuku"
     | "Ücret tahsilatı"
     | "İcra tahsilatı"
-    | "Müvekkile aktarım";
+    | "Müvekkile aktarım"
+    | "Kapanan dosyalar";
   description: string;
   caseId?: string;
   /** Müvekkilin borçlandığı tutar */
@@ -202,17 +207,6 @@ export function clientLedger(
   const raw: Omit<LedgerEntry, "balance">[] = [];
   const owns = (r: { clientId?: string; caseId?: string }) => recordClientId(state, r) === clientId;
 
-  for (const a of state.advances.filter(owns)) {
-    raw.push({
-      id: a.id,
-      date: a.date,
-      kind: a.kind === "Avans" ? "Avans" : "Avans iadesi",
-      description: a.note || (a.kind === "Avans" ? "Masraf avansı alındı" : "Avans iadesi"),
-      caseId: a.caseId,
-      debit: a.kind === "İade" ? a.amount : 0,
-      credit: a.kind === "Avans" ? a.amount : 0,
-    });
-  }
   for (const e of state.expenses.filter((e) => owns(e) && isClientCharged(e))) {
     raw.push({
       id: e.id,
@@ -247,6 +241,19 @@ export function clientLedger(
         });
       }
     }
+  }
+  const closed = state.clients.find((c) => c.id === clientId)?.closedCases;
+  if (closed && (closed.receivable || closed.payable)) {
+    raw.push({
+      id: `closed-${clientId}`,
+      date: closed.lastClosedAt.slice(0, 10),
+      kind: "Kapanan dosyalar",
+      description: closed.caseCount
+        ? `Kapanan ${closed.caseCount} dosya ve arşivlenen kayıtların devri`
+        : "Arşivlenen eski kayıtların devri",
+      debit: closed.receivable,
+      credit: closed.payable,
+    });
   }
   const enfIds = new Set(
     state.enforcements.filter((e) => e.clientId === clientId).map((e) => e.id),
@@ -293,7 +300,6 @@ export function clientLedger(
 }
 
 export function clientFinance(state: ErpState, clientId: string) {
-  const adv = advanceBalance(state, clientId);
   const plans = state.plans.filter((p) => p.clientId === clientId && !p.cancelled);
   const summaries = plans.map(planSummary);
   const feeTotal = sumBy(plans, (p) => p.total);
@@ -301,17 +307,13 @@ export function clientFinance(state: ErpState, clientId: string) {
   const feeRemaining = sumBy(summaries, (s) => s.remaining);
   const feeOverdue = sumBy(summaries, (s) => s.overdueAmount);
   const { closing } = clientLedger(state, clientId);
-  const client = state.clients.find((c) => c.id === clientId);
-  const lowAdvance =
-    !!client && adv.balance < (client.advanceThreshold ?? 0) && (adv.received > 0 || adv.spent > 0);
   return {
-    advance: adv,
+    expenseCharged: chargedExpenses(state, clientId),
     feeTotal,
     feePaid,
     feeRemaining,
     feeOverdue,
     balance: closing,
-    lowAdvance,
     status: (closing > 0.005 ? "Borçlu" : closing < -0.005 ? "Alacaklı" : "Kapalı") as
       "Borçlu" | "Alacaklı" | "Kapalı",
   };
@@ -323,7 +325,7 @@ export type AccountEntry = {
   id: string;
   date: ISODate;
   description: string;
-  source: "Açılış" | "Avans" | "Masraf" | "Tahsilat" | "İcra" | "Virman" | "Diğer" | "Aktarım";
+  source: "Açılış" | "Masraf" | "Tahsilat" | "İcra" | "Virman" | "Diğer" | "Aktarım";
   amount: number;
   balance: number;
   clientId?: string;
@@ -342,16 +344,6 @@ export function accountLedger(state: ErpState, accountId: string) {
     });
   }
   const clientName = (id?: string) => state.clients.find((c) => c.id === id)?.name ?? "";
-  for (const a of state.advances.filter((a) => a.accountId === accountId)) {
-    raw.push({
-      id: a.id,
-      date: a.date,
-      description: `${a.kind === "Avans" ? "Masraf avansı" : "Avans iadesi"} · ${clientName(a.clientId)}`,
-      source: "Avans",
-      amount: a.kind === "Avans" ? a.amount : -a.amount,
-      clientId: a.clientId,
-    });
-  }
   for (const e of state.expenses.filter((e) => e.paidBy === "Büro" && e.accountId === accountId)) {
     raw.push({
       id: e.id,
@@ -411,6 +403,16 @@ export function accountLedger(state: ErpState, accountId: string) {
   return { entries, balance: running };
 }
 
+/** Gelen paranın (tahsilat) varsayılan hesabı: Barokart dışındaki ilk aktif banka, yoksa kasa. */
+export function defaultIncomeAccountId(state: ErpState) {
+  const active = state.accounts.filter((a) => a.active);
+  return (
+    active.find((a) => a.type === "Banka" && !/baro\s*kart/i.test(a.name)) ??
+    active.find((a) => a.type === "Kasa") ??
+    active[0]
+  )?.id;
+}
+
 export function accountBalances(state: ErpState) {
   return state.accounts.map((a) => ({ account: a, balance: accountLedger(state, a.id).balance }));
 }
@@ -419,13 +421,11 @@ export function accountBalances(state: ErpState) {
 
 export function caseFinance(state: ErpState, caseId: string) {
   const expenses = state.expenses.filter((e) => e.caseId === caseId);
-  const advances = state.advances.filter((a) => a.caseId === caseId);
   const plans = state.plans.filter((p) => p.caseId === caseId && !p.cancelled);
   const summaries = plans.map(planSummary);
   return {
     expenseTotal: sumBy(expenses, (e) => e.amount),
     chargedTotal: sumBy(expenses.filter(isClientCharged), (e) => e.amount),
-    advanceTotal: sumBy(advances, (a) => (a.kind === "Avans" ? a.amount : -a.amount)),
     feeTotal: sumBy(plans, (p) => p.total),
     feePaid: sumBy(summaries, (s) => s.paid),
     feeRemaining: sumBy(summaries, (s) => s.remaining),
@@ -486,6 +486,102 @@ export function debtorSummary(state: ErpState, debtorId: string) {
   };
 }
 
+/* ───────────── Yıllık özet ve arşiv ───────────── */
+
+export function emptyYearStats(): YearStats {
+  return {
+    feeIncome: 0,
+    icraCollected: 0,
+    officeExpense: 0,
+    clientExpense: 0,
+    otherIncome: 0,
+    otherExpense: 0,
+    closedCases: 0,
+  };
+}
+
+type StatSources = {
+  payments?: Array<{ date: ISODate; amount: number }>;
+  collections?: Array<{ date: ISODate; amount: number }>;
+  expenses?: Expense[];
+  transactions?: AccountTx[];
+};
+
+/** Kayıtların tutarlarını yıl bazında `target`a ekler (yeni nesne döndürür). */
+export function addYearStats(
+  target: Record<string, YearStats>,
+  src: StatSources,
+): Record<string, YearStats> {
+  const out: Record<string, YearStats> = Object.fromEntries(
+    Object.entries(target).map(([y, v]) => [y, { ...v }]),
+  );
+  const at = (date: string) => (out[date.slice(0, 4)] ??= emptyYearStats());
+  for (const p of src.payments ?? []) at(p.date).feeIncome += p.amount;
+  for (const c of src.collections ?? []) at(c.date).icraCollected += c.amount;
+  for (const e of src.expenses ?? []) {
+    if (e.chargeTo === "Büro") at(e.date).officeExpense += e.amount;
+    else at(e.date).clientExpense += e.amount;
+  }
+  for (const t of src.transactions ?? []) {
+    if (t.category === "Diğer gelir") at(t.date).otherIncome += t.amount;
+    if (t.category === "Diğer gider") at(t.date).otherExpense += Math.abs(t.amount);
+  }
+  for (const v of Object.values(out))
+    for (const k of Object.keys(v) as Array<keyof YearStats>) v[k] = round2(v[k]);
+  return out;
+}
+
+/** Her yılın para toplamları: mevcut kayıtlar + arşivlenmiş (silinmiş) kayıtlar. */
+export function yearlySummary(state: ErpState) {
+  const live = addYearStats(
+    {},
+    {
+      payments: state.plans.flatMap((p) => p.installments.flatMap((i) => i.payments)),
+      collections: state.collections,
+      expenses: state.expenses,
+      transactions: state.transactions,
+    },
+  );
+  const archived = state.archive.years;
+  const years = [...new Set([...Object.keys(live), ...Object.keys(archived)])].sort().reverse();
+  return years.map((year) => {
+    const a = archived[year] ?? emptyYearStats();
+    const l = live[year] ?? emptyYearStats();
+    const sum = Object.fromEntries(
+      (Object.keys(a) as Array<keyof YearStats>).map((k) => [k, round2(a[k] + l[k])]),
+    ) as YearStats;
+    return {
+      year,
+      ...sum,
+      net: round2(sum.feeIncome + sum.otherIncome - sum.officeExpense - sum.otherExpense),
+      hasArchive: !!archived[year],
+    };
+  });
+}
+
+/** Seçilen yıl ve öncesinde arşivlenince silinecek kayıtlar (ayrıntılar). */
+export function archiveCandidates(state: ErpState, throughYear: number) {
+  const end = `${throughYear}-12-31`;
+  const old = (d?: string) => !!d && d.slice(0, 10) <= end;
+  const plans = state.plans.filter((p) => {
+    const pays = p.installments.flatMap((i) => i.payments);
+    const settled = p.cancelled || planSummary(p).remaining <= 0.005;
+    return settled && old(p.date) && pays.every((x) => old(x.date));
+  });
+  return {
+    end,
+    expenses: state.expenses.filter((e) => old(e.date)),
+    plans,
+    collections: state.collections.filter((c) => old(c.date) && c.transferredToClient),
+    transactions: state.transactions.filter((t) => old(t.date)),
+    reminders: state.reminders.filter((r) => old(r.date) && r.status !== "Bekliyor"),
+    promises: state.promises.filter((p) => old(p.dueDate) && p.status !== "Bekliyor"),
+    contacts: state.contacts.filter((c) => old(c.date)),
+    activities: state.activities.filter((a) => old(a.createdAt)),
+    notifications: state.notifications.filter((n) => old(n.createdAt)),
+  };
+}
+
 /* ───────────── Büro geneli ───────────── */
 
 export function feeIncomeInRange(state: ErpState, from: ISODate, to: ISODate) {
@@ -506,7 +602,7 @@ export function monthlySeries(state: ErpState, months = 12) {
     keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
   }
   const rows = new Map(
-    keys.map((k) => [k, { key: k, income: 0, officeExpense: 0, clientExpense: 0, advances: 0 }]),
+    keys.map((k) => [k, { key: k, income: 0, officeExpense: 0, clientExpense: 0 }]),
   );
   for (const p of state.plans)
     for (const i of p.installments)
@@ -526,16 +622,11 @@ export function monthlySeries(state: ErpState, months = 12) {
     if (e.chargeTo === "Büro") r.officeExpense += e.amount;
     else r.clientExpense += e.amount;
   }
-  for (const a of state.advances) {
-    const r = rows.get(monthKey(a.date));
-    if (r) r.advances += a.kind === "Avans" ? a.amount : -a.amount;
-  }
   return [...rows.values()].map((r) => ({
     ...r,
     income: round2(r.income),
     officeExpense: round2(r.officeExpense),
     clientExpense: round2(r.clientExpense),
-    advances: round2(r.advances),
     net: round2(r.income - r.officeExpense),
   }));
 }
@@ -569,10 +660,15 @@ export type Alert = {
   detail: string;
   link: string;
   date: ISODate;
-  category: "Taksit" | "Ödeme sözü" | "Ajanda" | "Avans" | "Belge" | "Mesaj";
+  category: "Taksit" | "Ödeme sözü" | "Ajanda";
 };
 
-export function computeAlerts(state: ErpState, user: User, canSeeFinance: boolean): Alert[] {
+export function computeAlerts(
+  state: ErpState,
+  user: User,
+  canSeeFinance: boolean,
+  canSeeAllAgenda = canSeeFinance,
+): Alert[] {
   const t = today();
   const soon = addDays(t, 3);
   const alerts: Alert[] = [];
@@ -588,24 +684,10 @@ export function computeAlerts(state: ErpState, user: User, canSeeFinance: boolea
         tone: late ? "danger" : "warning",
         title: late ? "Geciken taksit" : "Vadesi yaklaşan taksit",
         detail: `${clientName(row.plan.clientId)} · ${formatMoney(row.remaining)}`,
-        link: "/taksitler",
+        link: "/tahsilatlar",
         date: row.inst.dueDate,
         category: "Taksit",
       });
-    }
-    for (const c of state.clients) {
-      const fin = clientFinance(state, c.id);
-      if (fin.lowAdvance) {
-        alerts.push({
-          id: `adv-${c.id}`,
-          tone: fin.advance.balance < 0 ? "danger" : "warning",
-          title: fin.advance.balance < 0 ? "Avans eksiye düştü" : "Avans azaldı",
-          detail: `${c.name} · bakiye ${formatMoney(fin.advance.balance)}`,
-          link: `/muvekkiller/${c.id}`,
-          date: t,
-          category: "Avans",
-        });
-      }
     }
   }
 
@@ -632,7 +714,7 @@ export function computeAlerts(state: ErpState, user: User, canSeeFinance: boolea
 
   for (const r of state.reminders) {
     if (r.status !== "Bekliyor") continue;
-    if (!canSeeFinance && r.assigneeId !== user.id) continue;
+    if (!canSeeAllAgenda && r.assigneeId !== user.id) continue;
     if (r.date > addDays(t, 1)) continue;
     const late = r.date < t;
     alerts.push({
@@ -643,35 +725,6 @@ export function computeAlerts(state: ErpState, user: User, canSeeFinance: boolea
       link: "/takvim",
       date: r.date,
       category: "Ajanda",
-    });
-  }
-
-  for (const req of state.docRequests.filter((r) => r.status === "Yüklendi")) {
-    alerts.push({
-      id: `req-${req.id}`,
-      tone: "success",
-      title: "Müvekkil belge yükledi",
-      detail: `${clientName(req.clientId)} · ${req.title}`,
-      link: "/belgeler",
-      date: req.updatedAt.slice(0, 10),
-      category: "Belge",
-    });
-  }
-
-  const unreadByClient = new Map<string, number>();
-  for (const m of state.messages) {
-    if (m.readByFirm) continue;
-    unreadByClient.set(m.clientId, (unreadByClient.get(m.clientId) ?? 0) + 1);
-  }
-  for (const [clientId, count] of unreadByClient) {
-    alerts.push({
-      id: `msg-${clientId}`,
-      tone: "info",
-      title: "Okunmamış mesaj",
-      detail: `${clientName(clientId)} · ${count} mesaj`,
-      link: `/mesajlar?musteri=${clientId}`,
-      date: t,
-      category: "Mesaj",
     });
   }
 

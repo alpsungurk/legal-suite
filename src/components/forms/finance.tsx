@@ -1,4 +1,4 @@
-import { Plus, Trash2, Info, Wallet } from "lucide-react";
+import { Plus, Trash2, Info } from "lucide-react";
 import { toast } from "sonner";
 import {
   FormDialog,
@@ -21,11 +21,8 @@ import { Input } from "@/components/ui/input";
 import { useErp, uid } from "@/lib/erp-store";
 import { useOptions } from "@/lib/options";
 import {
-  FEE_KINDS,
-  PAYMENT_METHODS,
   type Account,
   type AccountTx,
-  type Advance,
   type Expense,
   type FeePlan,
   type Installment,
@@ -40,7 +37,13 @@ import {
   sum,
   today,
 } from "@/lib/format";
-import { advanceBalance, caseClientId, installmentPaid, installmentRemaining } from "@/lib/finance";
+import {
+  applyPaymentToPlan,
+  caseClientId,
+  defaultIncomeAccountId,
+  installmentPaid,
+  installmentRemaining,
+} from "@/lib/finance";
 import { cn } from "@/lib/utils";
 import type { FormProps } from "@/components/forms/core";
 
@@ -49,10 +52,31 @@ import type { FormProps } from "@/components/forms/core";
 export function ExpenseForm({ open, onOpenChange, record, preset, onSaved }: FormProps<Expense>) {
   const { save, state, currentUser, permissions } = useErp();
   const o = useOptions();
-  const accounts = permissions.viewFinance
-    ? o.accounts
-    : o.accounts.map((a) => ({ ...a, hint: undefined }));
+  // Yalnızca büro kasası + Barokart; eski bir kayıt başka hesaptaysa o da listede kalır
+  const accountOpts = [
+    ...o.expenseAccounts,
+    ...o.accounts.filter(
+      (a) => a.value === record?.accountId && !o.expenseAccounts.some((x) => x.value === a.value),
+    ),
+  ];
+  const accounts = permissions.can("accounts")
+    ? accountOpts
+    : accountOpts.map((a) => ({ ...a, hint: undefined }));
   const forClient = (v: FormValues) => v.chargeTo === "Müvekkil";
+  const fileOptions = [
+    ...o.casesByCourt.map((c) => ({ ...c, value: `case:${c.value}` })),
+    ...state.enforcements.map((e) => ({
+      value: `enf:${e.id}`,
+      label: `İcra ${e.no} · ${e.office}`,
+      hint: state.clients.find((c) => c.id === e.clientId)?.name,
+    })),
+  ];
+  const fileClientId = (ref: string) => {
+    const [kind, id] = ref.split(":");
+    return kind === "enf"
+      ? state.enforcements.find((e) => e.id === id)?.clientId
+      : caseClientId(state, id);
+  };
   const fields: FormField[] = [
     {
       name: "chargeTo",
@@ -64,14 +88,15 @@ export function ExpenseForm({ open, onOpenChange, record, preset, onSaved }: For
       ],
     },
     {
-      name: "caseId",
+      // Dava dosyası ve icra dosyası tek listede; ikisi de isteğe bağlı
+      name: "fileRef",
       label: "Dosya",
       type: "combobox",
-      options: o.cases,
+      options: fileOptions,
       allowClear: true,
       visible: forClient,
-      placeholder: "Dosya seçin",
-      onChange: (val) => (val ? { clientId: caseClientId(state, String(val)) } : {}),
+      placeholder: "Dava veya icra dosyası (isteğe bağlı)",
+      onChange: (val) => (val ? { clientId: fileClientId(String(val)) } : {}),
     },
     {
       name: "clientId",
@@ -80,8 +105,7 @@ export function ExpenseForm({ open, onOpenChange, record, preset, onSaved }: For
       options: o.allClients,
       required: true,
       visible: forClient,
-      onChange: (val, v) =>
-        v.caseId && caseClientId(state, v.caseId) !== val ? { caseId: "" } : {},
+      onChange: (val, v) => (v.fileRef && fileClientId(v.fileRef) !== val ? { fileRef: "" } : {}),
     },
     { name: "type", label: "Masraf türü", type: "select", options: o.expenseTypes, required: true },
     { name: "title", label: "Açıklama", required: true, placeholder: "Örn. Bilirkişi ücreti" },
@@ -93,7 +117,7 @@ export function ExpenseForm({ open, onOpenChange, record, preset, onSaved }: For
       type: "segmented",
       visible: forClient,
       options: [
-        { value: "Büro", label: "Büro ödedi (avanstan düşer)" },
+        { value: "Büro", label: "Büro ödedi (müvekkile yansır)" },
         { value: "Müvekkil", label: "Müvekkil kendisi ödedi" },
       ],
     },
@@ -103,7 +127,7 @@ export function ExpenseForm({ open, onOpenChange, record, preset, onSaved }: For
       type: "combobox",
       options: accounts,
       visible: (v) => v.chargeTo === "Büro" || v.paidBy === "Büro",
-      placeholder: "Kasa / banka",
+      placeholder: "Büro kasası / Barokart",
       allowClear: true,
     },
     { name: "note", label: "Not", type: "textarea" },
@@ -118,177 +142,71 @@ export function ExpenseForm({ open, onOpenChange, record, preset, onSaved }: For
     ...preset,
     ...record,
   };
+  const ref = initial.enforcementId
+    ? `enf:${initial.enforcementId}`
+    : initial.caseId
+      ? `case:${initial.caseId}`
+      : "";
+  initial.fileRef = ref;
   return (
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
       title={record ? "Masrafı düzenle" : "Yeni masraf"}
-      description="Makbuz ekleyebilir, avans bakiyesine etkisini anında görebilirsiniz."
+      description="Makbuz ekleyebilir; büronun ödediği dosya masrafı müvekkilin carisine yazılır."
       fields={fields}
       initial={initial}
       wide
       onSubmit={(v) => {
         const isClient = v.chargeTo === "Müvekkil";
         const paidBy = isClient ? v.paidBy : "Büro";
-        const item = save("expenses", {
-          id: record?.id,
-          title: v.title.trim(),
-          type: v.type,
-          amount: Number(v.amount),
-          date: v.date,
-          chargeTo: v.chargeTo,
-          paidBy,
-          caseId: isClient ? v.caseId || undefined : undefined,
-          clientId: isClient ? v.clientId || undefined : undefined,
-          accountId: paidBy === "Büro" ? v.accountId || undefined : undefined,
-          receipts: v.receipts ?? [],
-          note: v.note || undefined,
-          createdBy: record?.createdBy ?? currentUser.id,
-        });
+        const [refKind, refId] = String(v.fileRef || ":").split(":");
+        const item = save(
+          "expenses",
+          {
+            id: record?.id,
+            title: v.title.trim(),
+            type: v.type,
+            amount: Number(v.amount),
+            date: v.date,
+            chargeTo: v.chargeTo,
+            paidBy,
+            caseId: isClient && refKind === "case" ? refId : undefined,
+            enforcementId: isClient && refKind === "enf" ? refId : undefined,
+            clientId: isClient ? v.clientId || undefined : undefined,
+            accountId: paidBy === "Büro" ? v.accountId || undefined : undefined,
+            receipts: v.receipts ?? [],
+            note: v.note || undefined,
+            createdBy: record?.createdBy ?? currentUser.id,
+          },
+          // Avukatın girdiği yeni masraf büro sahibine bildirilir
+          !record && !permissions.can("expenses")
+            ? {
+                notify: {
+                  userIds: state.users
+                    .filter((u) => u.role === "Admin" && u.active)
+                    .map((u) => u.id),
+                  title: `${currentUser.name} masraf girdi`,
+                  link: "/masraflar",
+                },
+              }
+            : undefined,
+        );
         toast.success(record ? "Masraf güncellendi" : "Masraf kaydedildi");
         onSaved?.(item);
       }}
     >
-      {(v, set) => {
-        const clientId = v.chargeTo === "Müvekkil" ? v.clientId : undefined;
-        const bal = clientId ? advanceBalance(state, clientId) : null;
-        const effect =
-          bal && v.paidBy === "Büro"
-            ? round2(
-                bal.balance +
-                  (record &&
-                  record.clientId === clientId &&
-                  record.paidBy === "Büro" &&
-                  record.chargeTo === "Müvekkil"
-                    ? record.amount
-                    : 0) -
-                  (Number(v.amount) || 0),
-              )
-            : null;
-        return (
-          <div className="space-y-4">
-            {bal && permissions.viewFinance && (
-              <div className="flex items-center gap-3 rounded-xl border border-border/80 bg-secondary/40 px-4 py-3 text-sm animate-fade-up">
-                <Wallet className="h-4 w-4 shrink-0 text-primary" />
-                <span className="text-muted-foreground">Avans bakiyesi</span>
-                <Money value={bal.balance} className="font-semibold" />
-                {effect != null && (
-                  <>
-                    <span className="text-muted-foreground">→</span>
-                    <Money value={effect} colored className="font-semibold" />
-                  </>
-                )}
-              </div>
-            )}
-            <div>
-              <p className="mb-2 text-[13px] font-medium">Makbuz / belge</p>
-              <AttachmentList
-                files={v.receipts ?? []}
-                onChange={(files) => set({ receipts: files })}
-              />
-            </div>
+      {(v, set) => (
+        <div className="space-y-4">
+          <div>
+            <p className="mb-2 text-[13px] font-medium">Makbuz / belge</p>
+            <AttachmentList
+              files={v.receipts ?? []}
+              onChange={(files) => set({ receipts: files })}
+            />
           </div>
-        );
-      }}
-    </FormDialog>
-  );
-}
-
-/* ───────────── Masraf avansı ───────────── */
-
-export function AdvanceForm({ open, onOpenChange, record, preset, onSaved }: FormProps<Advance>) {
-  const { save, state } = useErp();
-  const o = useOptions();
-  const fields: FormField[] = [
-    {
-      name: "kind",
-      label: "İşlem",
-      type: "segmented",
-      options: [
-        { value: "Avans", label: "Avans alındı" },
-        { value: "İade", label: "Avans iadesi" },
-      ],
-    },
-    {
-      name: "clientId",
-      label: "Müvekkil",
-      type: "combobox",
-      options: o.allClients,
-      required: true,
-      onChange: () => ({ caseId: "" }),
-    },
-    { name: "amount", label: "Tutar", type: "money", required: true, autoFocus: true },
-    { name: "date", label: "Tarih", type: "date", required: true },
-    { name: "method", label: "Ödeme yöntemi", type: "select", options: [...PAYMENT_METHODS] },
-    { name: "accountId", label: "Hesap", type: "combobox", options: o.accounts, required: true },
-    { name: "note", label: "Açıklama", type: "textarea" },
-  ];
-  return (
-    <FormDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title={record ? "Avans kaydını düzenle" : "Masraf avansı"}
-      description="Müvekkilden masraflar için alınan para. Masraflar bu bakiyeden düşer."
-      fields={fields}
-      initial={{
-        kind: "Avans",
-        date: today(),
-        method: "Havale/EFT",
-        accountId: state.accounts.find((a) => a.type === "Banka")?.id,
-        ...preset,
-        ...record,
-      }}
-      onSubmit={(v) => {
-        const item = save("advances", {
-          id: record?.id,
-          kind: v.kind,
-          clientId: v.clientId,
-          caseId: v.caseId || undefined,
-          amount: Number(v.amount),
-          date: v.date,
-          method: v.method,
-          accountId: v.accountId || undefined,
-          note: v.note || undefined,
-        });
-        toast.success(v.kind === "Avans" ? "Avans kaydedildi" : "İade kaydedildi");
-        onSaved?.(item);
-      }}
-    >
-      {(v, set) => {
-        const caseOpts = o.casesOf(v.clientId);
-        const bal = v.clientId ? advanceBalance(state, v.clientId) : null;
-        return (
-          <div className="space-y-4">
-            {v.clientId && caseOpts.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                <span className="mr-1 self-center text-xs text-muted-foreground">Dosya:</span>
-                {[{ value: "", label: "Genel" }, ...caseOpts].map((c) => (
-                  <button
-                    key={c.value || "none"}
-                    type="button"
-                    onClick={() => set({ caseId: c.value })}
-                    className={cn(
-                      "rounded-full border px-3 py-1 text-xs font-medium transition-all",
-                      (v.caseId ?? "") === c.value
-                        ? "border-primary bg-primary text-primary-foreground shadow-soft"
-                        : "border-border bg-card hover:border-primary/40",
-                    )}
-                  >
-                    {c.label}
-                  </button>
-                ))}
-              </div>
-            )}
-            {bal && (
-              <div className="flex items-center gap-3 rounded-xl border border-border/80 bg-secondary/40 px-4 py-3 text-sm">
-                <Wallet className="h-4 w-4 text-primary" />
-                <span className="text-muted-foreground">Mevcut avans bakiyesi</span>
-                <Money value={bal.balance} colored className="font-semibold" />
-              </div>
-            )}
-          </div>
-        );
-      }}
+        </div>
+      )}
     </FormDialog>
   );
 }
@@ -297,9 +215,9 @@ export function AdvanceForm({ open, onOpenChange, record, preset, onSaved }: For
 
 type Row = { id?: string; dueDate: string; amount: number; payments?: Installment["payments"] };
 
-const PERIODS = ["Aylık", "2 haftada bir", "Haftalık", "3 ayda bir"] as const;
+export const PERIODS = ["Aylık", "2 haftada bir", "Haftalık", "3 ayda bir"] as const;
 
-function stepDate(start: string, period: string, i: number) {
+export function stepDate(start: string, period: string, i: number) {
   if (period === "Haftalık") return addDays(start, 7 * i);
   if (period === "2 haftada bir") return addDays(start, 14 * i);
   if (period === "3 ayda bir") return addMonths(start, 3 * i);
@@ -354,7 +272,7 @@ export function PlanForm({ open, onOpenChange, record, preset, onSaved }: FormPr
       name: "kind",
       label: "Ücret türü",
       type: "select",
-      options: [...FEE_KINDS],
+      options: o.feeKinds,
       onChange: (val, v) => (!v.titleTouched ? { title: String(val) } : {}),
     },
     { name: "title", label: "Açıklama", required: true, onChange: () => ({ titleTouched: true }) },
@@ -411,8 +329,8 @@ export function PlanForm({ open, onOpenChange, record, preset, onSaved }: FormPr
 
   const initialRows: Row[] = record?.installments.map((i) => ({ ...i })) ?? [];
   const base: FormValues = {
-    kind: "Vekalet ücreti",
-    title: "Vekalet ücreti",
+    kind: o.feeKinds.includes("Vekalet ücreti") ? "Vekalet ücreti" : o.feeKinds[0],
+    title: o.feeKinds.includes("Vekalet ücreti") ? "Vekalet ücreti" : o.feeKinds[0],
     date: today(),
     firstDue: addMonths(today(), 1),
     mode: "installment",
@@ -420,8 +338,9 @@ export function PlanForm({ open, onOpenChange, record, preset, onSaved }: FormPr
     period: "Aylık",
     downPayment: 0,
     payNow: false,
-    method: "Havale/EFT",
-    accountId: state.accounts.find((a) => a.type === "Banka")?.id,
+    method: "",
+    paidAmount: undefined,
+    accountId: defaultIncomeAccountId(state),
     ...preset,
   };
   const initial: FormValues = record
@@ -460,7 +379,13 @@ export function PlanForm({ open, onOpenChange, record, preset, onSaved }: FormPr
         if (lost) return { _form: "Ödemesi alınmış taksitler silinemez. Önce ödemeyi geri alın." };
         if (rows.some((r) => sum((r.payments ?? []).map((p) => p.amount)) > r.amount + 0.009))
           return { _form: "Bir taksitin tutarı, o taksite alınan ödemenin altına düşemez." };
-        if (v.payNow && !v.accountId) return { accountId: "Hesap seçin" };
+        if (v.payNow) {
+          const paid = Number(v.paidAmount ?? rows[0]?.amount) || 0;
+          if (paid <= 0) return { _form: "Alınan tutarı girin" };
+          if (paid > total + 0.009) return { _form: "Alınan tutar toplam tutarı aşamaz" };
+          if (!v.method) return { _form: "Ödeme yöntemi seçin" };
+          if (!v.accountId) return { _form: "Tahsilatın yatırıldığı hesabı seçin" };
+        }
         return undefined;
       }}
       onSubmit={(v) => {
@@ -471,23 +396,20 @@ export function PlanForm({ open, onOpenChange, record, preset, onSaved }: FormPr
           amount: round2(r.amount),
           payments: r.payments ?? [],
         }));
+        const draftPlan = { installments } as FeePlan;
         if (!editing && v.payNow && installments[0]) {
-          installments = installments.map((inst, i) =>
-            i === 0
-              ? {
-                  ...inst,
-                  payments: [
-                    {
-                      id: uid("ip"),
-                      date: v.date,
-                      amount: inst.amount,
-                      method: v.method,
-                      accountId: v.accountId,
-                    },
-                  ],
-                }
-              : inst,
-          );
+          // Alınan tutar ilk taksitten başlayarak taksitlere dağıtılır
+          installments = applyPaymentToPlan(
+            draftPlan,
+            installments[0].id,
+            {
+              date: v.date,
+              amount: Number(v.paidAmount ?? installments[0].amount),
+              method: v.method,
+              accountId: v.accountId,
+            },
+            () => uid("ip"),
+          ).installments;
         }
         const item = save("plans", {
           id: record?.id,
@@ -614,25 +536,46 @@ export function PlanForm({ open, onOpenChange, record, preset, onSaved }: FormPr
                   {v.mode === "single" ? "Ödeme şimdi alındı" : "İlk taksit / peşinat şimdi alındı"}
                 </label>
                 {v.payNow && (
-                  <div className="grid gap-3 animate-fade-up sm:grid-cols-2">
-                    <Select value={v.method} onValueChange={(m) => set({ method: m })}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PAYMENT_METHODS.map((m) => (
-                          <SelectItem key={m} value={m}>
-                            {m}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Combobox
-                      value={v.accountId}
-                      onChange={(a) => set({ accountId: a })}
-                      options={o.accounts}
-                      placeholder="Hesap seçin"
-                    />
+                  <div className="space-y-3 animate-fade-up">
+                    <div>
+                      <p className="mb-1.5 text-[13px] font-medium">Ne kadar alındı?</p>
+                      <MoneyInput
+                        value={Number(v.paidAmount ?? rows[0]?.amount) || 0}
+                        onChange={(n) => set({ paidAmount: n })}
+                      />
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Toplam {formatMoney(total)} · alınan sonrası kalan{" "}
+                        {formatMoney(
+                          Math.max(
+                            round2(total - (Number(v.paidAmount ?? rows[0]?.amount) || 0)),
+                            0,
+                          ),
+                        )}
+                      </p>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Select
+                        value={v.method || undefined}
+                        onValueChange={(m) => set({ method: m })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Ödeme yöntemi" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {o.paymentMethods.map((m) => (
+                            <SelectItem key={m} value={m}>
+                              {m}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Combobox
+                        value={v.accountId}
+                        onChange={(a) => set({ accountId: a })}
+                        options={o.accounts}
+                        placeholder="Hesap seçin"
+                      />
+                    </div>
                   </div>
                 )}
               </div>
@@ -678,7 +621,7 @@ export function PaymentForm({
       fields={[
         { name: "amount", label: "Tutar", type: "money", required: true, autoFocus: true },
         { name: "date", label: "Tarih", type: "date", required: true },
-        { name: "method", label: "Ödeme yöntemi", type: "select", options: [...PAYMENT_METHODS] },
+        { name: "method", label: "Ödeme yöntemi", type: "select", options: o.paymentMethods },
         {
           name: "accountId",
           label: "Yatırılan hesap",
@@ -691,8 +634,8 @@ export function PaymentForm({
       initial={{
         amount: remaining || planRemaining,
         date: today(),
-        method: "Havale/EFT",
-        accountId: state.accounts.find((a) => a.type === "Banka")?.id,
+        method: o.paymentMethods.includes("Havale/EFT") ? "Havale/EFT" : o.paymentMethods[0],
+        accountId: defaultIncomeAccountId(state),
       }}
       onSubmit={(v) => {
         recordInstallmentPayment(plan.id, inst.id, {
@@ -702,7 +645,9 @@ export function PaymentForm({
           accountId: v.accountId,
           note: v.note || undefined,
         });
-        toast.success(`${formatMoney(Number(v.amount))} tahsil edildi`);
+        toast.success(`${formatMoney(Number(v.amount))} tahsil edildi`, {
+          description: 'Taksit "Tahsil edilenler"e geçti; kasa ve cari otomatik güncellendi.',
+        });
       }}
     >
       {(v) => (

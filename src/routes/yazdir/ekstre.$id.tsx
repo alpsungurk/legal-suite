@@ -18,12 +18,9 @@ export const Route = createFileRoute("/yazdir/ekstre/$id")({
 function Page() {
   const { id } = Route.useParams();
   const { from, to } = Route.useSearch();
-  const { state, permissions, currentUser } = useErp();
+  const { state, permissions } = useErp();
   const client = state.clients.find((c) => c.id === id);
-  const allowed =
-    permissions.viewFinance ||
-    (permissions.isPortal && currentUser.clientId === id && !!client?.portalShowStatement);
-  if (!client || !allowed) return <NoAccess />;
+  if (!client || !permissions.can("ledger")) return <NoAccess />;
 
   const { entries, opening, closing } = clientLedger(state, id, { from, to });
   const fin = clientFinance(state, id);
@@ -57,9 +54,9 @@ function Page() {
               {from ? formatDate(from) : "Başlangıç"} – {to ? formatDate(to) : "Bugün"}
             </p>
             <div className="mt-2 grid grid-cols-2 gap-x-3 text-slate-600">
-              <span>Masraf avansı</span>
+              <span>Yansıyan masraf</span>
               <span className="text-right font-medium text-slate-900">
-                {formatMoney(fin.advance.balance)}
+                {formatMoney(fin.expenseCharged)}
               </span>
               <span>Ücret alacağı</span>
               <span className="text-right font-medium text-slate-900">
