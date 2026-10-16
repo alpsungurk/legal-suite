@@ -4,7 +4,6 @@ import { AttachmentList } from "@/components/app/files";
 import { useErp } from "@/lib/erp-store";
 import { useOptions } from "@/lib/options";
 import {
-  CLOSE_REASON_INFAZ,
   CLOSED_ENFORCEMENT_STATUS,
   DEFAULT_ENFORCEMENT_STATUS,
   EVENT_TYPE_BANK_891,
@@ -14,7 +13,6 @@ import {
   EVENT_TYPE_SERVICE,
   INQUIRY_FIELDS,
   STOPPED_ENFORCEMENT_STATUS,
-  isEnforcementClosed,
   type BankAnswer,
   type EventData,
   type InquiryResult,
@@ -1030,27 +1028,7 @@ export function CollectionForm({ open, onOpenChange, record, preset }: FormProps
           note: v.note || undefined,
         });
         if (v.promiseId) patch("promises", v.promiseId, { status: "Tutuldu" });
-        // Alacağın tamamı tahsil edildiyse icra dosyası kendiliğinden "Kapalı (İnfaz)" olur (avukatın talimatı)
-        const ef = state.enforcements.find((e) => e.id === v.enforcementId);
-        const others = state.collections
-          .filter((c) => c.enforcementId === v.enforcementId && c.id !== record?.id)
-          .reduce((t, c) => t + c.amount, 0);
-        const claim = ef ? ef.principal + ef.interest + ef.costs : 0;
-        if (
-          ef &&
-          claim > 0 &&
-          others + Number(v.amount) >= claim - 0.005 &&
-          !isEnforcementClosed(ef.status)
-        ) {
-          patch("enforcements", ef.id, {
-            status: CLOSED_ENFORCEMENT_STATUS,
-            closeReason: CLOSE_REASON_INFAZ,
-            stopReason: "",
-          });
-          toast.success("Tahsilat kaydedildi", {
-            description: `Alacağın tamamı tahsil edildi; ${ef.no} "Kapalı (${CLOSE_REASON_INFAZ})" yapıldı.`,
-          });
-        } else toast.success("Tahsilat kaydedildi");
+        toast.success("Tahsilat kaydedildi");
       }}
     />
   );

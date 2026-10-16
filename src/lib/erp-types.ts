@@ -289,7 +289,6 @@ export const DEFAULT_CLOSE_REASONS = [
   "İnfaz",
   "Haricen Tahsil",
 ];
-export const CLOSE_REASON_INFAZ = "İnfaz";
 /** Takip bilgileri için hazır seçenekler; listede olmayan elle yazılabilir */
 export const DEFAULT_CLAIM_TYPES = [
   "Araç Mahrumiyet Bedeli Alacağı",

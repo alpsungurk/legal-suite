@@ -9,14 +9,19 @@ export function useOptions() {
   const { state, staff, lawyers } = useErp();
   return useMemo(() => {
     const clientName = (id?: string) => state.clients.find((c) => c.id === id)?.name;
+    // Müvekkil listeleri her yerde alfabetik (Türkçe sıralama)
+    const byName = (a: Option, b: Option) => a.label.localeCompare(b.label, "tr");
     const clients: Option[] = state.clients
       .filter((c) => c.status === "Aktif")
       .map((c) => ({
         value: c.id,
         label: c.name,
         hint: c.kind === "Kurumsal" ? "Kurumsal" : undefined,
-      }));
-    const allClients: Option[] = state.clients.map((c) => ({ value: c.id, label: c.name }));
+      }))
+      .sort(byName);
+    const allClients: Option[] = state.clients
+      .map((c) => ({ value: c.id, label: c.name }))
+      .sort(byName);
     const cases: Option[] = state.cases.map((c) => ({
       value: c.id,
       label: `${c.no} · ${c.title}`,

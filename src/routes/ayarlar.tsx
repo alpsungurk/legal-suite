@@ -528,7 +528,7 @@ const CAT_GROUPS: Array<{
       {
         key: "enforcementCloseReasons",
         title: "Kapanış sebepleri",
-        desc: "Durum \"Kapalı\" seçilince sorulur (İnfaz: tamamı tahsil edilince otomatik)",
+        desc: "Durum \"Kapalı\" seçilince sorulur (kapatma elle yapılır)",
         locked: ["İnfaz"],
         canEmpty: true,
       },

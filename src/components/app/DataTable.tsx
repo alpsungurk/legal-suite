@@ -248,6 +248,34 @@ export function DataTable<T>({
               )}
             </Button>
           )}
+          {mobileCard && columns.some((c) => c.sort) && (
+            <Select
+              value={sort ? `${sort.id}:${sort.desc ? "desc" : "asc"}` : "__none"}
+              onValueChange={(v) => {
+                if (v === "__none") return setSort(null);
+                const [id, dir] = v.split(":");
+                setSort({ id, desc: dir === "desc" });
+              }}
+            >
+              <SelectTrigger className="h-9 w-auto min-w-[9rem] md:hidden">
+                <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+                <SelectValue placeholder="Sırala" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none">Sıralama yok</SelectItem>
+                {columns
+                  .filter((c) => c.sort)
+                  .flatMap((c) => [
+                    <SelectItem key={`${c.id}:asc`} value={`${c.id}:asc`}>
+                      {c.header} ↑
+                    </SelectItem>,
+                    <SelectItem key={`${c.id}:desc`} value={`${c.id}:desc`}>
+                      {c.header} ↓
+                    </SelectItem>,
+                  ])}
+              </SelectContent>
+            </Select>
+          )}
           <div className="ml-auto flex flex-wrap items-center gap-2">
             {toolbar}
             {exportName && (

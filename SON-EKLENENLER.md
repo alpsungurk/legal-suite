@@ -13,7 +13,7 @@ Bu belge, bir önceki "Yenilikler" belgesinden sonra eklenenleri içerir: "İcra
 - **Kapalı (sebep):** Yetkisizlik, Takipsizlik, Vazgeçme/Feragat, Takibin İptali, İnfaz, Haricen Tahsil
 - Formda durum "Kapalı" seçilince **kapanış sebebi** sorulur.
 - Listede ve Excel'de durum aynı biçimde görünür; Excel'den aktarırken de bu biçim okunur.
-- **Otomatik Kapalı (İnfaz):** Tahsilatlar takip çıkış rakamına ulaşınca dosya kendiliğinden **Kapalı (İnfaz)** olur.
+- **Otomatik kapatma yok:** Tahsilat takip çıkışına ulaşsa bile dosya kendiliğinden kapanmaz; borç tamamen bittiğinde büro durumu elle **Kapalı (İnfaz)** (veya başka sebep) yapar.
 
 ## 2. Takip şekli (Örnek No)
 

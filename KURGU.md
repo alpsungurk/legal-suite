@@ -392,7 +392,7 @@ Bunlar için bir şeye basman gerekmez:
 | Fazla tutar tahsil edersin                  | Fazlası sıradaki taksitlere dağıtılır                                                      |
 | Ayın ilk günü yönetici giriş yapar          | Aylık ücretli müvekkillerin o ayki ücreti oluşur                                           |
 | Borçlu taksitine "Ödendi" dersin            | Taksit "Tutuldu" olur, tahsilat icra dosyasına yazılır                                     |
-| Borçlu alacağın tamamını öder               | İcra dosyası "Tahsil edildi" olur                                                          |
+| Borçlu alacağın tamamını öder               | Tahsilat kaydı oluşur; dosyayı kapatmak elle yapılır (otomatik kapanmaz)                   |
 | Masrafı "Müvekkil kendisi ödedi" girersin   | Masraf "Ödendi" görünür, kasadan para çıkmaz                                               |
 | Masrafı "Büro ödedi" girersin               | Kasadan / Barokart'tan düşer, müvekkilin carisine borç yazılır                             |
 | Avukat masraf girer                         | Büro sahibine bildirim gider                                                               |

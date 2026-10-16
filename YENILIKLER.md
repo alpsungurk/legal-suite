@@ -279,7 +279,7 @@ Formlardaki bütün açılır listeler buradan yönetilir. Değer ekleyebilir, s
 **Dosya durumu**
 - Seçenekler sizin yazdığınız gibi: **Açık**, **Açık (Durdurulmuş : Takibe İtiraz / İcra Mahkemesine İtiraz / İhtiyati Tedbir / Tehir-i İcra Kararı / Diğer)**, **Kapalı (Yetkisizlik / Takipsizlik / Vazgeçme/Feragat / Takibin İptali / İnfaz / Haricen Tahsil)**.
 - Formda durum "Kapalı" seçilince **kapanış sebebi** sorulur.
-- Tahsilatlar takip çıkış rakamına ulaşınca dosya kendiliğinden **Kapalı (İnfaz)** olur.
+- Tahsilat takip çıkışına ulaşsa bile dosya **otomatik kapanmaz**; kapatma elle yapılır.
 - Listede ve Excel'de durum aynı biçimde ("Kapalı (İnfaz)") görünür.
 
 **Takip şekli (Örnek No)**
