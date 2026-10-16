@@ -58,14 +58,14 @@ export function OverlayLoader({
 /** Tam sayfa veri yükleme (oturum / sunucu) */
 export function PageLoader({ label = "Veriler yükleniyor…" }: { label?: string }) {
   return (
-    <div className="grid min-h-screen place-items-center bg-white" role="status" aria-busy>
+    <div className="grid min-h-screen place-items-center bg-background" role="status" aria-busy>
       <div className="flex flex-col items-center gap-3 animate-fade-up">
         <BrandImg
           variant="logo"
-          className="h-24 w-24 rounded-2xl bg-white shadow-soft ring-1 ring-slate-200/70"
+          className="h-24 w-24 rounded-2xl bg-white shadow-soft ring-1 ring-border"
         />
-        <Spinner size="md" className="text-[#143064]" />
-        <p className="text-sm font-medium text-slate-500">{label}</p>
+        <Spinner size="md" className="text-[#143064] dark:text-sky-300" />
+        <p className="text-sm font-medium text-muted-foreground">{label}</p>
       </div>
     </div>
   );

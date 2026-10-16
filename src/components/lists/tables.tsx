@@ -349,7 +349,7 @@ export function PlanTable({
       sort: (r) => r.s.progress,
       cell: (r) => (
         <div className="w-36">
-          <div className="mb-1 flex justify-between text-[11px] text-muted-foreground">
+          <div className="mb-1 flex justify-between text-[12.5px] text-muted-foreground">
             <span>
               {r.plan.installments.length > 1
                 ? `${r.plan.installments.filter((i) => installmentStatus(i) === "Ödendi").length}/${r.plan.installments.length} taksit`
@@ -378,8 +378,8 @@ export function PlanTable({
             <p>{formatDate(r.s.next.dueDate)}</p>
             <p
               className={cn(
-                "text-[11px]",
-                r.s.next.dueDate < today() ? "text-rose-600" : "text-muted-foreground",
+                "text-[12.5px]",
+                r.s.next.dueDate < today() ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground",
               )}
             >
               {relativeDue(r.s.next.dueDate)}
@@ -703,7 +703,7 @@ export function ReminderTable({ rows }: { rows: Reminder[] }) {
           </p>
           {r.status === "Bekliyor" && (
             <p
-              className={cn("text-[11px]", r.date < t ? "text-rose-600" : "text-muted-foreground")}
+              className={cn("text-[12.5px]", r.date < t ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground")}
             >
               {relativeDue(r.date)}
             </p>
@@ -974,7 +974,7 @@ export function LedgerTable({
       export: (e) => e.credit || null,
       cell: (e) =>
         e.credit ? (
-          <Money value={e.credit} className="text-emerald-600 dark:text-emerald-400" />
+          <Money value={e.credit} className="text-emerald-600 dark:text-emerald-400 dark:text-emerald-400" />
         ) : (
           <span className="text-muted-foreground">—</span>
         ),
@@ -992,7 +992,7 @@ export function LedgerTable({
             currency: "TRY",
             maximumFractionDigits: 2,
           })}{" "}
-          <span className="text-[10px] font-medium text-muted-foreground">
+          <span className="text-[12px] font-medium text-muted-foreground">
             {e.balance > 0 ? "(B)" : e.balance < 0 ? "(A)" : ""}
           </span>
         </span>
@@ -1021,7 +1021,7 @@ export function LedgerTable({
           </td>
           <td className="px-4 py-3 text-right">
             <Money value={Math.abs(closing)} />{" "}
-            <span className="text-[10px] text-muted-foreground">
+            <span className="text-[12px] text-muted-foreground">
               {closing > 0 ? "Borçlu" : closing < 0 ? "Alacaklı" : ""}
             </span>
           </td>

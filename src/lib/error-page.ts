@@ -3,10 +3,10 @@ export function renderErrorPage(): string {
 <html lang="tr">
   <head>
     <meta charset="utf-8" />
-    <title>LexKasa</title>
+    <title>Avukat Yönetim Paneli</title>
     <meta name="robots" content="noindex, nofollow" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="application-name" content="LexKasa" />
+    <meta name="application-name" content="Avukat Yönetim Paneli" />
     <style>
       body { font: 15px/1.5 system-ui, -apple-system, sans-serif; background: #f4f6fb; color: #0c1c3f; display: grid; place-items: center; min-height: 100vh; margin: 0; padding: 1.5rem; }
       .card { max-width: 28rem; width: 100%; text-align: center; padding: 2rem; }

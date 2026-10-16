@@ -13,7 +13,7 @@ import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { useQuick } from "@/components/forms/quick";
 
 export const Route = createFileRoute("/borclular/")({
-  head: () => ({ meta: [{ title: "Borçlular — LexKasa" }] }),
+  head: () => ({ meta: [{ title: "Borçlular — Avukat Yönetim Paneli" }] }),
   component: Page,
 });
 
@@ -77,7 +77,7 @@ function Page() {
       sort: (r) => r.s.collected,
       export: (r) => r.s.collected,
       cell: (r) => (
-        <Money value={r.s.collected} className="text-emerald-600 dark:text-emerald-400" />
+        <Money value={r.s.collected} className="text-emerald-600 dark:text-emerald-400 dark:text-emerald-400" />
       ),
     },
     {

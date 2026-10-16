@@ -62,18 +62,18 @@ export function PlanSheet({
               </div>
               <div className="grid grid-cols-3 gap-3 rounded-xl bg-secondary/50 p-3 text-center">
                 <div>
-                  <p className="text-[11px] text-muted-foreground">Toplam</p>
+                  <p className="text-[12.5px] text-muted-foreground">Toplam</p>
                   <Money value={plan.total} className="text-sm font-semibold" />
                 </div>
                 <div>
-                  <p className="text-[11px] text-muted-foreground">Tahsil edilen</p>
+                  <p className="text-[12.5px] text-muted-foreground">Tahsil edilen</p>
                   <Money
                     value={s.paid}
-                    className="text-sm font-semibold text-emerald-600 dark:text-emerald-400"
+                    className="text-sm font-semibold text-emerald-600 dark:text-emerald-400 dark:text-emerald-400"
                   />
                 </div>
                 <div>
-                  <p className="text-[11px] text-muted-foreground">Kalan</p>
+                  <p className="text-[12.5px] text-muted-foreground">Kalan</p>
                   <Money value={s.remaining} className="text-sm font-semibold" />
                 </div>
               </div>
@@ -128,7 +128,7 @@ export function PlanSheet({
                         </span>
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium">{formatDate(inst.dueDate)}</p>
-                          <p className="text-[11px] text-muted-foreground">
+                          <p className="text-[12.5px] text-muted-foreground">
                             {st === "Ödendi" ? "Ödendi" : relativeDue(inst.dueDate)}
                             {installmentPaid(inst) > 0 &&
                               st !== "Ödendi" &&
@@ -138,7 +138,7 @@ export function PlanSheet({
                         <div className="text-right">
                           <Money value={inst.amount} className="text-sm font-semibold" />
                           {rem > 0 && rem < inst.amount && (
-                            <p className="text-[11px] text-muted-foreground">
+                            <p className="text-[12.5px] text-muted-foreground">
                               kalan {rem.toLocaleString("tr-TR")} ₺
                             </p>
                           )}

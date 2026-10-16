@@ -12,7 +12,7 @@ import { StatusBadge } from "@/components/app/StatusBadge";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/bildirimler")({
-  head: () => ({ meta: [{ title: "Bildirimler — LexKasa" }] }),
+  head: () => ({ meta: [{ title: "Bildirimler — Avukat Yönetim Paneli" }] }),
   component: Page,
 });
 
@@ -74,13 +74,13 @@ function Page() {
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-2">
                         <span className={cn("text-sm", !n.read && "font-semibold")}>{n.title}</span>
-                        <StatusBadge tone="slate" dot={false} className="h-5 px-2 text-[10px]">
+                        <StatusBadge tone="slate" dot={false} className="h-5 px-2 text-[12px]">
                           {n.type}
                         </StatusBadge>
                       </span>
                       <span className="mt-0.5 block text-xs text-muted-foreground">{n.detail}</span>
                     </span>
-                    <span className="shrink-0 text-[11px] text-muted-foreground">
+                    <span className="shrink-0 text-[12.5px] text-muted-foreground">
                       {timeAgo(n.createdAt)}
                     </span>
                   </button>

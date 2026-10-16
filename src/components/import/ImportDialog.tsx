@@ -316,7 +316,7 @@ export function ImportDialog({
           <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
             {!fixedKind && (
               <div>
-                <p className="mb-2 text-[13px] font-medium">Ne aktarmak istiyorsunuz?</p>
+                <p className="mb-2 text-[14px] font-medium">Ne aktarmak istiyorsunuz?</p>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                   {allowedKinds.map((k) => (
                     <button
@@ -539,14 +539,14 @@ export function ImportDialog({
                             .map((c) => (
                               <p
                                 key={c.key}
-                                className="mt-1 text-[11px] leading-4 text-destructive"
+                                className="mt-1 text-[12.5px] leading-4 text-destructive"
                               >
                                 <span className="font-medium">{c.header}:</span>{" "}
                                 {r.check.errors[c.key]}
                               </p>
                             ))}
                           {r.problems.map((p) => (
-                            <p key={p} className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                            <p key={p} className="mt-1 text-[12.5px] leading-4 text-muted-foreground">
                               {p}
                             </p>
                           ))}
@@ -582,7 +582,7 @@ export function ImportDialog({
                                 />
                               )}
                               {error && (
-                                <p className="mt-1 max-w-[260px] text-[11px] leading-4 text-destructive">
+                                <p className="mt-1 max-w-[260px] text-[12.5px] leading-4 text-destructive">
                                   {error}
                                 </p>
                               )}
@@ -611,7 +611,7 @@ export function ImportDialog({
                         >
                           {filter === "error" ? (
                             <span className="inline-flex items-center gap-2">
-                              <CheckCircle2 className="h-4 w-4 text-emerald-600" /> Hatalı satır
+                              <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Hatalı satır
                               kalmadı
                             </span>
                           ) : (

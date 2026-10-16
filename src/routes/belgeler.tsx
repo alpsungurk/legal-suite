@@ -10,7 +10,7 @@ import { DocumentTable } from "@/components/lists/tables";
 import { useQuick } from "@/components/forms/quick";
 
 export const Route = createFileRoute("/belgeler")({
-  head: () => ({ meta: [{ title: "Belgeler — LexKasa" }] }),
+  head: () => ({ meta: [{ title: "Belgeler — Avukat Yönetim Paneli" }] }),
   component: Page,
 });
 

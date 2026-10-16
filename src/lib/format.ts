@@ -184,6 +184,10 @@ export function timeAgo(iso: string) {
 
 /* ───────────── Metin ───────────── */
 
+/** E-posta verilmeyen kullanıcılar için sistemin ürettiği iç adres (ekranda gösterilmez) */
+export const isInternalEmail = (email?: string) => !!email && email.endsWith("@panel.local");
+export const displayEmail = (email?: string) => (isInternalEmail(email) ? "" : (email ?? ""));
+
 export function initials(name: string) {
   return name
     .replace(/^Av\.\s*/i, "")

@@ -27,7 +27,7 @@ import { formatMoney, round2, sum, today } from "@/lib/format";
 import { passwordProblem } from "@/lib/auth";
 import { newId } from "@/lib/mappers";
 import { setSentryContext } from "@/lib/sentry";
-import { supabase, supabaseConfigured } from "@/lib/supabase";
+import { setRemember, supabase, supabaseConfigured } from "@/lib/supabase";
 import {
   blankState,
   loadFullState,
@@ -213,11 +213,14 @@ type ErpContextValue = {
   organization: Organization;
   currentUser: User;
   permissions: Permissions;
-  login: (username: string, password: string) => Promise<Result>;
+  login: (username: string, password: string, remember?: boolean) => Promise<Result>;
   logout: () => void;
   registerOrganization: (input: RegisterInput) => Promise<Result>;
   isUsernameAvailable: (username: string, exceptUserId?: string) => boolean;
   changePassword: (current: string, next: string) => Promise<Result>;
+  /** Yönetici geçici şifre verdiyse true: kullanıcı yeni şifre belirleyene kadar panel açılmaz */
+  mustChangePassword: boolean;
+  setFirstPassword: (next: string) => Promise<Result>;
   setUserPassword: (userId: string, next: string) => Promise<Result>;
   requestPasswordReset: (emailOrUsername: string) => Promise<Result>;
   save: <K extends CollectionKey>(key: K, data: Draft<K>, opts?: SaveOptions) => Collections[K];
@@ -285,6 +288,8 @@ export function ErpProvider({ children }: { children: ReactNode }) {
     createdAt: "",
     active: true,
   });
+  const [mustChangePassword, setMustChangePassword] = useState(false);
+  const loginPasswordRef = useRef("");
   const [lastActivity, setLastActivity] = useState(Date.now());
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -305,6 +310,7 @@ export function ErpProvider({ children }: { children: ReactNode }) {
         data: { user },
       } = await supabase.auth.getUser();
       setSessionUserId(user?.id ?? null);
+      setMustChangePassword(user?.user_metadata?.must_change_password === true);
       return loaded;
     } finally {
       setLoading(false);
@@ -337,6 +343,7 @@ export function ErpProvider({ children }: { children: ReactNode }) {
     const { data: sub } = supabase.auth.onAuthStateChange(async (event) => {
       if (event === "SIGNED_OUT") {
         setSessionUserId(null);
+        setMustChangePassword(false);
         setState(emptyState());
         setOrganization({ id: "", name: "", createdAt: "", active: true });
       } else if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "PASSWORD_RECOVERY") {
@@ -584,7 +591,7 @@ export function ErpProvider({ children }: { children: ReactNode }) {
   /* ───────────── Auth ───────────── */
 
   const login = useCallback(
-    async (username: string, password: string): Promise<Result> => {
+    async (username: string, password: string, remember = false): Promise<Result> => {
       if (!username.trim()) return { ok: false, error: "Kullanıcı adı girin" };
       const locked = loginLockSeconds();
       if (locked > 0)
@@ -603,6 +610,8 @@ export function ErpProvider({ children }: { children: ReactNode }) {
           return { ok: false, error: "Kullanıcı adı veya şifre hatalı" };
         }
 
+        setRemember(remember);
+        loginPasswordRef.current = password;
         const { data, error } = await supabase.auth.signInWithPassword({
           email: String(email),
           password,
@@ -622,7 +631,8 @@ export function ErpProvider({ children }: { children: ReactNode }) {
         const profile = loaded?.state.users.find((u) => u.id === data.user!.id);
         if (profile && !profile.active) {
           await supabase.auth.signOut();
-          return { ok: false, error: "Bu hesap devre dışı bırakılmış" };
+          // Pasif hesap, kim olduğunu belli etmeden yanlış bilgi gibi görünür
+          return { ok: false, error: "Kullanıcı adı veya şifre hatalı" };
         }
         if (!loaded?.organization.active) {
           await supabase.auth.signOut();
@@ -637,6 +647,12 @@ export function ErpProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(() => {
+    // Anında çıkış: ekran hemen temizlenir, sunucu oturumu arkadan kapatılır
+    setSessionUserId(null);
+    setMustChangePassword(false);
+    setState(emptyState());
+    setOrganization({ id: "", name: "", createdAt: "", active: true });
+    toast.success("Çıkış yapıldı");
     void supabase.auth.signOut();
   }, []);
 
@@ -740,6 +756,21 @@ export function ErpProvider({ children }: { children: ReactNode }) {
     [currentUser.email],
   );
 
+  const setFirstPassword = useCallback(async (next: string): Promise<Result> => {
+    const problem = passwordProblem(next);
+    if (problem) return { ok: false, error: problem };
+    if (next === loginPasswordRef.current)
+      return { ok: false, error: "Yeni şifre geçici şifreyle aynı olamaz" };
+    const { error } = await supabase.auth.updateUser({
+      password: next,
+      data: { must_change_password: false },
+    });
+    if (error) return { ok: false, error: error.message };
+    loginPasswordRef.current = "";
+    setMustChangePassword(false);
+    return { ok: true };
+  }, []);
+
   const setUserPassword = useCallback(async (userId: string, next: string): Promise<Result> => {
     const problem = passwordProblem(next);
     if (problem) return { ok: false, error: problem };
@@ -753,15 +784,20 @@ export function ErpProvider({ children }: { children: ReactNode }) {
         body: { action: "set_password", userId, password: next },
       });
       if (error) {
-        // Fallback: hedef kullanıcıya reset maili
-        const target = stateRef.current.users.find((u) => u.id === userId);
-        if (!target?.email) return { ok: false, error: error.message };
-        const { error: rErr } = await supabase.auth.resetPasswordForEmail(target.email, {
-          redirectTo: `${window.location.origin}/sifre-sifirla`,
-        });
-        if (rErr) return { ok: false, error: rErr.message };
-        toast.info("Şifre sıfırlama bağlantısı kullanıcının e-postasına gönderildi");
-        return { ok: true };
+        // Fonksiyon 4xx döndüyse asıl mesaj yanıt gövdesindedir
+        let msg = "";
+        const res = (error as { context?: Response }).context;
+        if (res && typeof res.json === "function") {
+          try {
+            msg = String((await res.json())?.error ?? "");
+          } catch {
+            /* yoksay */
+          }
+        }
+        return {
+          ok: false,
+          error: msg || "Şifre sıfırlanamadı. Sunucu fonksiyonu (invite-user) yayında olmayabilir.",
+        };
       }
       if (data?.error) return { ok: false, error: String(data.error) };
       return { ok: true };
@@ -1044,6 +1080,8 @@ export function ErpProvider({ children }: { children: ReactNode }) {
     registerOrganization,
     isUsernameAvailable,
     changePassword,
+    mustChangePassword,
+    setFirstPassword,
     setUserPassword,
     requestPasswordReset,
     save,

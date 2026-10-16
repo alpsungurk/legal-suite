@@ -2,10 +2,11 @@
 import { PGlite } from "@electric-sql/pglite";
 process.on("uncaughtException", (e) => { console.log(R.join("\n")); console.log("\nHATA:", String(e.message).slice(0, 400), e.detail ? "| " + String(e.detail).slice(0, 300) : ""); process.exit(2); });
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 // Migration, gerçek bir PostgreSQL (PGlite) üzerinde çalıştırılıp RLS, izinler ve iş fonksiyonları sınanır.
 // Çalıştırma: npm run test:db
-const MIGRATION = new URL("../migrations/20261012000000_lexkasa_init.sql", import.meta.url).pathname;
+const MIGRATION = fileURLToPath(new URL("../migrations/20261012000000_lexkasa_init.sql", import.meta.url));
 const R = [];
 const ok = (n, c, x = "") => R.push(`${c ? "PASS" : "FAIL"} ${n}${x ? " — " + x : ""}`);
 

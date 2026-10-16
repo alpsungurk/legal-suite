@@ -115,10 +115,10 @@ export function toneTextClass(t: Tone) {
   return {
     neutral: "text-muted-foreground",
     slate: "text-slate-500",
-    blue: "text-blue-600 dark:text-blue-400",
-    green: "text-emerald-600 dark:text-emerald-400",
-    amber: "text-amber-600 dark:text-amber-400",
-    red: "text-rose-600 dark:text-rose-400",
+    blue: "text-blue-600 dark:text-blue-400 dark:text-blue-400",
+    green: "text-emerald-600 dark:text-emerald-400 dark:text-emerald-400",
+    amber: "text-amber-600 dark:text-amber-400 dark:text-amber-400",
+    red: "text-rose-600 dark:text-rose-400 dark:text-rose-400",
     violet: "text-violet-600 dark:text-violet-400",
     cyan: "text-cyan-600 dark:text-cyan-400",
   }[t];
@@ -128,10 +128,10 @@ export function toneSoftClass(t: Tone) {
   return {
     neutral: "bg-secondary text-muted-foreground",
     slate: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
-    blue: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
-    green: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-    amber: "bg-amber-500/12 text-amber-600 dark:text-amber-400",
-    red: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+    blue: "bg-blue-500/10 text-blue-600 dark:text-blue-400 dark:text-blue-400",
+    green: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 dark:text-emerald-400",
+    amber: "bg-amber-500/12 text-amber-600 dark:text-amber-400 dark:text-amber-400",
+    red: "bg-rose-500/10 text-rose-600 dark:text-rose-400 dark:text-rose-400",
     violet: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
     cyan: "bg-cyan-500/10 text-cyan-700 dark:text-cyan-400",
   }[t];

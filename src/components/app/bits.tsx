@@ -21,8 +21,8 @@ export function Money({
     <span
       className={cn(
         "money whitespace-nowrap",
-        colored && value > 0 && "text-emerald-600 dark:text-emerald-400",
-        colored && value < 0 && "text-rose-600 dark:text-rose-400",
+        colored && value > 0 && "text-emerald-600 dark:text-emerald-400 dark:text-emerald-400",
+        colored && value < 0 && "text-rose-600 dark:text-rose-400 dark:text-rose-400",
         className,
       )}
     >
@@ -56,8 +56,8 @@ export function Avatar({
   className?: string;
 }) {
   const sz = {
-    xs: "h-6 w-6 text-[10px]",
-    sm: "h-8 w-8 text-[11px]",
+    xs: "h-6 w-6 text-[12px]",
+    sm: "h-8 w-8 text-[12.5px]",
     md: "h-9 w-9 text-xs",
     lg: "h-12 w-12 text-sm",
   }[size];
@@ -85,7 +85,7 @@ export function AvatarStack({ names, max = 3 }: { names: string[]; max?: number 
         </span>
       ))}
       {names.length > max && (
-        <span className="grid h-6 w-6 place-items-center rounded-full bg-secondary text-[10px] font-semibold ring-2 ring-card">
+        <span className="grid h-6 w-6 place-items-center rounded-full bg-secondary text-[12px] font-semibold ring-2 ring-card">
           +{names.length - max}
         </span>
       )}
@@ -193,7 +193,7 @@ export function TextLink({
 
 export function Kbd({ children }: { children: ReactNode }) {
   return (
-    <kbd className="inline-flex h-5 min-w-5 items-center justify-center rounded border border-border bg-secondary px-1 font-sans text-[10px] font-medium text-muted-foreground">
+    <kbd className="inline-flex h-5 min-w-5 items-center justify-center rounded border border-border bg-secondary px-1 font-sans text-[12px] font-medium text-muted-foreground">
       {children}
     </kbd>
   );

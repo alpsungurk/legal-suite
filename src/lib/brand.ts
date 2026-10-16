@@ -8,8 +8,8 @@
  * Sidebar üstü = Ayarlar’daki büro logosu (FirmMark).
  */
 export const BRAND = {
-  name: "LexKasa",
-  tagline: "Hukuk ön muhasebe ve masraf yönetimi",
+  name: "Avukat Yönetim Paneli",
+  tagline: "Büro, dosya, müvekkil ve finans yönetimi",
   logo: "/brand/logo1.png",
   /** Beyaz zeminli kullanım (loading, açık arka plan) */
   logoLight: "/brand/logo1-light.png",

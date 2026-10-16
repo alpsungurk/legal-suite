@@ -40,7 +40,7 @@ import { CashflowChart } from "@/components/dashboard/widgets";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/raporlar")({
-  head: () => ({ meta: [{ title: "Raporlar — LexKasa" }] }),
+  head: () => ({ meta: [{ title: "Raporlar — Avukat Yönetim Paneli" }] }),
   component: Page,
 });
 
@@ -448,7 +448,7 @@ function Page() {
             <Money value={r.exp} className="text-muted-foreground" />,
             <Money
               value={r.open}
-              className={r.open ? "font-medium text-rose-600" : "text-muted-foreground"}
+              className={r.open ? "font-medium text-rose-600 dark:text-rose-400" : "text-muted-foreground"}
             />,
           ])}
         />
@@ -474,7 +474,7 @@ function Page() {
             <span className="flex items-center gap-2 font-medium">
               {y.year}
               {y.hasArchive && (
-                <StatusBadge tone="slate" dot={false} className="h-5 px-2 text-[10px]">
+                <StatusBadge tone="slate" dot={false} className="h-5 px-2 text-[12px]">
                   arşiv
                 </StatusBadge>
               )}
@@ -501,7 +501,7 @@ function Page() {
               </span>,
               r.openCases,
               `${r.done}/${r.tasks}`,
-              <span className={r.late ? "font-semibold text-rose-600" : "text-muted-foreground"}>
+              <span className={r.late ? "font-semibold text-rose-600 dark:text-rose-400" : "text-muted-foreground"}>
                 {r.late}
               </span>,
               <Money value={r.expenses} className="text-muted-foreground" />,

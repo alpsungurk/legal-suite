@@ -26,7 +26,7 @@ function Page() {
       subtitle={
         <div className="grid grid-cols-2 gap-6">
           <div className="rounded-lg border border-slate-200 p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            <p className="text-[12px] font-semibold uppercase tracking-wider text-slate-500">
               Dosya
             </p>
             <p className="text-sm font-bold">
@@ -35,7 +35,7 @@ function Page() {
             <p className="text-slate-600">{[c.court, c.esasNo].filter(Boolean).join(" · ")}</p>
           </div>
           <div className="rounded-lg border border-slate-200 p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            <p className="text-[12px] font-semibold uppercase tracking-wider text-slate-500">
               Müvekkil
             </p>
             <p className="text-sm font-bold">{client?.name}</p>
@@ -78,7 +78,7 @@ function Page() {
 function Box({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg bg-slate-50 p-3">
-      <p className="text-[10px] uppercase tracking-wider text-slate-500">{label}</p>
+      <p className="text-[12px] uppercase tracking-wider text-slate-500">{label}</p>
       <p className="text-sm font-bold">{value}</p>
     </div>
   );

@@ -30,7 +30,7 @@ import { QuickAddMenu } from "@/components/layout/Topbar";
 import { ContentLoader } from "@/components/app/Loader";
 
 export const Route = createFileRoute("/")({
-  head: () => ({ meta: [{ title: "Gösterge paneli — LexKasa" }] }),
+  head: () => ({ meta: [{ title: "Gösterge paneli — Avukat Yönetim Paneli" }] }),
   component: Dashboard,
 });
 
@@ -210,7 +210,7 @@ function ClientBalances() {
                   <Money value={fin.balance} className="font-semibold" />
                 </div>
                 <ProgressBar value={max ? fin.balance / max : 0} tone="amber" />
-                <p className="mt-1 text-[11px] text-muted-foreground">
+                <p className="mt-1 text-[12.5px] text-muted-foreground">
                   {formatMoney(fin.expenseCharged)} masraf · {formatMoney(fin.feeRemaining)} ücret
                   alacağı
                 </p>

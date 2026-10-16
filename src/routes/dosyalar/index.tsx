@@ -12,7 +12,7 @@ import { useQuick } from "@/components/forms/quick";
 import { addDays, today } from "@/lib/format";
 
 export const Route = createFileRoute("/dosyalar/")({
-  head: () => ({ meta: [{ title: "Dosyalar — LexKasa" }] }),
+  head: () => ({ meta: [{ title: "Dosyalar — Avukat Yönetim Paneli" }] }),
   component: Page,
 });
 

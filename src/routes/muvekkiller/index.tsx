@@ -16,7 +16,7 @@ import type { Client } from "@/lib/erp-types";
 import { formatMoney, sumBy } from "@/lib/format";
 
 export const Route = createFileRoute("/muvekkiller/")({
-  head: () => ({ meta: [{ title: "Müvekkiller — LexKasa" }] }),
+  head: () => ({ meta: [{ title: "Müvekkiller — Avukat Yönetim Paneli" }] }),
   component: Page,
 });
 
@@ -93,7 +93,7 @@ function Page() {
           <div>
             <Money value={r.fin!.feeRemaining} className="font-medium" />
             {r.fin!.feeOverdue > 0 && (
-              <p className="text-[11px] text-rose-600">{formatMoney(r.fin!.feeOverdue)} gecikmiş</p>
+              <p className="text-[12.5px] text-rose-600 dark:text-rose-400">{formatMoney(r.fin!.feeOverdue)} gecikmiş</p>
             )}
           </div>
         ),

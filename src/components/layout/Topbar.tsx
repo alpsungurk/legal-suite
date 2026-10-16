@@ -32,7 +32,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useErp } from "@/lib/erp-store";
-import { timeAgo } from "@/lib/format";
+import { displayEmail, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Avatar, Kbd } from "@/components/app/bits";
 import { useQuick } from "@/components/forms/quick";
@@ -124,7 +124,7 @@ function NotificationsButton() {
         >
           <Bell className="h-[18px] w-[18px]" />
           {unread > 0 && (
-            <span className="absolute right-1 top-1 grid h-4 min-w-4 place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold text-white ring-2 ring-background animate-pop">
+            <span className="absolute right-1 top-1 grid h-4 min-w-4 place-items-center rounded-full bg-rose-500 px-1 text-[12px] font-semibold text-white ring-2 ring-background animate-pop">
               {unread > 9 ? "9+" : unread}
             </span>
           )}
@@ -169,7 +169,7 @@ function NotificationsButton() {
                 <span className="block text-sm font-medium">{n.title}</span>
                 <span className="block truncate text-xs text-muted-foreground">{n.detail}</span>
               </span>
-              <span className="shrink-0 text-[11px] text-muted-foreground">
+              <span className="shrink-0 text-[12.5px] text-muted-foreground">
                 {timeAgo(n.createdAt)}
               </span>
             </button>
@@ -322,7 +322,7 @@ export function Topbar() {
               <span className="min-w-0">
                 <span className="block truncate text-sm">{currentUser.name}</span>
                 <span className="block truncate text-xs font-normal text-muted-foreground">
-                  {currentUser.email}
+                  {displayEmail(currentUser.email) || `@${currentUser.username}`}
                 </span>
               </span>
             </DropdownMenuLabel>

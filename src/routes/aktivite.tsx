@@ -17,7 +17,7 @@ import {
 import type { ActivityLog } from "@/lib/erp-types";
 
 export const Route = createFileRoute("/aktivite")({
-  head: () => ({ meta: [{ title: "Aktivite geçmişi — LexKasa" }] }),
+  head: () => ({ meta: [{ title: "Aktivite geçmişi — Avukat Yönetim Paneli" }] }),
   component: Page,
 });
 
@@ -62,7 +62,7 @@ function Page() {
       cell: (a) => (
         <div className="whitespace-nowrap text-sm">
           <p>{timeAgo(a.createdAt)}</p>
-          <p className="text-[11px] text-muted-foreground">{formatDateTime(a.createdAt)}</p>
+          <p className="text-[12.5px] text-muted-foreground">{formatDateTime(a.createdAt)}</p>
         </div>
       ),
     },
@@ -99,7 +99,7 @@ function Page() {
         <div className="min-w-0 max-w-md">
           <p className="truncate text-sm">{a.detail}</p>
           {a.changes?.length ? (
-            <p className="text-[11px] text-primary">{a.changes.length} alan değişti</p>
+            <p className="text-[12.5px] text-primary">{a.changes.length} alan değişti</p>
           ) : null}
         </div>
       ),
@@ -185,7 +185,7 @@ function Page() {
                           <td className="px-3 py-2 font-medium">
                             {FIELD_LABELS[c.field] ?? c.field}
                           </td>
-                          <td className="px-3 py-2 text-rose-600 line-through decoration-rose-300 dark:text-rose-400">
+                          <td className="px-3 py-2 text-rose-600 dark:text-rose-400 line-through decoration-rose-300 dark:text-rose-400">
                             {c.before}
                           </td>
                           <td className="text-muted-foreground">

@@ -334,10 +334,10 @@ function Page() {
                         className={cn(
                           "grid h-9 w-9 place-items-center rounded-lg",
                           st === "Tutuldu"
-                            ? "bg-emerald-500/10 text-emerald-600"
+                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                             : st === "Gecikmiş" || st === "Tutulmadı"
-                              ? "bg-rose-500/10 text-rose-600"
-                              : "bg-amber-500/12 text-amber-600",
+                              ? "bg-rose-500/10 text-rose-600 dark:text-rose-400"
+                              : "bg-amber-500/12 text-amber-600 dark:text-amber-400",
                         )}
                       >
                         <CalendarCheck className="h-4 w-4" />
@@ -422,7 +422,7 @@ function Page() {
                     </StatusBadge>
                     <Money
                       value={c.amount}
-                      className="font-semibold text-emerald-600 dark:text-emerald-400"
+                      className="font-semibold text-emerald-600 dark:text-emerald-400 dark:text-emerald-400"
                     />
                     {can && (
                       <span className="flex opacity-0 transition-opacity group-hover:opacity-100">

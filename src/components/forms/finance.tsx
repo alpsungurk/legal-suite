@@ -199,7 +199,7 @@ export function ExpenseForm({ open, onOpenChange, record, preset, onSaved }: For
       {(v, set) => (
         <div className="space-y-4">
           <div>
-            <p className="mb-2 text-[13px] font-medium">Makbuz / belge</p>
+            <p className="mb-2 text-[14px] font-medium">Makbuz / belge</p>
             <AttachmentList
               files={v.receipts ?? []}
               onChange={(files) => set({ receipts: files })}
@@ -439,7 +439,7 @@ export function PlanForm({ open, onOpenChange, record, preset, onSaved }: FormPr
           <div className="space-y-4">
             <div className="overflow-hidden rounded-xl border border-border/80">
               <div className="flex items-center justify-between border-b border-border/60 bg-muted/40 px-4 py-2.5">
-                <p className="text-[13px] font-semibold">Taksit tablosu</p>
+                <p className="text-[14px] font-semibold">Taksit tablosu</p>
                 <p
                   className={cn(
                     "text-xs font-medium",
@@ -470,7 +470,7 @@ export function PlanForm({ open, onOpenChange, record, preset, onSaved }: FormPr
                       <MoneyInput value={r.amount} onChange={(n) => update(i, { amount: n })} />
                       <span className="hidden text-xs text-muted-foreground sm:block">
                         {paid > 0 && (
-                          <span className="text-emerald-600">Ödenen {formatMoney(paid)}</span>
+                          <span className="text-emerald-600 dark:text-emerald-400">Ödenen {formatMoney(paid)}</span>
                         )}
                       </span>
                       <Button
@@ -538,7 +538,7 @@ export function PlanForm({ open, onOpenChange, record, preset, onSaved }: FormPr
                 {v.payNow && (
                   <div className="space-y-3 animate-fade-up">
                     <div>
-                      <p className="mb-1.5 text-[13px] font-medium">Ne kadar alındı?</p>
+                      <p className="mb-1.5 text-[14px] font-medium">Ne kadar alındı?</p>
                       <MoneyInput
                         value={Number(v.paidAmount ?? rows[0]?.amount) || 0}
                         onChange={(n) => set({ paidAmount: n })}

@@ -233,7 +233,7 @@ export function CaseForm({ open, onOpenChange, record, preset, onSaved }: FormPr
 /* ───────────── Kullanıcı ───────────── */
 
 export function UserForm({ open, onOpenChange, record, preset, onSaved }: FormProps<User>) {
-  const { save, setUserPassword, isUsernameAvailable, reloadFromServer } = useErp();
+  const { save, isUsernameAvailable, reloadFromServer } = useErp();
   const fields: FormField[] = [
     { name: "name", label: "Ad soyad", required: true, span: 2, autoFocus: !record },
     { name: "role", label: "Rol", type: "select", options: [...USER_ROLES], required: true },
@@ -243,24 +243,38 @@ export function UserForm({ open, onOpenChange, record, preset, onSaved }: FormPr
       placeholder: "Örn. Avukat",
     },
     { name: "username", label: "Kullanıcı adı", required: true },
-    { name: "email", label: "E-posta", type: "email", required: true },
+    // Giriş e-postası hesap kimliğidir; sonradan değiştirilirse giriş bozulur, bu yüzden yalnızca eklerken girilir
+    ...(record
+      ? []
+      : ([
+          {
+            name: "email",
+            label: "E-posta",
+            type: "email",
+            required: true,
+            hint: "Giriş hesabı bu e-postayla oluşturulur; kullanıcı kullanıcı adı veya e-postasıyla giriş yapar",
+          },
+        ] as FormField[])),
     { name: "phone", label: "Telefon", type: "tel" },
-    {
-      name: "password",
-      label: record ? "Yeni şifre (opsiyonel)" : "Geçici şifre (opsiyonel)",
-      type: "text",
-      required: false,
-      hint: record
-        ? "Doldurursanız şifre güncellenir (en az 8 karakter)"
-        : "Boş bırakılırsa davet e-postası gider; doldurulursa geçici şifre atanır",
-    },
+    // Şifre yalnızca eklerken verilir; sonradan şifreyi kullanıcı kendi profilinden değiştirir
+    ...(record
+      ? []
+      : ([
+          {
+            name: "password",
+            label: "Geçici şifre",
+            type: "text",
+            required: true,
+            hint: "En az 8 karakter. Kullanıcı ilk girişte kendi şifresini belirlemek zorundadır",
+          },
+        ] as FormField[])),
     { name: "active", label: "Hesap aktif", type: "switch" },
   ];
   return (
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={record ? "Kullanıcıyı düzenle" : "Kullanıcı davet et"}
+      title={record ? "Kullanıcıyı düzenle" : "Kullanıcı ekle"}
       fields={fields}
       initial={{ role: "Avukat", active: true, ...preset, ...record, password: "" }}
       validate={(v) => {
@@ -285,20 +299,13 @@ export function UserForm({ open, onOpenChange, record, preset, onSaved }: FormPr
             role: v.role,
             title: v.title || undefined,
             username: v.username.trim().toLocaleLowerCase("tr"),
-            email: v.email.trim(),
+            email: record.email,
             phone: v.phone || undefined,
             active: !!v.active,
             passwordHash: "",
             passwordSalt: "",
             permissions: record.permissions,
           });
-          if (v.password) {
-            const r = await setUserPassword(record.id, String(v.password));
-            if (!r.ok) {
-              toast.error(r.error);
-              return;
-            }
-          }
           toast.success("Kullanıcı güncellendi");
           onSaved?.(item);
           return;
@@ -309,7 +316,7 @@ export function UserForm({ open, onOpenChange, record, preset, onSaved }: FormPr
             action: "invite",
             name: v.name.trim(),
             username: v.username.trim().toLocaleLowerCase("tr"),
-            email: v.email.trim(),
+            email: String(v.email ?? "").trim(),
             phone: v.phone || null,
             title: v.title || null,
             role: v.role === "Admin" ? "admin" : "avukat",
@@ -317,15 +324,23 @@ export function UserForm({ open, onOpenChange, record, preset, onSaved }: FormPr
           },
         });
         if (error || data?.error) {
-          toast.error(error?.message || String(data?.error) || "Davet başarısız");
+          let msg = data?.error ? String(data.error) : "";
+          // Fonksiyon 4xx/5xx döndüyse asıl mesaj yanıt gövdesindedir
+          const res = (error as { context?: Response } | null)?.context;
+          if (!msg && res && typeof res.json === "function") {
+            try {
+              msg = String((await res.json())?.error ?? "");
+            } catch {
+              /* yoksay */
+            }
+          }
+          toast.error(
+            msg || "Kullanıcı eklenemedi. Sunucu fonksiyonu (invite-user) yayında olmayabilir.",
+          );
           return;
         }
         await reloadFromServer();
-        toast.success(
-          v.password
-            ? "Kullanıcı oluşturuldu"
-            : "Davet e-postası gönderildi",
-        );
+        toast.success("Kullanıcı oluşturuldu; ilk girişte şifresini kendisi belirleyecek");
         onSaved?.(data?.user as User);
       }}
     />

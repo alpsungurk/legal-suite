@@ -6,7 +6,6 @@ import {
   EyeOff,
   FileStack,
   LockKeyhole,
-  Mail,
   Scale,
   ShieldCheck,
   UserRound,
@@ -15,13 +14,14 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useErp } from "@/lib/erp-store";
 import { Spinner } from "@/components/app/Loader";
 import { BrandImg } from "@/components/app/Brand";
 import { BRAND } from "@/lib/brand";
+import { ThemeMenu } from "@/components/layout/Topbar";
 
 type Search = { yonlendir?: string };
-type Mode = "login" | "forgot";
 
 /** Giriş sonrası dönülecek adres; yalnızca uygulama içi yollara izin verilir. */
 const safeTarget = (v?: string) =>
@@ -33,7 +33,7 @@ export const Route = createFileRoute("/giris")({
   }),
   head: () => ({
     meta: [
-      { title: "Giriş — LexKasa" },
+      { title: "Giriş — Avukat Yönetim Paneli" },
       { name: "robots", content: "noindex, nofollow, noarchive, nosnippet" },
     ],
   }),
@@ -43,14 +43,12 @@ export const Route = createFileRoute("/giris")({
 function Login() {
   const navigate = useNavigate();
   const { yonlendir } = Route.useSearch();
-  const { login, requestPasswordReset } = useErp();
-  const [mode, setMode] = useState<Mode>("login");
+  const { login } = useErp();
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [forgotId, setForgotId] = useState("");
-  const [error, setError] = useState("");
+  const [remember, setRemember] = useState(false);
 
   useEffect(() => {
     const id = "lex-login-fonts";
@@ -65,10 +63,9 @@ function Login() {
 
   const signIn = async () => {
     setLoading(true);
-    setError("");
-    const result = await login(username, password);
+    const result = await login(username, password, remember);
     if (!result.ok) {
-      setError(result.error);
+      toast.error(result.error);
       setLoading(false);
       return;
     }
@@ -76,30 +73,14 @@ function Login() {
     void navigate({ href: safeTarget(yonlendir) });
   };
 
-  const sendReset = async () => {
-    setLoading(true);
-    setError("");
-    const result = await requestPasswordReset(forgotId);
-    setLoading(false);
-    if (!result.ok) {
-      setError(result.error);
-      return;
-    }
-    toast.success("Şifre sıfırlama bağlantısı e-posta adresinize gönderildi");
-    setMode("login");
-  };
-
   const inputClass =
-    "h-12 rounded-xl border-slate-200/90 bg-white pl-10 text-slate-900 shadow-soft transition-all focus-visible:border-[#1e3a8a]/40 focus-visible:ring-[#1e3a8a]/15";
+    "h-12 rounded-xl border-slate-200/90 bg-white pl-10 text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 shadow-soft transition-all focus-visible:border-[#1e3a8a]/40 focus-visible:ring-[#1e3a8a]/15";
 
   return (
-    <div className="relative grid min-h-screen overflow-hidden bg-[#f4f6fb] lg:grid-cols-[1.05fr_0.95fr]">
+    <div className="relative grid min-h-screen overflow-hidden bg-[#f4f6fb] dark:bg-slate-950 lg:grid-cols-[1.05fr_0.95fr]">
       <section
-        className="relative hidden overflow-hidden lg:flex lg:flex-col"
-        style={{
-          fontFamily: "Manrope, sans-serif",
-          background: "linear-gradient(165deg, #b9dcf0 0%, #cfe8f6 38%, #e3f3fb 68%, #eef8fc 100%)",
-        }}
+        className="relative hidden overflow-hidden bg-[linear-gradient(165deg,#b9dcf0_0%,#cfe8f6_38%,#e3f3fb_68%,#eef8fc_100%)] dark:bg-none dark:bg-slate-900 lg:flex lg:flex-col"
+        style={{ fontFamily: "Manrope, sans-serif" }}
       >
         <div className="pointer-events-none absolute -left-24 -top-16 h-80 w-80 rounded-full bg-[#8ec8e4]/45 blur-3xl" />
         <div className="pointer-events-none absolute -right-16 bottom-8 h-96 w-96 rounded-full bg-[#7eb8d4]/35 blur-3xl" />
@@ -111,16 +92,16 @@ function Login() {
           </div>
 
           <div className="my-auto max-w-lg">
-            <p className="animate-in fade-in-0 slide-in-from-bottom-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#1a4a6a]/70 duration-500 [animation-delay:60ms]">
-              LexKasa
+            <p className="animate-in fade-in-0 slide-in-from-bottom-2 text-[12.5px] font-semibold uppercase tracking-[0.18em] text-[#1a4a6a]/70 dark:text-slate-400 duration-500 [animation-delay:60ms]">
+              Avukat Yönetim Paneli
             </p>
             <h2
-              className="mt-2 animate-in fade-in-0 slide-in-from-bottom-4 text-[clamp(1.85rem,3.2vw,2.35rem)] font-bold leading-[1.15] tracking-[-0.03em] text-[#0c1c3f] duration-700 [animation-delay:90ms]"
+              className="mt-2 animate-in fade-in-0 slide-in-from-bottom-4 text-[clamp(1.85rem,3.2vw,2.35rem)] font-bold leading-[1.15] tracking-[-0.03em] text-[#0c1c3f] dark:text-slate-100 duration-700 [animation-delay:90ms]"
               style={{ fontFamily: '"Libre Baskerville", Georgia, serif' }}
             >
               Büronuzun ön muhasebesi tek yerde
             </h2>
-            <p className="mt-4 max-w-md animate-in fade-in-0 slide-in-from-bottom-4 text-[15px] leading-7 text-[#0f2a45]/80 duration-700 [animation-delay:130ms]">
+            <p className="mt-4 max-w-md animate-in fade-in-0 slide-in-from-bottom-4 text-[15px] leading-7 text-[#0f2a45]/80 dark:text-slate-300 duration-700 [animation-delay:130ms]">
               {BRAND.tagline}. Dosya, müvekkil, tahsilat ve masraflarınızı düzenli tutun; yetkili
               ekibiniz güvenle çalışsın.
             </p>
@@ -156,17 +137,17 @@ function Login() {
               ).map(([Icon, title, desc, delay]) => (
                 <li
                   key={title}
-                  className="group flex animate-in fade-in-0 slide-in-from-bottom-2 gap-3.5 rounded-2xl border border-white/60 bg-white/55 px-3.5 py-3 shadow-[0_6px_20px_-12px_rgba(20,60,100,0.22)] backdrop-blur-sm duration-500 transition-all hover:-translate-y-0.5 hover:bg-white/80 hover:shadow-[0_12px_28px_-14px_rgba(20,60,100,0.3)]"
+                  className="group flex animate-in fade-in-0 slide-in-from-bottom-2 gap-3.5 rounded-2xl border border-white/60 bg-white/55 dark:border-slate-700 dark:bg-slate-800/60 px-3.5 py-3 shadow-[0_6px_20px_-12px_rgba(20,60,100,0.22)] backdrop-blur-sm duration-500 transition-all hover:-translate-y-0.5 hover:bg-white/80 dark:hover:bg-slate-800 hover:shadow-[0_12px_28px_-14px_rgba(20,60,100,0.3)]"
                   style={{ animationDelay: delay }}
                 >
-                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-white to-[#d6eef8] text-[#143064] shadow-sm ring-1 ring-[#7eb8d4]/35 transition-transform duration-300 group-hover:scale-105">
+                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-white to-[#d6eef8] text-[#143064] dark:from-slate-700 dark:to-slate-800 dark:text-slate-100 shadow-sm ring-1 ring-[#7eb8d4]/35 transition-transform duration-300 group-hover:scale-105">
                     <Icon className="h-[18px] w-[18px]" strokeWidth={2.1} />
                   </span>
                   <span className="min-w-0 pt-0.5">
-                    <span className="block text-[14px] font-semibold tracking-[-0.01em] text-[#0c1c3f]">
+                    <span className="block text-[14px] font-semibold tracking-[-0.01em] text-[#0c1c3f] dark:text-slate-100">
                       {title}
                     </span>
-                    <span className="mt-0.5 block text-[12.5px] leading-5 text-[#0f2a45]/72">
+                    <span className="mt-0.5 block text-[12.5px] leading-5 text-[#0f2a45]/72 dark:text-slate-400">
                       {desc}
                     </span>
                   </span>
@@ -175,7 +156,7 @@ function Login() {
             </ul>
           </div>
 
-          <p className="animate-in fade-in-0 text-[11px] font-medium uppercase tracking-[0.16em] text-[#1a4a6a]/50 duration-500 [animation-delay:220ms]">
+          <p className="animate-in fade-in-0 text-[12.5px] font-medium uppercase tracking-[0.16em] text-[#1a4a6a]/50 dark:text-slate-500 duration-500 [animation-delay:220ms]">
             © {new Date().getFullYear()} {BRAND.name}
           </p>
         </div>
@@ -186,71 +167,26 @@ function Login() {
         style={{ fontFamily: "Manrope, sans-serif" }}
       >
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(30,58,138,0.06),transparent_55%)]" />
+        <div className="absolute right-4 top-4">
+          <ThemeMenu />
+        </div>
 
         <div className="relative mx-auto w-full max-w-[420px]">
-          <div className="mb-8 w-fit overflow-hidden rounded-2xl bg-[#e3f3fb] px-2.5 py-1.5 ring-1 ring-[#9fd0ea]/40 lg:hidden">
+          <div className="mb-8 w-fit overflow-hidden rounded-2xl bg-[#e3f3fb] px-2.5 py-1.5 ring-1 ring-[#9fd0ea]/40 dark:bg-slate-800 dark:ring-slate-700 lg:hidden">
             <BrandImg variant="horizontal" className="h-9 w-auto max-w-[220px]" />
           </div>
 
           <h2
-            className="text-[1.85rem] font-bold tracking-[-0.03em] text-[#0c1c3f] sm:text-[2.1rem]"
+            className="text-[1.85rem] font-bold tracking-[-0.03em] text-[#0c1c3f] dark:text-slate-100 sm:text-[2.1rem]"
             style={{ fontFamily: '"Libre Baskerville", Georgia, serif' }}
           >
-            {mode === "login" ? "Giriş yapın" : "Şifrenizi sıfırlayın"}
+            Giriş yapın
           </h2>
-          <p className="mt-2 text-sm leading-6 text-slate-500">
-            {mode === "login"
-              ? "Size verilen kullanıcı adı ve şifre ile panele giriş yapın."
-              : "Kullanıcı adı veya e-posta adresinize sıfırlama bağlantısı gönderilir."}
+          <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
+            Size verilen kullanıcı adı ve şifre ile panele giriş yapın.
           </p>
 
-          {mode === "forgot" ? (
-            <form
-              className="mt-8 space-y-4"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void sendReset();
-              }}
-            >
-              <label className="grid gap-2 text-[13px] font-semibold text-slate-700">
-                Kullanıcı adı veya e-posta
-                <div className="group relative">
-                  <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-[#1e3a8a]" />
-                  <Input
-                    required
-                    value={forgotId}
-                    onChange={(e) => setForgotId(e.target.value)}
-                    autoComplete="username"
-                    className={inputClass}
-                  />
-                </div>
-              </label>
-              {error && (
-                <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
-                  {error}
-                </p>
-              )}
-              <Button
-                type="submit"
-                size="lg"
-                disabled={loading}
-                loading={loading}
-                className="h-12 w-full rounded-xl bg-[#143064] text-[15px] font-semibold hover:bg-[#0f2550]"
-              >
-                Sıfırlama bağlantısı gönder
-              </Button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMode("login");
-                  setError("");
-                }}
-                className="w-full text-center text-sm font-semibold text-[#1e3a8a]"
-              >
-                Girişe dön
-              </button>
-            </form>
-          ) : (
+          {(
             <form
               className="mt-8 space-y-4"
               onSubmit={(e) => {
@@ -258,8 +194,8 @@ function Login() {
                 void signIn();
               }}
             >
-              <label className="grid gap-2 text-[13px] font-semibold text-slate-700">
-                Kullanıcı adı
+              <label className="grid gap-2 text-[14px] font-semibold text-slate-700 dark:text-slate-200">
+                Kullanıcı adı veya e-posta
                 <div className="group relative">
                   <UserRound className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-[#1e3a8a]" />
                   <Input
@@ -272,7 +208,7 @@ function Login() {
                 </div>
               </label>
 
-              <label className="grid gap-2 text-[13px] font-semibold text-slate-700">
+              <label className="grid gap-2 text-[14px] font-semibold text-slate-700 dark:text-slate-200">
                 Şifre
                 <div className="group relative">
                   <LockKeyhole className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-[#1e3a8a]" />
@@ -282,7 +218,7 @@ function Login() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     autoComplete="current-password"
-                    className="h-12 rounded-xl border-slate-200/90 bg-white pl-10 pr-11 text-slate-900 shadow-soft transition-all focus-visible:border-[#1e3a8a]/40 focus-visible:ring-[#1e3a8a]/15"
+                    className="h-12 rounded-xl border-slate-200/90 bg-white pl-10 pr-11 text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 shadow-soft transition-all focus-visible:border-[#1e3a8a]/40 focus-visible:ring-[#1e3a8a]/15"
                   />
                   <button
                     type="button"
@@ -295,21 +231,18 @@ function Login() {
                 </div>
               </label>
 
-              {error && (
-                <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
-                  {error}
-                </p>
-              )}
 
-              <div className="flex items-center justify-end pt-1 text-sm">
+              <div className="flex items-center justify-between pt-1 text-sm">
+                <label className="flex cursor-pointer items-center gap-2 font-medium text-slate-600 dark:text-slate-300">
+                  <Checkbox checked={remember} onCheckedChange={(v) => setRemember(v === true)} />
+                  Beni hatırla
+                </label>
                 <button
                   type="button"
                   onClick={() => {
-                    setForgotId(username);
-                    setMode("forgot");
-                    setError("");
+                    toast.info("Şifre sıfırlama yakında eklenecek");
                   }}
-                  className="font-semibold text-[#1e3a8a] transition-opacity hover:opacity-70"
+                  className="font-semibold text-[#1e3a8a] transition-opacity dark:text-sky-300 hover:opacity-70"
                 >
                   Şifremi unuttum
                 </button>
@@ -319,7 +252,7 @@ function Login() {
                 type="submit"
                 size="lg"
                 disabled={loading}
-                className="h-12 w-full rounded-xl bg-[#143064] text-[15px] font-semibold shadow-[0_14px_28px_-12px_rgba(20,48,100,0.55)] transition-all hover:bg-[#0f2550]"
+                className="h-12 w-full rounded-xl bg-[#143064] text-[15px] text-white font-semibold shadow-[0_14px_28px_-12px_rgba(20,48,100,0.55)] transition-all hover:bg-[#0f2550]"
               >
                 {loading ? (
                   <span className="inline-flex items-center gap-2">

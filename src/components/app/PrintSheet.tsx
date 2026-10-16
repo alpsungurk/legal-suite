@@ -48,17 +48,17 @@ export function PrintSheet({
             )}
             <div>
               <p className="text-base font-bold text-[#143064]">{firm.legalName || firm.name}</p>
-              <p className="text-[11px] text-slate-500">{firm.address}</p>
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[12.5px] text-slate-500">{firm.address}</p>
+              <p className="text-[12.5px] text-slate-500">
                 {[firm.phone, firm.email].filter(Boolean).join(" · ")}
               </p>
             </div>
           </div>
           <div className="text-right">
             <p className="text-lg font-bold uppercase tracking-wide text-[#143064]">{title}</p>
-            <p className="text-[11px] text-slate-500">Düzenleme: {formatDateLong(today())}</p>
+            <p className="text-[12.5px] text-slate-500">Düzenleme: {formatDateLong(today())}</p>
             {firm.taxNo && (
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[12.5px] text-slate-500">
                 {firm.taxOffice} V.D. · {firm.taxNo}
               </p>
             )}
@@ -66,7 +66,7 @@ export function PrintSheet({
         </header>
         {subtitle && <div className="mt-5">{subtitle}</div>}
         <div className="mt-5">{children}</div>
-        <footer className="avoid-break mt-10 grid grid-cols-2 gap-8 border-t border-slate-200 pt-5 text-[11px] text-slate-600">
+        <footer className="avoid-break mt-10 grid grid-cols-2 gap-8 border-t border-slate-200 pt-5 text-[12.5px] text-slate-600">
           <div>
             {firm.iban && (
               <>
@@ -104,7 +104,7 @@ export function PrintTable({
   const a = (i: number) =>
     (align?.[i] ?? (i === 0 ? "left" : "left")) === "right" ? "text-right" : "text-left";
   return (
-    <table className="w-full border-collapse text-[11.5px]">
+    <table className="w-full border-collapse text-[12.5px]">
       <thead>
         <tr className="bg-[#143064] text-white">
           {head.map((h, i) => (

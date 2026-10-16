@@ -490,7 +490,7 @@ export function DebtorPlanForm({
         return (
           <div className="overflow-hidden rounded-xl border border-border/80">
             <div className="flex items-center justify-between border-b border-border/60 bg-muted/40 px-4 py-2.5">
-              <p className="text-[13px] font-semibold">Taksit tablosu</p>
+              <p className="text-[14px] font-semibold">Taksit tablosu</p>
               <p
                 className={cn(
                   "text-xs font-medium",

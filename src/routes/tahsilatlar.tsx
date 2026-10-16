@@ -60,7 +60,7 @@ export const Route = createFileRoute("/tahsilatlar")({
   validateSearch: (s: Record<string, unknown>): Search => ({
     sekme: typeof s.sekme === "string" ? s.sekme : undefined,
   }),
-  head: () => ({ meta: [{ title: "Tahsilatlar — LexKasa" }] }),
+  head: () => ({ meta: [{ title: "Tahsilatlar — Avukat Yönetim Paneli" }] }),
   component: Page,
 });
 
@@ -231,7 +231,7 @@ function PendingTab({
           <span
             className={cn(
               "hidden text-xs sm:inline",
-              r.status === "Gecikmiş" ? "font-medium text-rose-600" : "text-muted-foreground",
+              r.status === "Gecikmiş" ? "font-medium text-rose-600 dark:text-rose-400" : "text-muted-foreground",
             )}
           >
             {relativeDue(r.inst.dueDate)}
@@ -276,7 +276,7 @@ function PendingTab({
         <div>
           <Money value={r.remaining} className="font-semibold" />
           {r.paid > 0 && (
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-[12.5px] text-muted-foreground">
               {formatMoney(r.inst.amount)} taksitten
             </p>
           )}
@@ -414,7 +414,7 @@ function PaidTab({ rows, onOpenPlan }: { rows: PaidRow[]; onOpenPlan: (id: strin
       cell: (r) => (
         <Money
           value={r.pay.amount}
-          className="font-semibold text-emerald-600 dark:text-emerald-400"
+          className="font-semibold text-emerald-600 dark:text-emerald-400 dark:text-emerald-400"
         />
       ),
     },

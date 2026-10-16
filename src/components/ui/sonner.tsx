@@ -1,10 +1,27 @@
+import { useEffect, useState } from "react";
 import { Toaster as Sonner } from "sonner";
 
 type ToasterProps = React.ComponentProps<typeof Sonner>;
 
+/** Toast temasını uygulamanın seçili temasına (html.dark) bağlar, işletim sistemine değil */
+function useAppTheme(): "light" | "dark" {
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+  useEffect(() => {
+    const root = document.documentElement;
+    const sync = () => setTheme(root.classList.contains("dark") ? "dark" : "light");
+    sync();
+    const obs = new MutationObserver(sync);
+    obs.observe(root, { attributes: true, attributeFilter: ["class"] });
+    return () => obs.disconnect();
+  }, []);
+  return theme;
+}
+
 const Toaster = ({ ...props }: ToasterProps) => {
+  const theme = useAppTheme();
   return (
     <Sonner
+      theme={theme}
       className="toaster group"
       toastOptions={{
         classNames: {

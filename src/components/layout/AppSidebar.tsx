@@ -75,7 +75,7 @@ export function AppSidebar() {
               <span className="truncate text-sm font-semibold text-sidebar-foreground">
                 {state.settings.firm.name}
               </span>
-              <span className="truncate text-[11px] text-sidebar-foreground/55">Büro paneli</span>
+              <span className="truncate text-[12.5px] text-sidebar-foreground/55">Büro paneli</span>
             </div>
           )}
         </Link>
@@ -85,7 +85,7 @@ export function AppSidebar() {
         {groups.map((g) => (
           <SidebarGroup key={g.label} className="py-1">
             {!collapsed && (
-              <SidebarGroupLabel className="h-7 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/40">
+              <SidebarGroupLabel className="h-7 text-[12px] font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/40">
                 {g.label}
               </SidebarGroupLabel>
             )}
@@ -114,8 +114,8 @@ export function AppSidebar() {
                         <SidebarMenuBadge
                           className={
                             item.badgeTone === "red"
-                              ? "rounded-full bg-rose-500 px-1.5 text-[10px] font-semibold text-white peer-data-[active=true]/menu-button:bg-white peer-data-[active=true]/menu-button:text-rose-600"
-                              : "rounded-full bg-sidebar-accent px-1.5 text-[10px] font-semibold text-sidebar-foreground"
+                              ? "rounded-full bg-rose-500 px-1.5 text-[12px] font-semibold text-white peer-data-[active=true]/menu-button:bg-white peer-data-[active=true]/menu-button:text-rose-600 dark:text-rose-400"
+                              : "rounded-full bg-sidebar-accent px-1.5 text-[12px] font-semibold text-sidebar-foreground"
                           }
                         >
                           {item.badge}

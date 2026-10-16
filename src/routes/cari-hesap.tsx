@@ -11,7 +11,7 @@ import { StatusBadge } from "@/components/app/StatusBadge";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 
 export const Route = createFileRoute("/cari-hesap")({
-  head: () => ({ meta: [{ title: "Cari hesap — LexKasa" }] }),
+  head: () => ({ meta: [{ title: "Cari hesap — Avukat Yönetim Paneli" }] }),
   component: Page,
 });
 
@@ -69,7 +69,7 @@ function Page() {
       hideBelow: "md",
       sort: (r) => r.credit,
       export: (r) => r.credit,
-      cell: (r) => <Money value={r.credit} className="text-emerald-600 dark:text-emerald-400" />,
+      cell: (r) => <Money value={r.credit} className="text-emerald-600 dark:text-emerald-400 dark:text-emerald-400" />,
     },
     {
       id: "exp",

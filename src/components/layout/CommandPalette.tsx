@@ -109,7 +109,7 @@ export function CommandPalette() {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="top-[18%] translate-y-0 overflow-hidden p-0 sm:max-w-xl [&>button:last-child]:hidden">
         <DialogTitle className="sr-only">Hızlı arama</DialogTitle>
-        <Command className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:pb-1.5 [&_[cmdk-group-heading]]:pt-3 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-item]]:gap-3 [&_[cmdk-item]]:rounded-lg [&_[cmdk-item]]:px-3 [&_[cmdk-item]]:py-2.5 [&_[cmdk-item][data-selected=true]]:bg-secondary">
+        <Command className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:pb-1.5 [&_[cmdk-group-heading]]:pt-3 [&_[cmdk-group-heading]]:text-[12.5px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-item]]:gap-3 [&_[cmdk-item]]:rounded-lg [&_[cmdk-item]]:px-3 [&_[cmdk-item]]:py-2.5 [&_[cmdk-item][data-selected=true]]:bg-secondary">
           <CommandInput
             placeholder="Müvekkil, dosya, borçlu ara ya da bir işlem seç..."
             className="h-14 text-[15px]"
@@ -198,7 +198,7 @@ export function CommandPalette() {
               ))}
             </CommandGroup>
           </CommandList>
-          <div className="flex items-center gap-4 border-t border-border/60 bg-muted/30 px-4 py-2 text-[11px] text-muted-foreground">
+          <div className="flex items-center gap-4 border-t border-border/60 bg-muted/30 px-4 py-2 text-[12.5px] text-muted-foreground">
             <span className="flex items-center gap-1">
               <CornerDownLeft className="h-3 w-3" /> seç
             </span>

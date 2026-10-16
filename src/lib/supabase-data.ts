@@ -436,8 +436,15 @@ export async function persistRemove(key: CollectionKey, ids: string[]): Promise<
 export async function persistSettings(orgId: string, patch: Partial<Settings>): Promise<void> {
   const row = settingsToRow(patch);
   if (!Object.keys(row).length) return;
-  const { error } = await supabase.from("org_settings").upsert({ org_id: orgId, ...row });
+  // upsert değil update: org_settings satırı büro kurulurken oluşur ve tabloda yalnızca
+  // select/update politikası vardır (insert politikası olmadığı için upsert RLS'e takılırdı).
+  const { data, error } = await supabase
+    .from("org_settings")
+    .update(row)
+    .eq("org_id", orgId)
+    .select("org_id");
   if (error) throw new Error(errMsg(error));
+  if (!data?.length) throw new Error("Ayarlar kaydedilemedi: yönetici yetkisi gerekli veya ayar satırı yok");
 }
 
 export async function persistOrgName(orgId: string, name: string): Promise<void> {

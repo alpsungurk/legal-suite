@@ -26,7 +26,7 @@ import type { EnforcementFile } from "@/lib/erp-types";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/icra/")({
-  head: () => ({ meta: [{ title: "İcra dosyaları — LexKasa" }] }),
+  head: () => ({ meta: [{ title: "İcra dosyaları — Avukat Yönetim Paneli" }] }),
   component: Page,
 });
 
@@ -74,7 +74,7 @@ function Page() {
       sort: (r) => r.s.progress,
       cell: (r) => (
         <div className="w-40">
-          <div className="mb-1 flex justify-between text-[11px] text-muted-foreground">
+          <div className="mb-1 flex justify-between text-[12.5px] text-muted-foreground">
             <span>{formatMoney(r.s.collected)}</span>
             <span>%{Math.round(r.s.progress * 100)}</span>
           </div>
@@ -93,8 +93,8 @@ function Page() {
             <Money value={r.s.nextPromise.amount} className="font-medium" />
             <p
               className={cn(
-                "text-[11px]",
-                r.s.overduePromises ? "text-rose-600" : "text-muted-foreground",
+                "text-[12.5px]",
+                r.s.overduePromises ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground",
               )}
             >
               {relativeDue(r.s.nextPromise.dueDate)}

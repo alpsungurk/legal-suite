@@ -59,7 +59,11 @@ Deno.serve(async (req) => {
       if (!target || target.org_id !== caller.org_id) {
         return json({ error: "Kullanıcı bulunamadı" }, 404);
       }
-      const { error } = await admin.auth.admin.updateUserById(userId, { password });
+      // Yönetici başkasına şifre verdiyse kullanıcı bir sonraki girişte kendisi yenisini belirler
+      const { error } = await admin.auth.admin.updateUserById(userId, {
+        password,
+        user_metadata: { must_change_password: userId !== user.id },
+      });
       if (error) return json({ error: error.message }, 400);
       return json({ ok: true });
     }
@@ -76,25 +80,36 @@ Deno.serve(async (req) => {
     const password = body.password ? String(body.password) : null;
 
     if (!name || !username || !email) return json({ error: "Eksik alan" }, 400);
+    if (!/^\S+@\S+\.\S+$/.test(email)) return json({ error: "Geçerli bir e-posta girin" }, 400);
     if (!/^[a-z0-9çğıöşü._-]{3,}$/.test(username)) {
       return json({ error: "Geçersiz kullanıcı adı" }, 400);
     }
 
-    let userId: string;
-
-    if (password && password.length >= 8) {
-      const { data: created, error } = await admin.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-      });
-      if (error || !created.user) return json({ error: error?.message ?? "Oluşturulamadı" }, 400);
-      userId = created.user.id;
-    } else {
-      const { data: invited, error } = await admin.auth.admin.inviteUserByEmail(email);
-      if (error || !invited.user) return json({ error: error?.message ?? "Davet başarısız" }, 400);
-      userId = invited.user.id;
+    if (!password || password.length < 8) {
+      return json({ error: "Geçici şifre en az 8 karakter olmalı" }, 400);
     }
+
+    // Aynı büroda kullanıcı adı çakışması: hesap açılmadan önce yakalanır
+    const { data: taken } = await admin
+      .from("profiles")
+      .select("id")
+      .eq("org_id", caller.org_id)
+      .ilike("username", username)
+      .maybeSingle();
+    if (taken) return json({ error: "Bu kullanıcı adı alınmış" }, 400);
+
+    // Geçici şifre: kullanıcı ilk girişte kendi şifresini belirlemek zorunda
+    const { data: created, error: cErr2 } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { must_change_password: true },
+    });
+    if (cErr2 || !created.user) {
+      const msg = cErr2?.message ?? "Oluşturulamadı";
+      return json({ error: /already|registered/i.test(msg) ? "Bu e-posta zaten kayıtlı" : msg }, 400);
+    }
+    const userId = created.user.id;
 
     const { error: pErr } = await admin.from("profiles").insert({
       id: userId,

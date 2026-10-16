@@ -85,7 +85,7 @@ export function FirmMark({
     <span
       className={cn(
         box,
-        "grid shrink-0 place-items-center rounded-xl bg-sidebar-primary/25 text-[11px] font-bold tracking-wide text-sidebar-primary-foreground",
+        "grid shrink-0 place-items-center rounded-xl bg-sidebar-primary/25 text-[12.5px] font-bold tracking-wide text-sidebar-primary-foreground",
         className,
       )}
       aria-hidden

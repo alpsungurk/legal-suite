@@ -127,7 +127,7 @@ export function PermissionsTab() {
       >
         <div className="space-y-4">
           <div>
-            <p className="mb-2 text-[13px] font-medium">Kimin için?</p>
+            <p className="mb-2 text-[14px] font-medium">Kimin için?</p>
             <div className="flex flex-wrap gap-2">
               <ScopeChip active={scope === "role"} onClick={() => setScope("role")}>
                 <ShieldCheck className="h-3.5 w-3.5" /> Tüm avukatlar (varsayılan)
@@ -137,7 +137,7 @@ export function PermissionsTab() {
                   <Avatar name={u.name} size="xs" />
                   {u.name}
                   {u.permissions && Object.keys(u.permissions).length > 0 && (
-                    <span className="rounded-full bg-amber-500 px-1.5 text-[10px] font-semibold text-white">
+                    <span className="rounded-full bg-amber-500 px-1.5 text-[12px] font-semibold text-white">
                       özel
                     </span>
                   )}
@@ -158,7 +158,7 @@ export function PermissionsTab() {
           </div>
 
           <div>
-            <p className="mb-2 text-[13px] font-medium">Hazır ayarlar</p>
+            <p className="mb-2 text-[14px] font-medium">Hazır ayarlar</p>
             <div className="flex flex-wrap gap-2">
               {PRESETS.map((p) => (
                 <Button
@@ -192,7 +192,7 @@ export function PermissionsTab() {
       </Section>
 
       <Section title="İzin tablosu" bodyClassName="p-0">
-        <div className="grid grid-cols-[minmax(0,1fr)_repeat(4,3.4rem)] items-center gap-x-1 border-b border-border/60 bg-muted/40 px-3 py-2.5 text-[11px] font-semibold text-muted-foreground sm:grid-cols-[minmax(0,1fr)_repeat(4,5rem)] sm:px-5 sm:text-xs">
+        <div className="grid grid-cols-[minmax(0,1fr)_repeat(4,3.4rem)] items-center gap-x-1 border-b border-border/60 bg-muted/40 px-3 py-2.5 text-[12.5px] font-semibold text-muted-foreground sm:grid-cols-[minmax(0,1fr)_repeat(4,5rem)] sm:px-5 sm:text-xs">
           <span>Alan</span>
           {PERMISSION_ACTIONS.map((a) => (
             <span key={a} className="text-center">
@@ -208,7 +208,7 @@ export function PermissionsTab() {
             >
               <div className="min-w-0 pr-2">
                 <p className="text-sm font-medium">{m.label}</p>
-                <p className="text-[11px] leading-snug text-muted-foreground">{m.hint}</p>
+                <p className="text-[12.5px] leading-snug text-muted-foreground">{m.hint}</p>
               </div>
               {PERMISSION_ACTIONS.map((a) => {
                 if (!m.actions.includes(a)) {
@@ -239,7 +239,7 @@ export function PermissionsTab() {
                 );
               })}
               {PERMISSION_ACTIONS.some((a) => m.actionHints?.[a]) && (
-                <ul className="col-span-full mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+                <ul className="col-span-full mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[12.5px] text-muted-foreground">
                   {PERMISSION_ACTIONS.filter((a) => m.actionHints?.[a]).map((a) => (
                     <li key={a}>
                       <span className="font-medium">{PERMISSION_ACTION_LABELS[a]}:</span>{" "}

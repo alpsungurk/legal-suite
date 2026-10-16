@@ -27,7 +27,7 @@ import { useConfirm } from "@/components/app/confirm";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/banka-kasa")({
-  head: () => ({ meta: [{ title: "Banka & Kasa — LexKasa" }] }),
+  head: () => ({ meta: [{ title: "Banka & Kasa — Avukat Yönetim Paneli" }] }),
   component: Page,
 });
 
@@ -134,7 +134,7 @@ function Page() {
       <div className="stagger grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#143064] to-[#0c1c3f] p-5 text-white shadow-elevated">
           <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-white/5" />
-          <p className="text-[13px] text-white/70">Toplam varlık</p>
+          <p className="text-[14px] text-white/70">Toplam varlık</p>
           <p className="money mt-2 text-[1.75rem] font-bold">{formatMoney(total)}</p>
           <p className="mt-1 text-xs text-white/60">
             {balances.filter((b) => b.account.active).length} aktif hesap
@@ -156,8 +156,8 @@ function Page() {
                 className={cn(
                   "grid h-9 w-9 place-items-center rounded-xl",
                   a.type === "Kasa"
-                    ? "bg-amber-500/12 text-amber-600"
-                    : "bg-blue-500/10 text-blue-600",
+                    ? "bg-amber-500/12 text-amber-600 dark:text-amber-400"
+                    : "bg-blue-500/10 text-blue-600 dark:text-blue-400",
                 )}
               >
                 {a.type === "Kasa" ? (
@@ -169,11 +169,11 @@ function Page() {
               {!a.active && <StatusBadge tone="slate">Pasif</StatusBadge>}
             </div>
             <p className="mt-3 truncate text-sm font-medium">{a.name}</p>
-            <p className={cn("money text-xl font-bold", balance < 0 && "text-rose-600")}>
+            <p className={cn("money text-xl font-bold", balance < 0 && "text-rose-600 dark:text-rose-400")}>
               {formatMoney(balance)}
             </p>
             {a.iban && (
-              <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
+              <p className="mt-1 truncate font-mono text-[12.5px] text-muted-foreground">
                 {formatIban(a.iban)}
               </p>
             )}

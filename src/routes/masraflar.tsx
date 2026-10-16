@@ -12,7 +12,7 @@ import { ExpenseTable } from "@/components/lists/tables";
 import { useQuick } from "@/components/forms/quick";
 
 export const Route = createFileRoute("/masraflar")({
-  head: () => ({ meta: [{ title: "Masraflar — LexKasa" }] }),
+  head: () => ({ meta: [{ title: "Masraflar — Avukat Yönetim Paneli" }] }),
   component: Page,
 });
 

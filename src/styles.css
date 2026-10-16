@@ -200,6 +200,11 @@
     border-color: var(--color-border);
   }
 
+  /* Tüm rem ölçüleri (text-sm, text-xs, boşluklar) bu tabana göre büyür */
+  html {
+    font-size: 17px;
+  }
+
   html,
   body {
     font-family: var(--font-sans);

@@ -199,10 +199,10 @@ const alertIcon: Record<Alert["category"], LucideIcon> = {
 };
 
 const toneStyle: Record<Alert["tone"], string> = {
-  danger: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
-  warning: "bg-amber-500/12 text-amber-600 dark:text-amber-400",
-  info: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
-  success: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  danger: "bg-rose-500/10 text-rose-600 dark:text-rose-400 dark:text-rose-400",
+  warning: "bg-amber-500/12 text-amber-600 dark:text-amber-400 dark:text-amber-400",
+  info: "bg-blue-500/10 text-blue-600 dark:text-blue-400 dark:text-blue-400",
+  success: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 dark:text-emerald-400",
 };
 
 export function AlertsPanel({ limit = 7 }: { limit?: number }) {
@@ -259,9 +259,9 @@ export function AlertsPanel({ limit = 7 }: { limit?: number }) {
                   </span>
                   <span
                     className={cn(
-                      "shrink-0 text-[11px] font-medium",
+                      "shrink-0 text-[12.5px] font-medium",
                       a.tone === "danger"
-                        ? "text-rose-600 dark:text-rose-400"
+                        ? "text-rose-600 dark:text-rose-400 dark:text-rose-400"
                         : "text-muted-foreground",
                     )}
                   >
@@ -322,9 +322,9 @@ export function UpcomingInstallments() {
                 <Money value={r.remaining} className="text-sm font-semibold" />
                 <p
                   className={cn(
-                    "text-[11px]",
+                    "text-[12.5px]",
                     r.status === "Gecikmiş"
-                      ? "text-rose-600 dark:text-rose-400"
+                      ? "text-rose-600 dark:text-rose-400 dark:text-rose-400"
                       : "text-muted-foreground",
                   )}
                 >
@@ -353,11 +353,11 @@ export function DateChip({ date, danger }: { date: string; danger?: boolean }) {
     <span
       className={cn(
         "grid h-11 w-11 shrink-0 place-items-center rounded-xl leading-none",
-        danger ? "bg-rose-500/10 text-rose-600 dark:text-rose-400" : "bg-primary/8 text-primary",
+        danger ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 dark:text-rose-400" : "bg-primary/8 text-primary",
       )}
     >
       <span className="flex flex-col items-center">
-        <span className="text-[9px] font-semibold uppercase tracking-wider">
+        <span className="text-[12px] font-semibold uppercase tracking-wider">
           {MONTHS_SHORT[d.getMonth()]}
         </span>
         <span className="text-base font-bold">{d.getDate()}</span>
@@ -432,7 +432,7 @@ export function AgendaWidget({ mineOnly }: { mineOnly?: boolean }) {
                       <span className="truncate text-sm font-medium">{r.title}</span>
                       <StatusBadge
                         status={r.type}
-                        className="hidden h-5 px-2 text-[10px] sm:inline-flex"
+                        className="hidden h-5 px-2 text-[12px] sm:inline-flex"
                       />
                     </span>
                     <span className="block truncate text-xs text-muted-foreground">
@@ -444,11 +444,11 @@ export function AgendaWidget({ mineOnly }: { mineOnly?: boolean }) {
                   {!mineOnly && u && <Avatar name={u.name} size="xs" />}
                   <span
                     className={cn(
-                      "shrink-0 text-[11px] font-medium",
+                      "shrink-0 text-[12.5px] font-medium",
                       r.date < t
-                        ? "text-rose-600"
+                        ? "text-rose-600 dark:text-rose-400"
                         : r.date === t
-                          ? "text-amber-600"
+                          ? "text-amber-600 dark:text-amber-400"
                           : "text-muted-foreground",
                     )}
                   >
@@ -552,7 +552,7 @@ export function RecentActivity({ limit = 6 }: { limit?: number }) {
                 </p>
                 <p className="truncate text-xs text-muted-foreground">{a.detail}</p>
               </div>
-              <span className="shrink-0 text-[11px] text-muted-foreground">
+              <span className="shrink-0 text-[12.5px] text-muted-foreground">
                 {timeAgo(a.createdAt)}
               </span>
             </li>

@@ -261,13 +261,13 @@ function Page() {
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Toplam alacak</p>
-            <p className="font-semibold text-rose-600">
+            <p className="font-semibold text-rose-600 dark:text-rose-400">
               {formatMoney(client.closedCases.receivable)}
             </p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Toplam verecek</p>
-            <p className="font-semibold text-emerald-600">
+            <p className="font-semibold text-emerald-600 dark:text-emerald-400">
               {formatMoney(client.closedCases.payable)}
             </p>
           </div>

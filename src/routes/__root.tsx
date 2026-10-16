@@ -23,6 +23,7 @@ import { CommandPalette } from "@/components/layout/CommandPalette";
 import { NavProgress, useWarmRoutes } from "@/components/layout/navigation";
 import { Toaster } from "@/components/ui/sonner";
 import { ErpProvider, useErp } from "@/lib/erp-store";
+import { FirstPasswordGate } from "@/components/app/FirstPasswordGate";
 import { ConfirmProvider } from "@/components/app/confirm";
 import { QuickActionsProvider } from "@/components/forms/quick";
 import { Button } from "@/components/ui/button";
@@ -85,9 +86,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
-      { title: "LexKasa" },
-      { name: "application-name", content: "LexKasa" },
-      { name: "apple-mobile-web-app-title", content: "LexKasa" },
+      { title: "Avukat Yönetim Paneli" },
+      { name: "application-name", content: "Avukat Yönetim Paneli" },
+      { name: "apple-mobile-web-app-title", content: "Avukat Yönetim Paneli" },
       // Özel panel: arama / önizleme / AI tarayıcıları dizinlemesin
       {
         name: "robots",
@@ -97,7 +98,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "bingbot", content: "noindex, nofollow, noarchive, nosnippet" },
       { name: "referrer", content: "no-referrer" },
       { name: "theme-color", content: "#143064" },
-      { name: "description", content: "LexKasa — özel büro paneli" },
+      { name: "description", content: "Avukat yönetim paneli — özel büro paneli" },
       { property: "og:site_name", content: BRAND.name },
       { property: "og:title", content: BRAND.name },
       { property: "og:description", content: BRAND.tagline },
@@ -159,7 +160,7 @@ function Splash() {
 function AuthGate({ children }: { children: (area: Area) => ReactNode }) {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { isAuthenticated, hydrated } = useErp();
+  const { isAuthenticated, hydrated, mustChangePassword } = useErp();
   const area = areaOf(pathname);
 
   const here = useRouterState({ select: (s) => s.location.href });
@@ -192,6 +193,7 @@ function AuthGate({ children }: { children: (area: Area) => ReactNode }) {
 
   // Auth alanında loader gösterme (giriş formu kendi spinner'ını kullanır)
   if (!hydrated || target) return area === "auth" && !target ? <>{children(area)}</> : <Splash />;
+  if (isAuthenticated && mustChangePassword && !isReset) return <FirstPasswordGate />;
   return <>{children(area)}</>;
 }
 

@@ -56,5 +56,5 @@ export function pageTitle(pathname: string) {
     .filter((p) => p.url !== "/")
     .sort((a, b) => b.url.length - a.url.length)
     .find((p) => pathname.startsWith(p.url + "/"));
-  return parent?.title ?? "LexKasa";
+  return parent?.title ?? "Avukat Yönetim Paneli";
 }

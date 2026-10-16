@@ -26,7 +26,7 @@ import { cn } from "@/lib/utils";
 import type { Reminder } from "@/lib/erp-types";
 
 export const Route = createFileRoute("/takvim")({
-  head: () => ({ meta: [{ title: "Ajanda — LexKasa" }] }),
+  head: () => ({ meta: [{ title: "Ajanda — Avukat Yönetim Paneli" }] }),
   component: Page,
 });
 
@@ -237,7 +237,7 @@ function Page() {
               {WEEKDAYS_SHORT.map((d) => (
                 <div
                   key={d}
-                  className="py-2 text-center text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
+                  className="py-2 text-center text-[12.5px] font-semibold uppercase tracking-wider text-muted-foreground"
                 >
                   {d}
                 </div>
@@ -309,7 +309,7 @@ function Page() {
                             open(e);
                           }}
                           className={cn(
-                            "hidden truncate rounded border-l-2 px-1.5 py-0.5 text-[11px] font-medium transition-transform hover:translate-x-0.5 sm:block",
+                            "hidden truncate rounded border-l-2 px-1.5 py-0.5 text-[12.5px] font-medium transition-transform hover:translate-x-0.5 sm:block",
                             idx > 0 && "sm:hidden xl:block",
                             kindStyle[e.kind],
                             e.done && "opacity-50 line-through",
@@ -324,7 +324,7 @@ function Page() {
                       {/* Hücreye sığmayan kayıtlar için "+N daha"; gün ayrıntısı sağdaki listede */}
                       {evs.length > 1 && (
                         <p
-                          className="hidden px-1 text-[10px] font-semibold text-muted-foreground sm:block xl:hidden"
+                          className="hidden px-1 text-[12px] font-semibold text-muted-foreground sm:block xl:hidden"
                           title={evs.map((e) => e.title).join("\n")}
                         >
                           +{evs.length - 1} daha…
@@ -332,7 +332,7 @@ function Page() {
                       )}
                       {evs.length > 2 && (
                         <p
-                          className="hidden px-1 text-[10px] font-semibold text-muted-foreground xl:block"
+                          className="hidden px-1 text-[12px] font-semibold text-muted-foreground xl:block"
                           title={evs.map((e) => e.title).join("\n")}
                         >
                           +{evs.length - 2} daha…
@@ -404,7 +404,7 @@ function Page() {
                           patch("reminders", e.reminder!.id, { status: "Tamamlandı" });
                           toast.success("Tamamlandı olarak işaretlendi");
                         }}
-                        className="ml-3 mt-1 text-[11px] font-medium text-muted-foreground hover:text-primary"
+                        className="ml-3 mt-1 text-[12.5px] font-medium text-muted-foreground hover:text-primary"
                       >
                         ✓ Tamamlandı işaretle
                       </button>

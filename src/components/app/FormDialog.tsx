@@ -331,13 +331,13 @@ function FieldBlock({
   return (
     <div className={cn("min-w-0 space-y-1.5", span)}>
       {f.section && (
-        <p className="-mb-0.5 pt-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <p className="-mb-0.5 pt-1 text-[12.5px] font-semibold uppercase tracking-wider text-muted-foreground">
           {f.section}
         </p>
       )}
       <label
         htmlFor={id}
-        className="flex items-center gap-1 text-[13px] font-medium text-foreground/90"
+        className="flex items-center gap-1 text-[14px] font-medium text-foreground/90"
       >
         {f.label}
         {f.required && <span className="text-destructive">*</span>}

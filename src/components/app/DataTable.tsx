@@ -223,7 +223,7 @@ export function DataTable<T>({
             >
               <ListFilter /> Filtre
               {activeFilterCount > 0 && (
-                <span className="grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] text-primary-foreground">
+                <span className="grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[12px] text-primary-foreground">
                   {activeFilterCount}
                 </span>
               )}

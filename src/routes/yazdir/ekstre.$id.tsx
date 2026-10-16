@@ -35,7 +35,7 @@ function Page() {
       subtitle={
         <div className="grid grid-cols-2 gap-6">
           <div className="rounded-lg border border-slate-200 p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            <p className="text-[12px] font-semibold uppercase tracking-wider text-slate-500">
               Müvekkil
             </p>
             <p className="text-sm font-bold">{client.name}</p>
@@ -47,7 +47,7 @@ function Page() {
             {client.address && <p className="text-slate-600">{client.address}</p>}
           </div>
           <div className="rounded-lg border border-slate-200 p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            <p className="text-[12px] font-semibold uppercase tracking-wider text-slate-500">
               Dönem
             </p>
             <p className="text-sm font-bold">
@@ -103,7 +103,7 @@ function Page() {
               ? "müvekkil alacağıdır."
               : "(hesap kapalı)."}
         </p>
-        <p className="mt-1 text-[11px] text-slate-500">
+        <p className="mt-1 text-[12.5px] text-slate-500">
           (B): Müvekkil borçlu · (A): Müvekkil alacaklı
         </p>
       </div>

@@ -22,6 +22,8 @@ import {
 import { toast } from "sonner";
 import { useErp } from "@/lib/erp-store";
 import { PageHeader } from "@/components/app/PageHeader";
+import { FormDialog } from "@/components/app/FormDialog";
+import { passwordProblem } from "@/lib/auth";
 import { Avatar, PageShell, Section } from "@/components/app/bits";
 import { DataTable, type Column } from "@/components/app/DataTable";
 import { StatusBadge } from "@/components/app/StatusBadge";
@@ -42,7 +44,7 @@ import {
   type User,
 } from "@/lib/erp-types";
 import { exportBackup, readBackup } from "@/lib/backup";
-import { formatIban } from "@/lib/format";
+import { displayEmail, formatIban } from "@/lib/format";
 import { sendSentryTest, sentryEnabled } from "@/lib/sentry";
 import { PermissionsTab } from "@/components/settings/PermissionsTab";
 import { CronTab } from "@/components/settings/CronTab";
@@ -62,7 +64,7 @@ export const Route = createFileRoute("/ayarlar")({
   validateSearch: (s: Record<string, unknown>): Search => ({
     sekme: typeof s.sekme === "string" ? s.sekme : undefined,
   }),
-  head: () => ({ meta: [{ title: "Ayarlar — LexKasa" }] }),
+  head: () => ({ meta: [{ title: "Ayarlar — Avukat Yönetim Paneli" }] }),
   component: Page,
 });
 
@@ -163,7 +165,7 @@ function FirmTab() {
     opts?: { placeholder?: string; span?: boolean },
   ) => (
     <label className={opts?.span ? "space-y-1.5 sm:col-span-2" : "space-y-1.5"}>
-      <span className="text-[13px] font-medium">{label}</span>
+      <span className="text-[14px] font-medium">{label}</span>
       <Input
         value={(firm[key] as string) ?? ""}
         placeholder={opts?.placeholder}
@@ -175,7 +177,7 @@ function FirmTab() {
     <div className="space-y-4">
       <Section
         title="Organizasyon"
-        description="Büronuzun LexKasa çalışma alanı. Tüm kullanıcılar ve kayıtlar bu organizasyona bağlıdır."
+        description="Büronuzun çalışma alanı. Tüm kullanıcılar ve kayıtlar bu organizasyona bağlıdır."
       >
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {(
@@ -213,7 +215,7 @@ function FirmTab() {
           {field("bankName", "Banka")}
           {field("iban", "IBAN", { placeholder: "TR.." })}
           <label className="space-y-1.5 sm:col-span-2">
-            <span className="text-[13px] font-medium">Ekstre alt notu</span>
+            <span className="text-[14px] font-medium">Ekstre alt notu</span>
             <Textarea
               value={firm.statementNote}
               onChange={(e) => setFirm((f) => ({ ...f, statementNote: e.target.value }))}
@@ -271,9 +273,16 @@ function FirmTab() {
 /* ───────────── Kullanıcılar ───────────── */
 
 function UsersTab() {
-  const { state, currentUser, remove, patch } = useErp();
+  const { state, currentUser, remove, patch, setUserPassword } = useErp();
+  const [resetFor, setResetFor] = useState<(typeof state.users)[number] | null>(null);
   const quick = useQuick();
   const confirm = useConfirm();
+  const navigate = useNavigate();
+  // Kendi hesabını yönetici kullanıcı listesinden değil, Profil ayarlarından düzenler
+  const edit = (u: (typeof state.users)[number]) =>
+    u.id === currentUser.id
+      ? navigate({ to: "/ayarlar", search: { sekme: "hesabim" } })
+      : quick.open("user", { record: u });
   const clientName = (id?: string) => state.clients.find((c) => c.id === id)?.name;
   const columns: Column<User>[] = [
     {
@@ -291,7 +300,9 @@ function UsersTab() {
                 <span className="text-xs text-muted-foreground">(siz)</span>
               )}
             </p>
-            <p className="truncate text-xs text-muted-foreground">{u.email}</p>
+            <p className="truncate text-xs text-muted-foreground">
+              {displayEmail(u.email) || `@${u.username}`}
+            </p>
           </div>
         </div>
       ),
@@ -328,12 +339,45 @@ function UsersTab() {
       }
       bodyClassName="p-0"
     >
+      <FormDialog
+        open={!!resetFor}
+        onOpenChange={(o) => !o && setResetFor(null)}
+        title={`Şifre sıfırla: ${resetFor?.name ?? ""}`}
+        description="Verdiğiniz geçici şifreyle giriş yapınca kullanıcı kendi yeni şifresini belirlemek zorunda kalır."
+        submitLabel="Geçici şifreyi ata"
+        fields={[
+          {
+            name: "password",
+            label: "Geçici şifre",
+            type: "text",
+            required: true,
+            span: 2,
+            autoFocus: true,
+            hint: "En az 8 karakter",
+          },
+        ]}
+        initial={{ password: "" }}
+        validate={(v) => {
+          const p = passwordProblem(String(v.password ?? ""));
+          return p ? { password: p } : undefined;
+        }}
+        onSubmit={async (v) => {
+          if (!resetFor) return;
+          const r = await setUserPassword(resetFor.id, String(v.password));
+          if (!r.ok) {
+            toast.error(r.error);
+            return false;
+          }
+          toast.success("Geçici şifre atandı; kullanıcı ilk girişte yenisini belirleyecek");
+          setResetFor(null);
+        }}
+      />
       <DataTable
         className="rounded-none border-0 shadow-none"
         rows={state.users}
         columns={columns}
         getId={(u) => u.id}
-        searchText={(u) => [u.name, u.username, u.email]}
+        searchText={(u) => [u.name, u.username, displayEmail(u.email)]}
         filters={[
           {
             id: "role",
@@ -343,32 +387,33 @@ function UsersTab() {
           },
         ]}
         exportName="Kullanıcılar"
-        onRowClick={(u) => quick.open("user", { record: u })}
+        onRowClick={edit}
         rowActions={(u) => (
           <>
-            <DropdownMenuItem onClick={() => quick.open("user", { record: u })}>
-              <Pencil /> Düzenle / şifre
+            <DropdownMenuItem onClick={() => edit(u)}>
+              <Pencil /> {u.id === currentUser.id ? "Profil ayarları" : "Düzenle"}
             </DropdownMenuItem>
             {u.id !== currentUser.id && (
               <>
-                <DropdownMenuItem onClick={() => patch("users", u.id, { active: !u.active })}>
-                  <KeyRound /> {u.active ? "Devre dışı bırak" : "Etkinleştir"}
+                <DropdownMenuItem onClick={() => setResetFor(u)}>
+                  <Lock /> Şifre sıfırla
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  className="text-destructive focus:text-destructive"
                   onClick={async () => {
                     if (
-                      await confirm({
-                        title: `${u.name} silinsin mi?`,
-                        description: "Kullanıcının geçmiş kayıtları korunur.",
-                      })
-                    ) {
-                      remove("users", u.id);
-                      toast.success("Kullanıcı silindi");
-                    }
+                      u.active &&
+                      !(await confirm({
+                        title: `${u.name} pasife alınsın mı?`,
+                        description:
+                          "Kullanıcı giriş yapamaz. Kayıtları ve geçmişi silinmez; istediğiniz zaman tekrar etkinleştirebilirsiniz.",
+                      }))
+                    )
+                      return;
+                    patch("users", u.id, { active: !u.active });
+                    toast.success(u.active ? "Kullanıcı pasife alındı" : "Kullanıcı etkinleştirildi");
                   }}
                 >
-                  <Trash2 /> Sil
+                  <KeyRound /> {u.active ? "Pasife al" : "Etkinleştir"}
                 </DropdownMenuItem>
               </>
             )}
@@ -571,7 +616,6 @@ function AccountTab() {
   const { currentUser, patch, changePassword } = useErp();
   const [profile, setProfile] = useState({
     name: currentUser.name,
-    email: currentUser.email,
     phone: currentUser.phone ?? "",
     title: currentUser.title ?? "",
   });
@@ -595,17 +639,16 @@ function AccountTab() {
             e.preventDefault();
             patch("users", currentUser.id, {
               name: profile.name.trim(),
-              email: profile.email.trim(),
               phone: profile.phone || undefined,
               title: profile.title || undefined,
             });
             toast.success("Profil güncellendi");
           }}
         >
-          {(["name", "title", "email", "phone"] as const).map((k) => (
+          {(["name", "title", "phone"] as const).map((k) => (
             <label key={k} className="block space-y-1.5">
-              <span className="text-[13px] font-medium">
-                {{ name: "Ad soyad", title: "Ünvan", email: "E-posta", phone: "Telefon" }[k]}
+              <span className="text-[14px] font-medium">
+                {{ name: "Ad soyad", title: "Ünvan", phone: "Telefon" }[k]}
               </span>
               <Input
                 value={profile[k]}
@@ -616,7 +659,7 @@ function AccountTab() {
           <Button type="submit">Kaydet</Button>
         </form>
       </Section>
-      <Section title="Şifre değiştir" description="En az 6 karakter">
+      <Section title="Şifre değiştir" description="En az 8 karakter. Yeni şifreniz bir sonraki girişten itibaren geçerli olur">
         <form
           className="space-y-3"
           onSubmit={async (e) => {
@@ -642,7 +685,7 @@ function AccountTab() {
             ] as const
           ).map(([k, label, ac]) => (
             <label key={k} className="block space-y-1.5">
-              <span className="text-[13px] font-medium">{label}</span>
+              <span className="text-[14px] font-medium">{label}</span>
               <Input
                 type="password"
                 autoComplete={ac}

@@ -33,7 +33,7 @@ export function StatTile({
       )}
     >
       <div className="flex h-9 items-center justify-between gap-2">
-        <p className="min-w-0 truncate text-xs font-medium leading-none text-muted-foreground @[11rem]:text-[13px]">
+        <p className="min-w-0 truncate text-xs font-medium leading-none text-muted-foreground @[11rem]:text-[14px]">
           {label}
         </p>
         <span
@@ -56,7 +56,7 @@ export function StatTile({
 
       <p
         className={cn(
-          "mt-auto pt-2 line-clamp-2 min-h-[2.25rem] text-[11px] font-medium leading-snug @[11rem]:text-xs",
+          "mt-auto pt-2 line-clamp-2 min-h-[2.25rem] text-[12.5px] font-medium leading-snug @[11rem]:text-xs",
           hintTone ? toneTextClass(hintTone) : "text-muted-foreground",
         )}
       >
