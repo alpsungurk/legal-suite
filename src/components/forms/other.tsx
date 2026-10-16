@@ -3,7 +3,6 @@ import { FormDialog, type FormValues } from "@/components/app/FormDialog";
 import { AttachmentList } from "@/components/app/files";
 import { useErp } from "@/lib/erp-store";
 import { useOptions } from "@/lib/options";
-import { useEffect } from "react";
 import {
   BANK_GARNISHMENT_EVENT_TYPES,
   CLOSED_ENFORCEMENT_STATUS,
@@ -48,7 +47,6 @@ import {
   defaultIncomeAccountId,
   enforcementSummary,
   seizureDueDate,
-  waitingBanksFromPrior,
 } from "@/lib/finance";
 import { PERIODS, stepDate } from "@/components/forms/finance";
 import { Combobox, MoneyInput, MultiCombobox, type Option } from "@/components/app/fields";
@@ -87,13 +85,12 @@ export function procedureRule(p?: Procedure) {
   return `Ödeme emri tebliğinden ${p.days} gün sonra, ${p.days + 1}. gün ${p.action.toLocaleLowerCase("tr")} hatırlatılır`;
 }
 
-/** 89/1–89/3: gönderilen bankalar; her cevap türünün yanında ayrı tutar */
+/** 89/1–89/3: bankalar elle seçilir; her cevap türünün yanında ayrı tutar */
 function BankAnswersEditor({
   value,
   answerTypes,
   bankOptions,
   nextLabel,
-  priorWaiting,
   onChange,
 }: {
   value: BankAnswer[];
@@ -101,15 +98,8 @@ function BankAnswersEditor({
   bankOptions: Option[];
   /** Süre dolunca hatırlatılacak adım (89/2, 89/3, kesinleşme) */
   nextLabel: string;
-  /** Önceki adımdan cevap bekleyen bankalar (boş formda bir kez doldurulur) */
-  priorWaiting?: BankAnswer[];
   onChange: (v: BankAnswer[]) => void;
 }) {
-  useEffect(() => {
-    if (value.length === 0 && priorWaiting && priorWaiting.length > 0) onChange(priorWaiting);
-    // yalnızca ilk açılışta doldur
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
   const update = (i: number, p: Partial<BankAnswer>) =>
     onChange(value.map((b, j) => (j === i ? { ...b, ...p } : b)));
   const toggleAnswer = (i: number, type: string) => {
@@ -138,8 +128,8 @@ function BankAnswersEditor({
         <div>
           <p className="text-sm font-medium">Bankalar ve cevapları</p>
           <p className="text-xs text-muted-foreground">
-            Listeden seçin veya elle yazın. Cevap seçilmeyen banka "cevap vermedi" sayılır; süre
-            dolunca {nextLabel} hatırlatılır. Her cevabın yanına tutar yazılabilir.
+            Bankayı listeden seçin veya elle yazın. Cevap gelirse türü (ve isteğe bağlı tutarı)
+            işaretleyin; cevap yoksa boş bırakın — süre dolunca {nextLabel} hatırlatılır.
             {waiting > 0 && ` Cevap bekleyen: ${waiting}`}
           </p>
         </div>
@@ -738,23 +728,12 @@ export function EnforcementEventForm({
           );
         }
         if (!isBankGarnishment(type)) return null;
-        const priorType =
-          type === EVENT_TYPE_BANK_892
-            ? EVENT_TYPE_BANK_891
-            : type === EVENT_TYPE_BANK_893
-              ? EVENT_TYPE_BANK_892
-              : undefined;
-        const priorWaiting =
-          !record && enfId && priorType
-            ? waitingBanksFromPrior(state, enfId, priorType)
-            : undefined;
         return (
           <BankAnswersEditor
             value={(v.banks as BankAnswer[]) ?? []}
             answerTypes={o.bankAnswerTypes}
             bankOptions={o.banks}
             nextLabel={nextBankStepLabel(type)}
-            priorWaiting={priorWaiting}
             onChange={(banks) => set({ banks })}
           />
         );

@@ -872,21 +872,6 @@ export const DEADLINE_TITLES: Record<DeadlineKind, string> = {
   "Taksit / ödeme sözü": "Taksit / ödeme sözü günü",
 };
 
-/** Önceki 89 adımındaki cevap bekleyen bankalar (89/2 / 89/3 formu için) */
-export function waitingBanksFromPrior(
-  state: ErpState,
-  enforcementId: string,
-  priorType: string,
-) {
-  const prior = state.events
-    .filter((e) => e.enforcementId === enforcementId && e.type === priorType)
-    .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt))[0];
-  if (!prior) return [];
-  return normalizeBankAnswers(prior.data?.banks)
-    .filter((b) => !bankHasAnswer(b))
-    .map((b) => ({ name: b.name, answers: [] as { type: string; amount?: number }[] }));
-}
-
 /* ───────────── Uyarılar ───────────── */
 
 export type Alert = {

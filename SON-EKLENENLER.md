@@ -49,7 +49,7 @@ Bu belge, bir önceki "Yenilikler" belgesinden sonra eklenenleri içerir: "İcra
 ## 5. İşlem ekle
 
 - **Sorgu:** 7 başlık bir arada girilir: Araç, Taşınmaz, Alacaklı olduğu icra dosyası, Banka (adet), Bankalar (kayıtlı listeden çoklu seçim), SGK maaş (aktif/pasif), SGK Mosip (aktif/pasif), Firma (aktif firma sayısı).
-- **89/1 → 89/2 → 89/3:** Bankalar listeden seçilir. Her cevap türünün (Hacizli, Rehinli, Olumsuz, Tahsil edilebilir) yanında ayrı tutar yazılabilir. Cevabı boş banka "cevap bekleniyor" sayılır; 89/2 / 89/3 formunda önceki adımdaki bekleyen bankalar önceden dolar.
+- **89/1 → 89/2 → 89/3:** Her adımda bankalar elle seçilir (otomatik dolmaz). Cevap gelirse tür (Hacizli, Rehinli, Olumsuz, Tahsil edilebilir) ve isteğe bağlı tutar işaretlenir; cevap yoksa boş bırakılır, süre dolunca sonraki adım hatırlatılır.
 - Tarih alanının altında, işlemin doğuracağı hatırlatmanın günü yazar.
 
 ## 6. Takip bilgileri
