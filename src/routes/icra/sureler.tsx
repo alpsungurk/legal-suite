@@ -64,7 +64,7 @@ const KIND_ICON: Partial<Record<DeadlineKind, LucideIcon>> = {
 
 /**
  * Avukatın talimatındaki bütün süreler tek yerde: takip şekline göre kesinleştirme / tahliye,
- * 89/1'den sonra 89/2, maaş haczinden sonra işveren borçlu ekleme, haciz yenileme ve taksit günleri.
+ * 89/1→89/2→89/3→banka haczi kesinleşme, maaş haczinden sonra işveren borçlu ekleme, haciz yenileme ve taksit günleri.
  * Her sabah aynı kurallarla sorumlu avukata bildirim de gider.
  */
 function Page() {
@@ -230,7 +230,7 @@ function Page() {
     <PageShell>
       <PageHeader
         title="İcra süreleri"
-        description="Takip şekline göre kesinleştirme ve tahliye, 89/2, işveren borçlu ekleme, haciz yenileme ve taksit günleri. İlgili işlem girilince ya da 'Tamamlandı' denince listeden düşer."
+        description="Takip şekline göre kesinleştirme ve tahliye, 89/2–89/3, banka haczi kesinleşme, işveren borçlu ekleme, haciz yenileme ve taksit günleri. İlgili işlem girilince ya da 'Tamamlandı' denince listeden düşer."
         icon={Timer}
       />
 

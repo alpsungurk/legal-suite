@@ -2,12 +2,14 @@
  * UI (camelCase) ↔ Postgres (snake_case) dönüşümleri.
  */
 import { defaultSettings } from "@/lib/erp-data";
+import { normalizeBankAnswers } from "@/lib/erp-types";
 import type {
   Account,
   AccountTx,
   ActivityLog,
   AppNotification,
   AttachmentRef,
+  Bank,
   CaseFile,
   Client,
   Collection,
@@ -360,6 +362,26 @@ export function accountToRow(a: Partial<Account>) {
   return row;
 }
 
+/* ───── Banks (haciz listesi) ───── */
+
+export function bankFromRow(r: Record<string, unknown>): Bank {
+  return {
+    id: String(r.id),
+    firmId: String(r.org_id),
+    createdAt: iso(r.created_at as string),
+    updatedAt: iso(r.updated_at as string),
+    name: String(r.name ?? ""),
+    active: r.active !== false,
+  };
+}
+
+export function bankToRow(b: Partial<Bank>) {
+  const row: Record<string, unknown> = {};
+  if (b.name != null) row.name = b.name.trim();
+  if (b.active != null) row.active = b.active;
+  return row;
+}
+
 /* ───── Transactions ───── */
 
 export function txFromRow(r: Record<string, unknown>): AccountTx {
@@ -481,6 +503,14 @@ export function enforcementToRow(e: Partial<EnforcementFile>) {
 /* ───── İcra işlem geçmişi ───── */
 
 export function eventFromRow(r: Record<string, unknown>): EnforcementEvent {
+  const raw = r.data && typeof r.data === "object" ? (r.data as EventData) : undefined;
+  const data: EventData | undefined = raw
+    ? {
+        ...raw,
+        banks: raw.banks != null ? normalizeBankAnswers(raw.banks) : undefined,
+      }
+    : undefined;
+  if (data && data.banks && data.banks.length === 0) delete data.banks;
   return {
     id: String(r.id),
     firmId: String(r.org_id),
@@ -495,7 +525,7 @@ export function eventFromRow(r: Record<string, unknown>): EnforcementEvent {
     result: optStr(r.result),
     amount: optNum(r.amount),
     note: optStr(r.note),
-    data: r.data && typeof r.data === "object" ? (r.data as EventData) : undefined,
+    data,
   };
 }
 

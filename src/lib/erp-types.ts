@@ -177,6 +177,12 @@ export type Account = BaseEntity & {
   active: boolean;
 };
 
+/** Haciz gönderilecek banka (89/1 listesi; Ayarlar → Kategoriler → Bankalar) */
+export type Bank = BaseEntity & {
+  name: string;
+  active: boolean;
+};
+
 /** Banka/kasa üzerinde elle girilen hareket (virman, diğer gelir/gider). */
 export type AccountTx = BaseEntity & {
   accountId: string;
@@ -326,7 +332,8 @@ export const DEFAULT_PROCEDURES: Procedure[] = [
   { name: "Örnek No: 44", days: null, action: null },
 ];
 export const PROCEDURE_ACTIONS = ["Kesinleştirme", "Tahliye"];
-export const DEFAULT_BANK_RESPONSE_DAYS = 13;
+/** 89/1→89/2→89/3 ve 89/3→kesinleşme cevap süresi (gün); hatırlatma = gün + 1 */
+export const DEFAULT_BANK_RESPONSE_DAYS = 15;
 export const DEFAULT_SALARY_RESPONSE_DAYS = 30;
 export const DEFAULT_INQUIRY_TYPES = [
   "Araç",
@@ -349,6 +356,7 @@ export const DEFAULT_ENFORCEMENT_EVENT_TYPES = [
   "Maaş haczi tebliği",
   "89/1 haciz ihbarnamesi",
   "89/2 haciz ihbarnamesi",
+  "89/3 haciz ihbarnamesi",
   "Banka cevabı",
   "Borçlu ekleme talebi",
   "Tahliye talebi",
@@ -365,6 +373,7 @@ export const EVENT_TYPE_FINALIZED = "Kesinleşme";
 export const EVENT_TYPE_SALARY = "Maaş haczi tebliği";
 export const EVENT_TYPE_BANK_891 = "89/1 haciz ihbarnamesi";
 export const EVENT_TYPE_BANK_892 = "89/2 haciz ihbarnamesi";
+export const EVENT_TYPE_BANK_893 = "89/3 haciz ihbarnamesi";
 export const EVENT_TYPE_ADD_DEBTOR = "Borçlu ekleme talebi";
 export const EVENT_TYPE_EVICTION = "Tahliye talebi";
 export const LOCKED_EVENT_TYPES = [
@@ -375,9 +384,16 @@ export const LOCKED_EVENT_TYPES = [
   EVENT_TYPE_SALARY,
   EVENT_TYPE_BANK_891,
   EVENT_TYPE_BANK_892,
+  EVENT_TYPE_BANK_893,
   EVENT_TYPE_ADD_DEBTOR,
   EVENT_TYPE_EVICTION,
 ];
+/** 89/1–89/3 işlem türleri (banka listesi + cevap/tutar formu) */
+export const BANK_GARNISHMENT_EVENT_TYPES = [
+  EVENT_TYPE_BANK_891,
+  EVENT_TYPE_BANK_892,
+  EVENT_TYPE_BANK_893,
+] as const;
 
 /** Sorgu sonuçları: avukatın istediği 7 başlık */
 export type InquiryResult = {
@@ -400,7 +416,44 @@ export const INQUIRY_FIELDS: Array<{ key: keyof InquiryResult; label: string; ki
   { key: "mosip", label: "SGK Mosip (şirketler için)", kind: "status" },
   { key: "firma", label: "Firma (aktif firma sayısı)", kind: "count" },
 ];
-export type BankAnswer = { name: string; answers: string[] };
+/** Bir banka cevabı türü ve isteğe bağlı tutar (Hacizli · 10.000 ₺) */
+export type BankAnswerItem = { type: string; amount?: number };
+export type BankAnswer = { name: string; answers: BankAnswerItem[] };
+
+/** Eski kayıtlar answers: string[] olabilir; okurken normalize edilir */
+export function normalizeBankAnswers(raw: unknown): BankAnswer[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((b) => {
+      const row = b as { name?: unknown; answers?: unknown };
+      const name = String(row.name ?? "").trim();
+      const answers: BankAnswerItem[] = [];
+      if (Array.isArray(row.answers)) {
+        for (const a of row.answers) {
+          if (typeof a === "string" && a.trim()) {
+            answers.push({ type: a.trim() });
+            continue;
+          }
+          if (a && typeof a === "object" && "type" in a) {
+            const type = String((a as BankAnswerItem).type ?? "").trim();
+            if (!type) continue;
+            const amount = (a as BankAnswerItem).amount;
+            answers.push({
+              type,
+              amount: typeof amount === "number" && Number.isFinite(amount) && amount > 0 ? amount : undefined,
+            });
+          }
+        }
+      }
+      return { name, answers };
+    })
+    .filter((b) => b.name);
+}
+
+export function bankHasAnswer(b: BankAnswer) {
+  return b.answers.length > 0;
+}
+
 export type EventData = {
   inquiry?: InquiryResult;
   banks?: BankAnswer[];
@@ -585,7 +638,7 @@ export type Settings = {
   bankAnswerTypes: string[];
   /** Takip şekilleri ve süre kuralları */
   procedures: Procedure[];
-  /** 89/1'e banka cevap süresi (gün); dolunca 89/2 hatırlatılır */
+  /** 89/1→89/2→89/3 ve 89/3→kesinleşme cevap süresi (gün); hatırlatma ertesi gün */
   bankResponseDays: number;
   /** Maaş haczinde işverenin ödeme süresi (gün); dolunca işveren borçlu eklenmesi hatırlatılır */
   salaryResponseDays: number;
@@ -613,6 +666,7 @@ export type Collections = {
   collections: Collection;
   contacts: ContactLog;
   events: EnforcementEvent;
+  banks: Bank;
   documents: DocumentFile;
   notifications: AppNotification;
   activities: ActivityLog;

@@ -20,11 +20,14 @@ import {
   EVENT_TYPE_ADD_DEBTOR,
   EVENT_TYPE_BANK_891,
   EVENT_TYPE_BANK_892,
+  EVENT_TYPE_BANK_893,
   EVENT_TYPE_EVICTION,
   EVENT_TYPE_FINALIZED,
   EVENT_TYPE_SALARY,
   EVENT_TYPE_SERVICE,
+  bankHasAnswer,
   isEnforcementClosed,
+  normalizeBankAnswers,
 } from "@/lib/erp-types";
 import {
   addDays,
@@ -697,6 +700,8 @@ export type DeadlineKind =
   | "İtiraz / ödeme süresi"
   | "Haciz yenileme"
   | "89/2 haciz ihbarnamesi"
+  | "89/3 haciz ihbarnamesi"
+  | "Banka haczi kesinleşme"
   | "İşveren borçlu ekleme"
   | "Taksit / ödeme sözü";
 
@@ -771,7 +776,7 @@ export function icraDeadlines(state: ErpState): IcraDeadline[] {
       continue;
     } else if (ev.type === EVENT_TYPE_BANK_891) {
       const due = addDays(ev.date, s.bankResponseDays + 1);
-      const banks = ev.data?.banks ?? [];
+      const banks = normalizeBankAnswers(ev.data?.banks);
       out.push({
         ...base,
         id: `b89:${ev.id}`,
@@ -780,8 +785,37 @@ export function icraDeadlines(state: ErpState): IcraDeadline[] {
         remindFrom: due,
         resolved:
           done ||
-          (banks.length > 0 && banks.every((b) => b.answers.length > 0)) ||
+          (banks.length > 0 && banks.every(bankHasAnswer)) ||
           later(en.id, ev.date, ev.id, EVENT_TYPE_BANK_892),
+      });
+    } else if (ev.type === EVENT_TYPE_BANK_892) {
+      const due = addDays(ev.date, s.bankResponseDays + 1);
+      const banks = normalizeBankAnswers(ev.data?.banks);
+      out.push({
+        ...base,
+        id: `b892:${ev.id}`,
+        kind: "89/3 haciz ihbarnamesi",
+        dueDate: due,
+        remindFrom: due,
+        resolved:
+          done ||
+          (banks.length > 0 && banks.every(bankHasAnswer)) ||
+          later(en.id, ev.date, ev.id, EVENT_TYPE_BANK_893),
+      });
+    } else if (ev.type === EVENT_TYPE_BANK_893) {
+      // Menfi tespit davası yoksa: cevap süresi + 1 = 16. gün (varsayılan 15 gün)
+      const due = addDays(ev.date, s.bankResponseDays + 1);
+      const banks = normalizeBankAnswers(ev.data?.banks);
+      out.push({
+        ...base,
+        id: `b893:${ev.id}`,
+        kind: "Banka haczi kesinleşme",
+        dueDate: due,
+        remindFrom: due,
+        resolved:
+          done ||
+          (banks.length > 0 && banks.every(bankHasAnswer)) ||
+          later(en.id, ev.date, ev.id, EVENT_TYPE_FINALIZED),
       });
     } else if (ev.type === EVENT_TYPE_SALARY) {
       const due = addDays(ev.date, s.salaryResponseDays + 1);
@@ -832,9 +866,26 @@ export const DEADLINE_TITLES: Record<DeadlineKind, string> = {
   "İtiraz / ödeme süresi": "İtiraz / ödeme süresi doluyor",
   "Haciz yenileme": "Haciz yenilenmeli",
   "89/2 haciz ihbarnamesi": "89/2 gönderilmeli: cevap vermeyen banka var",
+  "89/3 haciz ihbarnamesi": "89/3 gönderilmeli: cevap vermeyen banka var",
+  "Banka haczi kesinleşme": "Menfi tespit yoksa banka haczi kesinleşmeli",
   "İşveren borçlu ekleme": "Maaş haczi: işveren borçlu eklenmeli",
   "Taksit / ödeme sözü": "Taksit / ödeme sözü günü",
 };
+
+/** Önceki 89 adımındaki cevap bekleyen bankalar (89/2 / 89/3 formu için) */
+export function waitingBanksFromPrior(
+  state: ErpState,
+  enforcementId: string,
+  priorType: string,
+) {
+  const prior = state.events
+    .filter((e) => e.enforcementId === enforcementId && e.type === priorType)
+    .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt))[0];
+  if (!prior) return [];
+  return normalizeBankAnswers(prior.data?.banks)
+    .filter((b) => !bankHasAnswer(b))
+    .map((b) => ({ name: b.name, answers: [] as { type: string; amount?: number }[] }));
+}
 
 /* ───────────── Uyarılar ───────────── */
 

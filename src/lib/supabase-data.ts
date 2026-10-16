@@ -14,6 +14,8 @@ import {
   accountToRow,
   activityFromRow,
   attachmentFromRow,
+  bankFromRow,
+  bankToRow,
   caseFromRow,
   caseToRow,
   clientFromRow,
@@ -107,6 +109,7 @@ export async function loadFullState(): Promise<LoadResult | null> {
     yearsRes,
     archiveRes,
     eventsRes,
+    banksRes,
   ] = await Promise.all([
     supabase.from("organizations").select("*").eq("id", orgId).single(),
     supabase.from("org_settings").select("*").eq("org_id", orgId).maybeSingle(),
@@ -134,8 +137,10 @@ export async function loadFullState(): Promise<LoadResult | null> {
     supabase.from("org_archive").select("*").eq("org_id", orgId).maybeSingle(),
     // 20261016 migration'ı çalıştırılmadıysa tablo yoktur: hata yükü durdurmaz, liste boş gelir
     supabase.from("enforcement_events").select("*").eq("org_id", orgId).order("date", { ascending: false }),
+    supabase.from("banks").select("*").eq("org_id", orgId).order("name"),
   ]);
   if (eventsRes.error) console.warn("İcra işlem geçmişi yüklenemedi:", eventsRes.error.message);
+  if (banksRes.error) console.warn("Banka listesi yüklenemedi:", banksRes.error.message);
 
   const firstErr = [
     orgRes,
@@ -238,6 +243,9 @@ export async function loadFullState(): Promise<LoadResult | null> {
     events: eventsRes.error
       ? []
       : (eventsRes.data ?? []).map((r) => eventFromRow(r as Record<string, unknown>)),
+    banks: banksRes.error
+      ? []
+      : (banksRes.data ?? []).map((r) => bankFromRow(r as Record<string, unknown>)),
     expenses: (expensesRes.data ?? []).map((r) => {
       const row = r as Record<string, unknown>;
       return expenseFromRow(row, expenseReceipts.get(String(row.id)) ?? []);
@@ -289,6 +297,7 @@ const TABLE: Partial<Record<CollectionKey, string>> = {
   collections: "collections",
   contacts: "contact_logs",
   events: "enforcement_events",
+  banks: "banks",
   expenses: "expenses",
   reminders: "reminders",
   documents: "documents",
@@ -309,6 +318,7 @@ const TO_ROW: Partial<Record<CollectionKey, ToRowFn>> = {
   collections: (c) => collectionToRow(c as never),
   contacts: (c) => contactToRow(c as never),
   events: (e) => eventToRow(e as never),
+  banks: (b) => bankToRow(b as never),
   expenses: (e) => expenseToRow(e as never),
   reminders: (r) => reminderToRow(r as never),
   documents: (d) => documentToRow(d as never),

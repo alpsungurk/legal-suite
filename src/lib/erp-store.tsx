@@ -169,6 +169,7 @@ const ENTITY: { [K in CollectionKey]: EntityMeta } = {
     audit: true,
     describe: (e: Collections["events"]) => `${e.type} · ${e.date}`,
   },
+  banks: { label: "Banka", audit: true, describe: (b: Collections["banks"]) => b.name },
   contacts: {
     label: "Görüşme notu",
     audit: false,

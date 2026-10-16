@@ -31,6 +31,7 @@ export type ImportKind =
   | "cases"
   | "expenses"
   | "debtors"
+  | "banks"
   | "enforcements"
   | "enforcementsOwed";
 
@@ -788,6 +789,61 @@ const expenses: ImportSpec = {
 
 /* ───────────── Borçlular ───────────── */
 
+/* ───────────── Bankalar (haciz listesi) ───────────── */
+
+const banks: ImportSpec = {
+  kind: "banks",
+  title: "Bankalar",
+  noun: "banka",
+  description: "89/1 haciz ihbarnamesinde seçilecek bankaları toplu ekleyin.",
+  allowed: (p) => p.can("settings_categories", "create"),
+  softDuplicates: true,
+  columns: [
+    {
+      key: "name",
+      header: "Banka adı",
+      required: true,
+      hint: "Haciz gönderilecek bankanın adı",
+      example: "Ziraat Bankası",
+      width: 32,
+      aliases: ["Banka", "Ad", "İsim"],
+    },
+    {
+      key: "status",
+      header: "Durum",
+      type: "enum",
+      options: () => ["Aktif", "Pasif"],
+      hint: "Aktif veya Pasif (boşsa Aktif)",
+      example: "Aktif",
+      aliases: ["Aktif", "Pasif"],
+    },
+  ],
+  check(v, ctx) {
+    const errors: Errors = {};
+    const name = required(v, "name", errors);
+    enumOf(v, "status", ["Aktif", "Pasif"] as const, errors, "Aktif");
+    const dup = ctx.state.banks.find((b) => norm(b.name) === norm(name));
+    return {
+      errors,
+      warnings: [],
+      existing: dup ? `Kayıtlı banka: ${dup.name}` : undefined,
+      key: norm(name),
+    };
+  },
+  build(rows, ctx) {
+    const out: Draft<"banks">[] = rows.map((v) => {
+      const name = v.name.trim();
+      const existing = ctx.state.banks.find((b) => norm(b.name) === norm(name));
+      return {
+        id: existing?.id,
+        name,
+        active: matchOption(v.status ?? "", ["Aktif", "Pasif"]) !== "Pasif",
+      };
+    });
+    return { banks: out };
+  },
+};
+
 const debtors: ImportSpec = {
   kind: "debtors",
   title: "Borçlular",
@@ -1272,6 +1328,7 @@ export const IMPORT_SPECS: Record<ImportKind, ImportSpec> = {
   cases,
   expenses,
   debtors,
+  banks,
   enforcements,
   enforcementsOwed,
 };
@@ -1281,6 +1338,7 @@ export const IMPORT_ORDER: ImportKind[] = [
   "cases",
   "expenses",
   "debtors",
+  "banks",
   "enforcements",
   "enforcementsOwed",
 ];

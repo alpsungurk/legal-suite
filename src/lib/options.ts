@@ -90,6 +90,11 @@ export function useOptions() {
       enforcementCloseReasons: state.settings.enforcementCloseReasons,
       claimTypes: state.settings.claimTypes,
       bankAnswerTypes: state.settings.bankAnswerTypes,
+      /** 89/1 haciz için aktif bankalar (ad = değer) */
+      banks: state.banks
+        .filter((b) => b.active)
+        .map((b) => ({ value: b.name, label: b.name }))
+        .sort(byName),
       procedures: state.settings.procedures.map((p) => ({
         value: p.name,
         label: p.name,

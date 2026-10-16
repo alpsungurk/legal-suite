@@ -28,13 +28,15 @@ Bu belge, bir önceki "Yenilikler" belgesinden sonra eklenenleri içerir: "İcra
 |---|---|---|
 | Ödeme emri tebliği (alacaklı olduğumuz) | Takip şeklinin süresi dolduktan sonraki gün **kesinleştirme**; Örnek 14'te **tahliye**. Örnek: 30.09.2026 tebliğ, Örnek No: 7 → 08.10.2026 | "Kesinleşme" ya da "Tahliye talebi" girilince |
 | Ödeme emri tebliği (**borçlu olduğumuz**) | **İtiraz / ödeme süresi**: son gün = tebliğ + takip şeklinin günü; **son günden 2 gün önce** ve son gün | "Tamamlandı" denince |
-| 89/1 haciz ihbarnamesi | 13 gün sonra cevap vermeyen banka varsa **89/2** | Bütün bankaların cevabı girilince ya da 89/2 girilince |
+| 89/1 haciz ihbarnamesi | 15 gün sonra (16. gün) cevap vermeyen banka varsa **89/2** | Bütün bankaların cevabı girilince ya da 89/2 girilince |
+| 89/2 haciz ihbarnamesi | Aynı süre sonra **89/3** | Bütün bankaların cevabı girilince ya da 89/3 girilince |
+| 89/3 haciz ihbarnamesi | Aynı süre sonra **menfi tespit yoksa banka haczi kesinleşme** | Kesinleşme girilince ya da cevaplar tamamlanınca |
 | Maaş haczi tebliği | 30 gün sonra **işverenin borçlu olarak eklenmesi** | "Borçlu ekleme talebi" girilince |
 | Son haciz | 12 ay dolmadan 14 gün önce ve düşme günü **haciz yenileme** | Yeni haciz girilince |
 | Taksit / ödeme sözü | Ödeme günü | Tahsilat girilince |
 
 - Hatırlatmalar her sabah 08:00'de dosyanın sorumlu avukatına **bildirim** olarak gider ve "Dikkat gerektirenler"de görünür.
-- Alacaklı tarafına özgü süreler (kesinleştirme, 89/2, maaş, haciz, taksit) borçlu olduğumuz dosyalarda çıkmaz.
+- Alacaklı tarafına özgü süreler (kesinleştirme, 89/2–89/3, banka haczi kesinleşme, maaş, haciz, taksit) borçlu olduğumuz dosyalarda çıkmaz.
 
 ## 4. İcra → Süreler sayfası
 
@@ -46,8 +48,8 @@ Bu belge, bir önceki "Yenilikler" belgesinden sonra eklenenleri içerir: "İcra
 
 ## 5. İşlem ekle
 
-- **Sorgu:** 7 başlık bir arada girilir: Araç, Taşınmaz, Alacaklı olduğu icra dosyası, Banka (adet ve hangi bankalar), SGK maaş (aktif/pasif), SGK Mosip (aktif/pasif), Firma (aktif firma sayısı). İşlem geçmişinde renkli etiketlerle görünür.
-- **89/1 haciz ihbarnamesi:** Bankalar tek tek eklenir. Her bankanın cevabı Hacizli, Rehinli, Olumsuz, Tahsil edilebilir seçeneklerinden bir ya da birkaçı olarak işaretlenir. Cevabı boş banka "cevap bekleniyor" sayılır.
+- **Sorgu:** 7 başlık bir arada girilir: Araç, Taşınmaz, Alacaklı olduğu icra dosyası, Banka (adet), Bankalar (kayıtlı listeden çoklu seçim), SGK maaş (aktif/pasif), SGK Mosip (aktif/pasif), Firma (aktif firma sayısı).
+- **89/1 → 89/2 → 89/3:** Bankalar listeden seçilir. Her cevap türünün (Hacizli, Rehinli, Olumsuz, Tahsil edilebilir) yanında ayrı tutar yazılabilir. Cevabı boş banka "cevap bekleniyor" sayılır; 89/2 / 89/3 formunda önceki adımdaki bekleyen bankalar önceden dolar.
 - Tarih alanının altında, işlemin doğuracağı hatırlatmanın günü yazar.
 
 ## 6. Takip bilgileri
@@ -58,9 +60,10 @@ Bu belge, bir önceki "Yenilikler" belgesinden sonra eklenenleri içerir: "İcra
 ## 7. Ayarlar → Kategoriler
 
 - Yeni listeler: **Kapanış sebepleri**, **Takip bilgileri**, **Banka cevapları (89/1)**.
+- **Bankalar:** Haciz gönderilecek bankaların listesi (aktif/pasif). Tek tablo; Excel şablonuyla toplu yüklenir. 89/1–89/3 ve sorgu formunda listeden seçilir.
 - **Takip şekilleri ve süreleri:** gün sayısı ve süre dolunca yapılacak işlem değiştirilebilir, yeni takip şekli eklenebilir.
-- **Banka ve maaş haczi süreleri:** 89/1 için 13 gün, maaş haczi için 30 gün; değiştirilebilir.
-- Süre hesabında kullanılan işlem türleri (Ödeme emri tebliği, Kesinleşme, 89/1, 89/2, Maaş haczi tebliği, Borçlu ekleme talebi, Tahliye talebi, Sorgu, Haciz) kilitlidir, silinemez.
+- **Banka ve maaş haczi süreleri:** 89/1–89/3 için varsayılan 15 gün (16. gün hatırlatma), maaş haczi için 30 gün; değiştirilebilir.
+- Süre hesabında kullanılan işlem türleri (Ödeme emri tebliği, Kesinleşme, 89/1, 89/2, 89/3, Maaş haczi tebliği, Borçlu ekleme talebi, Tahliye talebi, Sorgu, Haciz) kilitlidir, silinemez.
 
 ## 8. Excel
 

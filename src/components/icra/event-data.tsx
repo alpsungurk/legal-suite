@@ -1,11 +1,11 @@
-import { INQUIRY_FIELDS, type EnforcementEvent, type EventData } from "@/lib/erp-types";
-import { today } from "@/lib/format";
+import { INQUIRY_FIELDS, normalizeBankAnswers, type EnforcementEvent, type EventData } from "@/lib/erp-types";
+import { formatMoney, today } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-/** İşlem kaydındaki ek bilgiler: sorgu sonuçları ve 89/1 banka cevapları */
+/** İşlem kaydındaki ek bilgiler: sorgu sonuçları ve 89/1–89/3 banka cevapları */
 export function EventDataSummary({ data, className }: { data?: EventData; className?: string }) {
   const inq = data?.inquiry;
-  const banks = data?.banks ?? [];
+  const banks = normalizeBankAnswers(data?.banks);
   if (!inq && banks.length === 0) return null;
   return (
     <div className={cn("mt-1.5 space-y-1.5", className)}>
@@ -37,8 +37,9 @@ export function EventDataSummary({ data, className }: { data?: EventData; classN
               <span className="font-medium">{b.name}</span>
               {b.answers.length ? (
                 b.answers.map((a) => (
-                  <span key={a} className="rounded-full bg-secondary px-2 py-0.5">
-                    {a}
+                  <span key={a.type} className="rounded-full bg-secondary px-2 py-0.5">
+                    {a.type}
+                    {a.amount != null && a.amount > 0 ? ` · ${formatMoney(a.amount)}` : ""}
                   </span>
                 ))
               ) : (

@@ -135,6 +135,7 @@ export function emptyState(): ErpState {
     collections: [],
     contacts: [],
     events: [],
+    banks: [],
     documents: [],
     notifications: [],
     activities: [],

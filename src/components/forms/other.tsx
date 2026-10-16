@@ -3,17 +3,23 @@ import { FormDialog, type FormValues } from "@/components/app/FormDialog";
 import { AttachmentList } from "@/components/app/files";
 import { useErp } from "@/lib/erp-store";
 import { useOptions } from "@/lib/options";
+import { useEffect } from "react";
 import {
+  BANK_GARNISHMENT_EVENT_TYPES,
   CLOSED_ENFORCEMENT_STATUS,
   DEFAULT_ENFORCEMENT_STATUS,
   EVENT_TYPE_BANK_891,
+  EVENT_TYPE_BANK_892,
+  EVENT_TYPE_BANK_893,
   EVENT_TYPE_INQUIRY,
   EVENT_TYPE_SALARY,
   EVENT_TYPE_SEIZURE,
   EVENT_TYPE_SERVICE,
   INQUIRY_FIELDS,
   STOPPED_ENFORCEMENT_STATUS,
+  normalizeBankAnswers,
   type BankAnswer,
+  type BankAnswerItem,
   type EventData,
   type InquiryResult,
   type Procedure,
@@ -42,15 +48,37 @@ import {
   defaultIncomeAccountId,
   enforcementSummary,
   seizureDueDate,
+  waitingBanksFromPrior,
 } from "@/lib/finance";
 import { PERIODS, stepDate } from "@/components/forms/finance";
-import { MoneyInput } from "@/components/app/fields";
+import { Combobox, MoneyInput, MultiCombobox, type Option } from "@/components/app/fields";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Money } from "@/components/app/bits";
 import { Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FormProps } from "@/components/forms/core";
+
+const isBankGarnishment = (type?: string) =>
+  !!type && (BANK_GARNISHMENT_EVENT_TYPES as readonly string[]).includes(type);
+
+function bankDeadlineHint(type: string, date: string, days: number) {
+  const when = formatDate(addDays(date, days + 1));
+  if (type === EVENT_TYPE_BANK_891)
+    return `Cevap vermeyen banka varsa ${when} günü 89/2 hatırlatılır`;
+  if (type === EVENT_TYPE_BANK_892)
+    return `Cevap vermeyen banka varsa ${when} günü 89/3 hatırlatılır`;
+  if (type === EVENT_TYPE_BANK_893)
+    return `Menfi tespit davası yoksa ${when} günü banka haczi kesinleşmesi hatırlatılır`;
+  return undefined;
+}
+
+function nextBankStepLabel(type: string) {
+  if (type === EVENT_TYPE_BANK_891) return "89/2";
+  if (type === EVENT_TYPE_BANK_892) return "89/3";
+  if (type === EVENT_TYPE_BANK_893) return "kesinleşme";
+  return "sonraki adım";
+}
 
 /** Takip şeklinin süre kuralını tek cümleyle anlatır */
 export function procedureRule(p?: Procedure) {
@@ -59,18 +87,50 @@ export function procedureRule(p?: Procedure) {
   return `Ödeme emri tebliğinden ${p.days} gün sonra, ${p.days + 1}. gün ${p.action.toLocaleLowerCase("tr")} hatırlatılır`;
 }
 
-/** 89/1 haciz ihbarnamesi: gönderilen bankalar ve her bankanın cevabı (birden fazla seçilebilir) */
+/** 89/1–89/3: gönderilen bankalar; her cevap türünün yanında ayrı tutar */
 function BankAnswersEditor({
   value,
   answerTypes,
+  bankOptions,
+  nextLabel,
+  priorWaiting,
   onChange,
 }: {
   value: BankAnswer[];
   answerTypes: string[];
+  bankOptions: Option[];
+  /** Süre dolunca hatırlatılacak adım (89/2, 89/3, kesinleşme) */
+  nextLabel: string;
+  /** Önceki adımdan cevap bekleyen bankalar (boş formda bir kez doldurulur) */
+  priorWaiting?: BankAnswer[];
   onChange: (v: BankAnswer[]) => void;
 }) {
+  useEffect(() => {
+    if (value.length === 0 && priorWaiting && priorWaiting.length > 0) onChange(priorWaiting);
+    // yalnızca ilk açılışta doldur
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const update = (i: number, p: Partial<BankAnswer>) =>
     onChange(value.map((b, j) => (j === i ? { ...b, ...p } : b)));
+  const toggleAnswer = (i: number, type: string) => {
+    const b = value[i];
+    const on = b.answers.some((a) => a.type === type);
+    update(i, {
+      answers: on
+        ? b.answers.filter((a) => a.type !== type)
+        : [...b.answers, { type } satisfies BankAnswerItem],
+    });
+  };
+  const setAmount = (i: number, type: string, amount: number) => {
+    const b = value[i];
+    update(i, {
+      answers: b.answers.map((a) =>
+        a.type === type
+          ? { ...a, amount: amount > 0 ? round2(amount) : undefined }
+          : a,
+      ),
+    });
+  };
   const waiting = value.filter((b) => b.name.trim() && b.answers.length === 0).length;
   return (
     <div className="rounded-lg border p-3">
@@ -78,7 +138,8 @@ function BankAnswersEditor({
         <div>
           <p className="text-sm font-medium">Bankalar ve cevapları</p>
           <p className="text-xs text-muted-foreground">
-            Cevap seçilmeyen banka "cevap vermedi" sayılır; süre dolunca 89/2 hatırlatılır.
+            Listeden seçin veya elle yazın. Cevap seçilmeyen banka "cevap vermedi" sayılır; süre
+            dolunca {nextLabel} hatırlatılır. Her cevabın yanına tutar yazılabilir.
             {waiting > 0 && ` Cevap bekleyen: ${waiting}`}
           </p>
         </div>
@@ -94,49 +155,60 @@ function BankAnswersEditor({
       {value.length === 0 ? (
         <p className="py-2 text-center text-xs text-muted-foreground">Henüz banka eklenmedi</p>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {value.map((b, i) => (
-            <div key={i} className="flex flex-col gap-2 rounded-md bg-muted/40 p-2 sm:flex-row sm:items-center">
-              <Input
-                value={b.name}
-                placeholder="Banka adı"
-                className="h-9 sm:w-48"
-                onChange={(e) => update(i, { name: e.target.value })}
-              />
-              <div className="flex flex-1 flex-wrap gap-1.5">
+            <div key={i} className="space-y-2 rounded-md bg-muted/40 p-2">
+              <div className="flex items-center gap-2">
+                <div className="min-w-0 flex-1 sm:max-w-xs">
+                  <Combobox
+                    value={b.name || undefined}
+                    onChange={(name) => update(i, { name })}
+                    options={bankOptions}
+                    placeholder="Banka seçin"
+                    creatable
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0"
+                  aria-label="Bankayı kaldır"
+                  onClick={() => onChange(value.filter((_, j) => j !== i))}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="flex flex-col gap-1.5">
                 {answerTypes.map((a) => {
-                  const on = b.answers.includes(a);
+                  const item = b.answers.find((x) => x.type === a);
                   return (
-                    <button
-                      key={a}
-                      type="button"
-                      onClick={() =>
-                        update(i, {
-                          answers: on ? b.answers.filter((x) => x !== a) : [...b.answers, a],
-                        })
-                      }
-                      className={cn(
-                        "rounded-full border px-2.5 py-1 text-xs transition-colors",
-                        on
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "bg-background text-muted-foreground hover:bg-accent",
+                    <div key={a} className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => toggleAnswer(i, a)}
+                        className={cn(
+                          "rounded-full border px-2.5 py-1 text-xs transition-colors",
+                          item
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "bg-background text-muted-foreground hover:bg-accent",
+                        )}
+                      >
+                        {a}
+                      </button>
+                      {item && (
+                        <div className="w-28">
+                          <MoneyInput
+                            value={item.amount}
+                            onChange={(n) => setAmount(i, a, n)}
+                            placeholder="Tutar"
+                          />
+                        </div>
                       )}
-                    >
-                      {a}
-                    </button>
+                    </div>
                   );
                 })}
               </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 shrink-0 self-end sm:self-auto"
-                aria-label="Bankayı kaldır"
-                onClick={() => onChange(value.filter((_, j) => j !== i))}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
             </div>
           ))}
         </div>
@@ -506,14 +578,15 @@ export function EnforcementEventForm({
       if (p.days == null || !p.action) return `${p.name}: süre hatırlatması yok`;
       return `${p.name}: ${formatDate(addDays(v.date, p.days + 1))} günü ${p.action.toLocaleLowerCase("tr")} hatırlatılır`;
     }
-    if (v.type === EVENT_TYPE_BANK_891)
-      return `Cevap vermeyen banka varsa ${formatDate(addDays(v.date, s.bankResponseDays + 1))} günü 89/2 hatırlatılır`;
+    if (isBankGarnishment(String(v.type)))
+      return bankDeadlineHint(String(v.type), v.date, s.bankResponseDays);
     if (v.type === EVENT_TYPE_SALARY)
       return `${formatDate(addDays(v.date, s.salaryResponseDays + 1))} günü işverenin borçlu olarak eklenmesi hatırlatılır`;
     return undefined;
   };
   const inquiry = record?.data?.inquiry ?? {};
-  const inquiryFields = INQUIRY_FIELDS.map((f, i) => ({
+  // "Bankalar" serbest metin yerine listeden çoklu seçim (aşağıda MultiCombobox)
+  const inquiryFields = INQUIRY_FIELDS.filter((f) => f.key !== "bankalar").map((f, i) => ({
     name: `inq_${f.key}`,
     label: f.label,
     type: (f.kind === "count" ? "number" : f.kind === "status" ? "select" : "text") as
@@ -522,10 +595,14 @@ export function EnforcementEventForm({
       | "text",
     options: f.kind === "status" ? ["Aktif", "Pasif"] : undefined,
     allowClear: f.kind === "status",
-    placeholder: f.kind === "count" ? "Adet" : f.kind === "text" ? "Hangi bankalar" : undefined,
+    placeholder: f.kind === "count" ? "Adet" : undefined,
     section: i === 0 ? "Sorgu sonuçları" : undefined,
     visible: (v: FormValues) => v.type === EVENT_TYPE_INQUIRY,
   }));
+  const inquiryBankNames = (inquiry.bankalar ?? "")
+    .split(/[,;]+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
   return (
     <FormDialog
       open={open}
@@ -562,7 +639,7 @@ export function EnforcementEventForm({
           label: "Sonuç",
           type: "select",
           options: o.resultTypes,
-          visible: (v) => v.type !== EVENT_TYPE_INQUIRY && v.type !== EVENT_TYPE_BANK_891,
+          visible: (v) => v.type !== EVENT_TYPE_INQUIRY && !isBankGarnishment(String(v.type)),
         },
         { name: "amount", label: "Tutar (varsa)", type: "money" },
         ...inquiryFields,
@@ -572,11 +649,18 @@ export function EnforcementEventForm({
         date: today(),
         ...preset,
         ...record,
-        ...Object.fromEntries(INQUIRY_FIELDS.map((f) => [`inq_${f.key}`, inquiry[f.key] ?? ""])),
-        banks: record?.data?.banks ?? [],
+        ...Object.fromEntries(
+          INQUIRY_FIELDS.filter((f) => f.key !== "bankalar").map((f) => [
+            `inq_${f.key}`,
+            inquiry[f.key] ?? "",
+          ]),
+        ),
+        inquiryBanks: inquiryBankNames,
+        banks: normalizeBankAnswers(record?.data?.banks ?? []),
       }}
       validate={(v) =>
-        v.type === EVENT_TYPE_BANK_891 && (v.banks as BankAnswer[]).some((b) => !b.name.trim())
+        isBankGarnishment(String(v.type)) &&
+        (v.banks as BankAnswer[]).some((b) => !b.name.trim())
           ? { type: "Banka adı boş bırakılamaz" }
           : undefined
       }
@@ -588,6 +672,7 @@ export function EnforcementEventForm({
         if (type === EVENT_TYPE_INQUIRY) {
           const inq: InquiryResult = {};
           for (const f of INQUIRY_FIELDS) {
+            if (f.key === "bankalar") continue;
             const raw = v[`inq_${f.key}`];
             if (raw === "" || raw == null) continue;
             if (f.kind === "count") {
@@ -595,12 +680,18 @@ export function EnforcementEventForm({
               if (Number.isFinite(n) && n >= 0) (inq as Record<string, unknown>)[f.key] = Math.round(n);
             } else (inq as Record<string, unknown>)[f.key] = String(raw).trim();
           }
+          const selected = (v.inquiryBanks as string[] | undefined) ?? [];
+          if (selected.length) inq.bankalar = selected.join(", ");
           if (Object.keys(inq).length) data.inquiry = inq;
         }
-        if (type === EVENT_TYPE_BANK_891) {
-          const banks = (v.banks as BankAnswer[])
-            .map((b) => ({ name: b.name.trim(), answers: b.answers }))
-            .filter((b) => b.name);
+        if (isBankGarnishment(type)) {
+          const banks = normalizeBankAnswers(v.banks).map((b) => ({
+            name: b.name,
+            answers: b.answers.map((a) => ({
+              type: a.type,
+              ...(a.amount != null && a.amount > 0 ? { amount: a.amount } : {}),
+            })),
+          }));
           if (banks.length) data.banks = banks;
         }
         if (!data.doneAt) delete data.doneAt;
@@ -612,7 +703,7 @@ export function EnforcementEventForm({
           debtorId: v.debtorId || "",
           inquiryType: type === EVENT_TYPE_INQUIRY ? record?.inquiryType || "" : "",
           seizureType: type === EVENT_TYPE_SEIZURE ? v.seizureType || "" : "",
-          result: type === EVENT_TYPE_INQUIRY || type === EVENT_TYPE_BANK_891 ? "" : v.result || "",
+          result: type === EVENT_TYPE_INQUIRY || isBankGarnishment(type) ? "" : v.result || "",
           data,
           amount: Number(v.amount) > 0 ? round2(Number(v.amount)) : undefined,
           note: v.note?.trim() || "",
@@ -631,15 +722,43 @@ export function EnforcementEventForm({
         onSaved?.(item);
       }}
     >
-      {(v, set) =>
-        v.type === EVENT_TYPE_BANK_891 ? (
+      {(v, set) => {
+        const type = String(v.type ?? "");
+        if (type === EVENT_TYPE_INQUIRY) {
+          return (
+            <div className="space-y-1.5">
+              <p className="text-sm font-medium">Bankalar</p>
+              <MultiCombobox
+                value={(v.inquiryBanks as string[]) ?? []}
+                onChange={(inquiryBanks) => set({ inquiryBanks })}
+                options={o.banks}
+                placeholder="Kayıtlı bankalardan seçin"
+              />
+            </div>
+          );
+        }
+        if (!isBankGarnishment(type)) return null;
+        const priorType =
+          type === EVENT_TYPE_BANK_892
+            ? EVENT_TYPE_BANK_891
+            : type === EVENT_TYPE_BANK_893
+              ? EVENT_TYPE_BANK_892
+              : undefined;
+        const priorWaiting =
+          !record && enfId && priorType
+            ? waitingBanksFromPrior(state, enfId, priorType)
+            : undefined;
+        return (
           <BankAnswersEditor
-            value={v.banks as BankAnswer[]}
+            value={(v.banks as BankAnswer[]) ?? []}
             answerTypes={o.bankAnswerTypes}
+            bankOptions={o.banks}
+            nextLabel={nextBankStepLabel(type)}
+            priorWaiting={priorWaiting}
             onChange={(banks) => set({ banks })}
           />
-        ) : null
-      }
+        );
+      }}
     </FormDialog>
   );
 }

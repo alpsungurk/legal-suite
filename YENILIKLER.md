@@ -291,7 +291,7 @@ Formlardaki bütün açılır listeler buradan yönetilir. Değer ekleyebilir, s
 | İşlem | Hatırlatma | Ne zaman kapanır |
 |---|---|---|
 | Ödeme emri tebliği | Takip şeklinin süresi dolduktan sonraki gün **kesinleştirme** (Örnek 14'te **tahliye**). Örnek: 30.09.2026 tebliğ, Örnek No: 7 → 08.10.2026 | "Kesinleşme" ya da "Tahliye talebi" işlemi girilince |
-| 89/1 haciz ihbarnamesi | 13 gün sonra cevap vermeyen banka varsa **89/2** | Bütün bankaların cevabı girilince ya da 89/2 işlemi girilince |
+| 89/1 → 89/2 → 89/3 | 15 gün sonra (16. gün) cevap vermeyen banka varsa sıradaki ihbarname; 89/3 sonrası menfi tespit yoksa **banka haczi kesinleşme** | Cevaplar tamamlanınca / sonraki işlem / Kesinleşme girilince |
 | Maaş haczi tebliği | 30 gün sonra **işverenin borçlu olarak eklenmesi** | "Borçlu ekleme talebi" girilince |
 | Son haciz | 12 ay dolmadan 14 gün önce ve düşme günü **haciz yenileme** | Yeni haciz girilince |
 | Taksit / ödeme sözü | Ödeme günü | Tahsilat girilince |
@@ -317,8 +317,8 @@ Formlardaki bütün açılır listeler buradan yönetilir. Değer ekleyebilir, s
 **Ayarlar → Kategoriler**
 - Yeni listeler: **Kapanış sebepleri**, **Takip bilgileri**, **Banka cevapları (89/1)**.
 - **Takip şekilleri ve süreleri:** Her Örnek No'nun gün sayısı ve süre dolunca ne yapılacağı (kesinleştirme / tahliye) değiştirilebilir, yeni takip şekli eklenebilir. Gün boş bırakılırsa hatırlatma yapılmaz.
-- **Banka ve maaş haczi süreleri:** 89/1 için 13 gün, maaş haczi için 30 gün; değiştirilebilir.
-- Süre hesabında kullanılan işlem türleri (Ödeme emri tebliği, Kesinleşme, 89/1, 89/2, Maaş haczi tebliği, Borçlu ekleme talebi, Tahliye talebi, Sorgu, Haciz) kilitli; silinemez.
+- **Banka ve maaş haczi süreleri:** 89/1–89/3 için 15 gün (16. gün hatırlatma), maaş haczi için 30 gün; değiştirilebilir.
+- Süre hesabında kullanılan işlem türleri (Ödeme emri tebliği, Kesinleşme, 89/1, 89/2, 89/3, Maaş haczi tebliği, Borçlu ekleme talebi, Tahliye talebi, Sorgu, Haciz) kilitli; silinemez.
 
 **Excel**
 - Boş şablon talimatınızdaki 11 sütunla (Takip Şekli dahil) yenilendi.
@@ -331,7 +331,7 @@ Formlardaki bütün açılır listeler buradan yönetilir. Değer ekleyebilir, s
 
 - Borçlu olduğumuz dosyada da takip şekli seçilir ve "Ödeme emri tebliği" işlemi girilir.
 - Süre son gün = tebliğ tarihi + takip şeklinin günü. **Son günden 2 gün önce** ve son gün **İtiraz / ödeme süresi** bildirimi gider; aynı kayıtlar İcra → Süreler sayfasında da görünür.
-- İşlem yapıldıysa **Tamamlandı** denir. Kesinleştirme, 89/2, maaş gibi alacaklı tarafı süreleri borçlu dosyalarda çıkmaz.
+- İşlem yapıldıysa **Tamamlandı** denir. Kesinleştirme, 89/2–89/3, banka haczi kesinleşme, maaş gibi alacaklı tarafı süreleri borçlu dosyalarda çıkmaz.
 
 ---
 

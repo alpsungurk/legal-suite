@@ -53,6 +53,7 @@ import { PermissionsTab } from "@/components/settings/PermissionsTab";
 import { CronTab } from "@/components/settings/CronTab";
 import { CompanyListsTab } from "@/components/settings/CompanyListsTab";
 import { IcraRulesSettings } from "@/components/settings/IcraRulesSettings";
+import { BanksSettings } from "@/components/settings/BanksSettings";
 import { formatDate, today } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { archiveCandidates } from "@/lib/finance";
@@ -720,7 +721,12 @@ function CategoriesTab({ access }: { access: SectionAccess }) {
           </div>
           {g.title === "Dosyalar" && <ClosedCaseSettings canEdit={access.edit} />}
           {g.title === "İcra" && <SeizureSettings canEdit={access.edit} />}
-          {g.title === "İcra işlem geçmişi" && <IcraRulesSettings access={access} />}
+          {g.title === "İcra işlem geçmişi" && (
+            <>
+              <BanksSettings access={access} />
+              <IcraRulesSettings access={access} />
+            </>
+          )}
         </div>
       ))}
     </div>

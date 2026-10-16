@@ -163,7 +163,7 @@ export function IcraRulesSettings({ access }: { access: Access }) {
 
       <Section
         title="Banka ve maaş haczi süreleri"
-        description="89/1 haciz ihbarnamesinden sonra cevap vermeyen banka için süre dolunca 89/2 hatırlatılır. Maaş haczi müzekkeresi tebliğinden sonra süre dolunca işverenin borçlu olarak eklenmesi hatırlatılır."
+        description="89/1 → 89/2 → 89/3 zincirinde cevap vermeyen banka için süre dolunca (gün + 1) hatırlatılır. 89/3'ten sonra menfi tespit davası yoksa aynı süreyle banka haczi kesinleşmesi hatırlatılır. Maaş haczi tebliğinden sonra işverenin borçlu eklenmesi hatırlatılır."
       >
         <form
           inert={!access.edit}
@@ -179,7 +179,7 @@ export function IcraRulesSettings({ access }: { access: Access }) {
           }}
         >
           <label className="space-y-1.5">
-            <span className="text-[14px] font-medium">89/1 cevap süresi (gün)</span>
+            <span className="text-[14px] font-medium">89/1–89/3 cevap süresi (gün)</span>
             <Input
               type="number"
               min={1}
