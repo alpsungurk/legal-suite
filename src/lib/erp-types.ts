@@ -235,6 +235,36 @@ export const LOCKED_ENFORCEMENT_STATUSES = ["Açık", "Durdurulmuş", "Kapalı",
 export const CLOSED_ENFORCEMENT_STATUSES = ["Kapalı", "Kapandı", "Tahsil edildi"];
 export const DEFAULT_ENFORCEMENT_STATUS = "Açık";
 export const STOPPED_ENFORCEMENT_STATUS = "Durdurulmuş";
+export const CLOSED_ENFORCEMENT_STATUS = "Kapalı";
+/**
+ * Büronun listesindeki biçim: "Açık", "Açık (Durdurulmuş : Takibe İtiraz)", "Kapalı (İnfaz)".
+ * Excel'e bu biçimde yazılır, içe aktarımda da bu biçim çözülür.
+ */
+export function enforcementStatusLabel(e: { status: string; stopReason?: string; closeReason?: string }) {
+  if (e.status === STOPPED_ENFORCEMENT_STATUS)
+    return e.stopReason ? `Açık (Durdurulmuş : ${e.stopReason})` : "Açık (Durdurulmuş)";
+  if (e.status === CLOSED_ENFORCEMENT_STATUS && e.closeReason) return `Kapalı (${e.closeReason})`;
+  return e.status;
+}
+/** "Kapalı (İnfaz)" → { status: "Kapalı", closeReason: "İnfaz" }; tanınmazsa yalnızca status döner */
+export function parseEnforcementStatus(raw: string): {
+  status: string;
+  stopReason?: string;
+  closeReason?: string;
+} {
+  const s = raw.replace(/\s+/g, " ").trim();
+  const m = /^(.*?)\s*\((.*)\)\s*$/.exec(s);
+  if (!m) return { status: s };
+  const head = m[1].trim();
+  const inner = m[2].trim();
+  const low = (x: string) => x.toLocaleLowerCase("tr");
+  const stop = /^durdurulmu[şs]\s*:?\s*(.*)$/i.exec(inner);
+  if (stop || low(head).startsWith("durdurulmu"))
+    return { status: STOPPED_ENFORCEMENT_STATUS, stopReason: (stop ? stop[1] : inner).trim() || undefined };
+  if (low(head).startsWith("kapal"))
+    return { status: CLOSED_ENFORCEMENT_STATUS, closeReason: inner || undefined };
+  return { status: head || s };
+}
 export const isEnforcementClosed = (status: string) =>
   CLOSED_ENFORCEMENT_STATUSES.includes(status);
 export type EnforcementStatus = string;
@@ -243,7 +273,62 @@ export type EnforcementStatus = string;
 export type EnforcementSide = "Alacaklı" | "Borçlu";
 export const ENFORCEMENT_SIDES: EnforcementSide[] = ["Alacaklı", "Borçlu"];
 
-export const DEFAULT_STOP_REASONS = ["Borçlu itirazı", "Şikâyet", "Tedbir kararı", "Diğer"];
+export const DEFAULT_STOP_REASONS = [
+  "Takibe İtiraz",
+  "İcra Mahkemesine İtiraz",
+  "İhtiyati Tedbir",
+  "Tehir-i İcra Kararı",
+  "Diğer",
+];
+/** Durum "Kapalı" ise sebebi (avukatın talimatı) */
+export const DEFAULT_CLOSE_REASONS = [
+  "Yetkisizlik",
+  "Takipsizlik",
+  "Vazgeçme/Feragat",
+  "Takibin İptali",
+  "İnfaz",
+  "Haricen Tahsil",
+];
+export const CLOSE_REASON_INFAZ = "İnfaz";
+/** Takip bilgileri için hazır seçenekler; listede olmayan elle yazılabilir */
+export const DEFAULT_CLAIM_TYPES = [
+  "Araç Mahrumiyet Bedeli Alacağı",
+  "Dekont Alacağı",
+  "Kira Alacağı",
+  "Çek Alacağı",
+  "Senet Alacağı",
+  "Bono Alacağı",
+  "Fatura Alacağı",
+  "Ürün Bedeli Alacağı",
+  "İlam Vekalet Ücreti Alacağı",
+];
+/** 89/1 haciz ihbarnamesine bankanın cevabı (her bankada bir ya da birden fazla) */
+export const DEFAULT_BANK_ANSWER_TYPES = ["Hacizli", "Rehinli", "Olumsuz", "Tahsil edilebilir"];
+
+/**
+ * Takip şekli (Örnek No) ve süre kuralı: ödeme emri tebliğinden itibaren "days" gün;
+ * süre bitince ertesi gün "action" için hatırlatılır (ör. Örnek 7: 7 gün → 8. gün kesinleştirme).
+ */
+export type Procedure = { name: string; days: number | null; action: string | null };
+export const DEFAULT_PROCEDURES: Procedure[] = [
+  { name: "Örnek No: 2", days: 7, action: "Kesinleştirme" },
+  { name: "Örnek No: 3", days: null, action: null },
+  { name: "Örnek No: 4-5", days: 7, action: "Kesinleştirme" },
+  { name: "Örnek No: 6", days: 30, action: "Kesinleştirme" },
+  { name: "Örnek No: 7", days: 7, action: "Kesinleştirme" },
+  { name: "Örnek No: 8", days: 15, action: "Kesinleştirme" },
+  { name: "Örnek No: 9", days: 30, action: "Kesinleştirme" },
+  { name: "Örnek No: 10", days: 10, action: "Kesinleştirme" },
+  { name: "Örnek No: 11", days: null, action: null },
+  { name: "Örnek No: 12", days: null, action: null },
+  { name: "Örnek No: 13", days: 30, action: "Kesinleştirme" },
+  { name: "Örnek No: 13 (hasılat kirası)", days: 60, action: "Kesinleştirme" },
+  { name: "Örnek No: 14", days: 15, action: "Tahliye" },
+  { name: "Örnek No: 44", days: null, action: null },
+];
+export const PROCEDURE_ACTIONS = ["Kesinleştirme", "Tahliye"];
+export const DEFAULT_BANK_RESPONSE_DAYS = 13;
+export const DEFAULT_SALARY_RESPONSE_DAYS = 30;
 export const DEFAULT_INQUIRY_TYPES = [
   "Araç",
   "Taşınmaz",
@@ -259,19 +344,74 @@ export const DEFAULT_ENFORCEMENT_EVENT_TYPES = [
   "Ödeme emri tebliği",
   "Ödeme emri iadesi",
   "İtiraz",
-  "Kesinleştirme talebi",
+  "Kesinleşme",
   "Sorgu",
   "Haciz",
+  "Maaş haczi tebliği",
+  "89/1 haciz ihbarnamesi",
+  "89/2 haciz ihbarnamesi",
   "Banka cevabı",
   "Borçlu ekleme talebi",
+  "Tahliye talebi",
+  "Taksitli anlaşma",
+  "Haricen tahsil talebi",
+  "Kesinleştirme talebi",
   "Diğer",
 ];
-/** İşlem türü bu ise sorgu türü / haciz türü alanı açılır */
+/** Program bu işlem türlerini süre hesabında ve ek alanlarda kullanır (Kategoriler'de silinemez) */
 export const EVENT_TYPE_INQUIRY = "Sorgu";
 export const EVENT_TYPE_SEIZURE = "Haciz";
+export const EVENT_TYPE_SERVICE = "Ödeme emri tebliği";
+export const EVENT_TYPE_FINALIZED = "Kesinleşme";
+export const EVENT_TYPE_SALARY = "Maaş haczi tebliği";
+export const EVENT_TYPE_BANK_891 = "89/1 haciz ihbarnamesi";
+export const EVENT_TYPE_BANK_892 = "89/2 haciz ihbarnamesi";
+export const EVENT_TYPE_ADD_DEBTOR = "Borçlu ekleme talebi";
+export const EVENT_TYPE_EVICTION = "Tahliye talebi";
+export const LOCKED_EVENT_TYPES = [
+  EVENT_TYPE_SERVICE,
+  EVENT_TYPE_FINALIZED,
+  EVENT_TYPE_INQUIRY,
+  EVENT_TYPE_SEIZURE,
+  EVENT_TYPE_SALARY,
+  EVENT_TYPE_BANK_891,
+  EVENT_TYPE_BANK_892,
+  EVENT_TYPE_ADD_DEBTOR,
+  EVENT_TYPE_EVICTION,
+];
+
+/** Sorgu sonuçları: avukatın istediği 7 başlık */
+export type InquiryResult = {
+  arac?: number;
+  tasinmaz?: number;
+  icra?: number;
+  banka?: number;
+  bankalar?: string;
+  sgk?: "Aktif" | "Pasif";
+  mosip?: "Aktif" | "Pasif";
+  firma?: number;
+};
+export const INQUIRY_FIELDS: Array<{ key: keyof InquiryResult; label: string; kind: "count" | "status" | "text" }> = [
+  { key: "arac", label: "Araç", kind: "count" },
+  { key: "tasinmaz", label: "Taşınmaz", kind: "count" },
+  { key: "icra", label: "Alacaklı olduğu icra dosyası", kind: "count" },
+  { key: "banka", label: "Banka", kind: "count" },
+  { key: "bankalar", label: "Bankalar", kind: "text" },
+  { key: "sgk", label: "SGK (maaş)", kind: "status" },
+  { key: "mosip", label: "SGK Mosip (şirketler için)", kind: "status" },
+  { key: "firma", label: "Firma (aktif firma sayısı)", kind: "count" },
+];
+export type BankAnswer = { name: string; answers: string[] };
+export type EventData = {
+  inquiry?: InquiryResult;
+  banks?: BankAnswer[];
+  /** Süre elle "tamamlandı" işaretlendiyse tarihi */
+  doneAt?: string;
+};
 export const DEFAULT_SEIZURE_VALID_MONTHS = 12;
 export const DEFAULT_SEIZURE_REMINDER_DAYS = 14;
-export const DEFAULT_CLOSED_CASE_RETENTION_MONTHS = 12;
+/** 0 = kapalı dosyalar otomatik silinmez (büro "Şimdi kalıcı sil" demedikçe saklanır) */
+export const DEFAULT_CLOSED_CASE_RETENTION_MONTHS = 0;
 
 export const ENFORCEMENT_TYPES = ["İlamsız", "İlamlı", "Kambiyo", "Rehin", "Kira", "Diğer"];
 
@@ -290,6 +430,10 @@ export type EnforcementFile = BaseEntity & {
   status: EnforcementStatus;
   /** Durum "Durdurulmuş" ise sebebi */
   stopReason?: string;
+  /** Durum "Kapalı" ise sebebi (İnfaz, Haricen Tahsil…) */
+  closeReason?: string;
+  /** Takip şekli (Örnek No); kesinleştirme / tahliye süresi buna göre hesaplanır */
+  procedure?: string;
   openingDate: ISODate;
   responsibleIds: string[];
   caseId?: string;
@@ -312,6 +456,8 @@ export type EnforcementEvent = BaseEntity & {
   result?: string;
   amount?: number;
   note?: string;
+  /** Sorgu sonuçları, 89/1 bankaları ve cevapları, "tamamlandı" işareti */
+  data?: EventData;
 };
 
 /** Ayarlar → Şirket listeleri: belirli müvekkillerin icra dosyaları için ayrı liste */
@@ -435,6 +581,15 @@ export type Settings = {
   /** Haczin düşeceği tarihten kaç gün önce hatırlatılır */
   seizureReminderDays: number;
   companyLists: CompanyList[];
+  enforcementCloseReasons: string[];
+  claimTypes: string[];
+  bankAnswerTypes: string[];
+  /** Takip şekilleri ve süre kuralları */
+  procedures: Procedure[];
+  /** 89/1'e banka cevap süresi (gün); dolunca 89/2 hatırlatılır */
+  bankResponseDays: number;
+  /** Maaş haczinde işverenin ödeme süresi (gün); dolunca işveren borçlu eklenmesi hatırlatılır */
+  salaryResponseDays: number;
   /** Kapalı dava dosyası kapanıştan kaç ay sonra silinir (müvekkilde toplamlar kalır) */
   closedCaseRetentionMonths: number;
 };

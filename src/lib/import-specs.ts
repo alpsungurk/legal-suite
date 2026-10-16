@@ -12,6 +12,8 @@ import {
   type Client,
   DEFAULT_ENFORCEMENT_STATUS,
   STOPPED_ENFORCEMENT_STATUS,
+  CLOSED_ENFORCEMENT_STATUS,
+  parseEnforcementStatus,
   type Debtor,
   type EnforcementFile,
   type EnforcementSide,
@@ -907,6 +909,34 @@ const firstDateIn = (text?: string) => {
   return m ? parseDateText(`${m[1]}.${m[2]}.${m[3]}`) : null;
 };
 
+/**
+ * "Örnek No: 7", "Örnek 7", "7", "örnek no 4-5" → ayarlardaki takip şekli adı.
+ * Önce olduğu gibi, sonra numarasıyla eşlenir; bulunamazsa undefined.
+ */
+export function matchProcedure(raw: string, names: string[]) {
+  const v = raw.trim();
+  if (!v) return undefined;
+  const num = (x: string) =>
+    x
+      .toLocaleLowerCase("tr")
+      .replace(/^\s*(örnek|ornek)\s*(no)?\b|[:.]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  const key = num(v);
+  return (
+    names.find((n) => num(n) === key) ??
+    matchLoose(v, names) ??
+    names.find((n) => num(n).split(" ")[0] === key)
+  );
+}
+
+/** Dosya durumu hücresi: "Açık", "Açık (Durdurulmuş : Takibe İtiraz)", "Kapalı (İnfaz)" */
+function statusCell(raw: string | undefined, s: ErpState) {
+  if (!raw?.trim()) return { status: defaultStatus(s) as string | undefined };
+  const p = parseEnforcementStatus(raw);
+  return { ...p, status: matchLoose(p.status, s.settings.enforcementStatuses) };
+}
+
 const defaultStatus = (s: ErpState) =>
   s.settings.enforcementStatuses.includes(DEFAULT_ENFORCEMENT_STATUS)
     ? DEFAULT_ENFORCEMENT_STATUS
@@ -960,8 +990,14 @@ function enforcementSpec(side: EnforcementSide): ImportSpec {
         key: "status",
         header: "Dosya durumu",
         type: "lookup",
-        options: (c) => c.state.settings.enforcementStatuses,
-        hint: "Açık, Durdurulmuş, Kapalı… (boşsa Açık)",
+        creatable: true,
+        options: (c) => [
+          ...c.state.settings.enforcementStatuses,
+          ...c.state.settings.enforcementStopReasons.map((r) => `Açık (Durdurulmuş : ${r})`),
+          ...c.state.settings.enforcementCloseReasons.map((r) => `Kapalı (${r})`),
+        ],
+        hint: "Açık, Açık (Durdurulmuş : Takibe İtiraz), Kapalı (İnfaz)… (boşsa Açık)",
+        width: 26,
         aliases: ["Durum"],
       },
       ...(owed ? [clientColumn, partiesColumn] : [clientColumn, partiesColumn]),
@@ -993,6 +1029,16 @@ function enforcementSpec(side: EnforcementSide): ImportSpec {
         options: (c) => c.state.settings.enforcementTypes,
         hint: "İlamsız, İlamlı, Kambiyo… (\"İlamsız Takip\" de tanınır)",
         aliases: ["Tür"],
+      },
+      {
+        key: "procedure",
+        header: "Takip şekli",
+        type: "lookup",
+        options: (c) => c.state.settings.procedures.map((p) => p.name),
+        hint: "Örnek No: 7 gibi; kesinleştirme / tahliye hatırlatması buna göre (\"7\" de tanınır)",
+        example: "Örnek No: 7",
+        width: 18,
+        aliases: ["Örnek No", "Örnek", "Takip şekli (örnek no)"],
       },
       {
         key: "details",
@@ -1082,11 +1128,15 @@ function enforcementSpec(side: EnforcementSide): ImportSpec {
       const office = required(v, "office", errors);
       if (v.type?.trim() && !matchLoose(v.type, s.settings.enforcementTypes))
         warnings.push(`Takip türü listeye eklenecek: ${v.type.trim()}`);
-      const status = v.status?.trim()
-        ? matchLoose(v.status, s.settings.enforcementStatuses)
-        : defaultStatus(s);
-      if (!status)
+      const st = statusCell(v.status, s);
+      if (!st.status)
         errors.status = `Listeden seçin: ${s.settings.enforcementStatuses.slice(0, 6).join(", ")}…`;
+      if (st.stopReason && !matchLoose(st.stopReason, s.settings.enforcementStopReasons))
+        warnings.push(`Durdurulma sebebi listeye eklenecek: ${st.stopReason}`);
+      if (st.closeReason && !matchLoose(st.closeReason, s.settings.enforcementCloseReasons))
+        warnings.push(`Kapanış sebebi listeye eklenecek: ${st.closeReason}`);
+      if (v.procedure?.trim() && !matchProcedure(v.procedure, s.settings.procedures.map((p) => p.name)))
+        errors.procedure = "Takip şekli bulunamadı; Ayarlar → Kategoriler → Takip şekilleri'ne ekleyin";
       let clientId: string | undefined;
       if (required(v, "client", errors)) {
         const r = findClient(s, v.client);
@@ -1157,9 +1207,18 @@ function enforcementSpec(side: EnforcementSide): ImportSpec {
         return newParties.get(k)!.id;
       };
       const out: Draft<"enforcements">[] = rows.map((v) => {
-        const status = v.status?.trim()
-          ? (matchLoose(v.status, s.settings.enforcementStatuses) ?? defaultStatus(s))
-          : defaultStatus(s);
+        const st = statusCell(v.status, s);
+        const status = st.status ?? defaultStatus(s);
+        const stopReason =
+          status === STOPPED_ENFORCEMENT_STATUS
+            ? (st.stopReason
+                ? (matchLoose(st.stopReason, s.settings.enforcementStopReasons) ?? st.stopReason)
+                : v.stopReason?.trim()) || ""
+            : "";
+        const closeReason =
+          status === CLOSED_ENFORCEMENT_STATUS && st.closeReason
+            ? (matchLoose(st.closeReason, s.settings.enforcementCloseReasons) ?? st.closeReason)
+            : "";
         const type = v.type?.trim()
           ? (matchLoose(v.type, s.settings.enforcementTypes) ?? v.type.trim())
           : (s.settings.enforcementTypes[0] ?? "İlamsız");
@@ -1179,7 +1238,9 @@ function enforcementSpec(side: EnforcementSide): ImportSpec {
           interest: 0,
           costs: 0,
           status,
-          stopReason: status === STOPPED_ENFORCEMENT_STATUS ? v.stopReason?.trim() || "" : "",
+          stopReason,
+          closeReason,
+          procedure: matchProcedure(v.procedure ?? "", s.settings.procedures.map((p) => p.name)) ?? "",
           openingDate:
             parseDateText(v.openingDate ?? "") ?? firstDateIn(note) ?? firstDateIn(v.details) ?? today(),
           lastSeizureDate: owed ? "" : (parseDateText(v.lastSeizureDate ?? "") ?? ""),

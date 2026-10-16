@@ -28,6 +28,8 @@ import type {
   YearStats,
   CompanyList,
   EnforcementEvent,
+  EventData,
+  Procedure,
   EnforcementSide,
 } from "@/lib/erp-types";
 
@@ -155,7 +157,26 @@ export function settingsFromRow(r: Record<string, unknown> | null): Settings {
     seizureReminderDays: num(r.seizure_reminder_days, base.seizureReminderDays),
     companyLists: companyListsFromJson(r.company_lists),
     closedCaseRetentionMonths: num(r.closed_case_retention_months, base.closedCaseRetentionMonths),
+    enforcementCloseReasons:
+      (r.enforcement_close_reasons as string[]) ?? base.enforcementCloseReasons,
+    claimTypes: (r.claim_types as string[]) ?? base.claimTypes,
+    bankAnswerTypes: (r.bank_answer_types as string[]) ?? base.bankAnswerTypes,
+    procedures: proceduresFromJson(r.procedures) ?? base.procedures,
+    bankResponseDays: num(r.bank_response_days, base.bankResponseDays),
+    salaryResponseDays: num(r.salary_response_days, base.salaryResponseDays),
   };
+}
+
+function proceduresFromJson(v: unknown): Procedure[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  return v
+    .filter((x): x is Record<string, unknown> => !!x && typeof x === "object")
+    .map((x) => ({
+      name: String(x.name ?? ""),
+      days: x.days == null || x.days === "" ? null : Number(x.days),
+      action: x.action ? String(x.action) : null,
+    }))
+    .filter((x) => x.name);
 }
 
 function companyListsFromJson(v: unknown): CompanyList[] {
@@ -197,6 +218,12 @@ export function settingsToRow(s: Partial<Settings>) {
   if (s.companyLists != null) row.company_lists = s.companyLists;
   if (s.closedCaseRetentionMonths != null)
     row.closed_case_retention_months = s.closedCaseRetentionMonths;
+  if (s.enforcementCloseReasons != null) row.enforcement_close_reasons = s.enforcementCloseReasons;
+  if (s.claimTypes != null) row.claim_types = s.claimTypes;
+  if (s.bankAnswerTypes != null) row.bank_answer_types = s.bankAnswerTypes;
+  if (s.procedures != null) row.procedures = s.procedures;
+  if (s.bankResponseDays != null) row.bank_response_days = s.bankResponseDays;
+  if (s.salaryResponseDays != null) row.salary_response_days = s.salaryResponseDays;
   return row;
 }
 
@@ -417,6 +444,8 @@ export function enforcementFromRow(
     costs: num(r.costs),
     status: String(r.status ?? "Açık"),
     stopReason: optStr(r.stop_reason),
+    closeReason: optStr(r.close_reason),
+    procedure: optStr(r.procedure),
     openingDate: dateOnly(r.opening_date as string),
     responsibleIds: (r.responsible_ids as string[]) ?? [],
     caseId: optStr(r.case_id),
@@ -442,6 +471,8 @@ export function enforcementToRow(e: Partial<EnforcementFile>) {
   if (e.note !== undefined) row.note = e.note || null;
   if (e.side != null) row.side = e.side;
   if (e.stopReason !== undefined) row.stop_reason = e.stopReason || null;
+  if (e.closeReason !== undefined) row.close_reason = e.closeReason || null;
+  if (e.procedure !== undefined) row.procedure = e.procedure || null;
   if (e.details !== undefined) row.details = e.details || null;
   if (e.lastSeizureDate !== undefined) row.last_seizure_date = e.lastSeizureDate || null;
   return row;
@@ -464,6 +495,7 @@ export function eventFromRow(r: Record<string, unknown>): EnforcementEvent {
     result: optStr(r.result),
     amount: optNum(r.amount),
     note: optStr(r.note),
+    data: r.data && typeof r.data === "object" ? (r.data as EventData) : undefined,
   };
 }
 
@@ -478,6 +510,7 @@ export function eventToRow(e: Partial<EnforcementEvent>) {
   if (e.result !== undefined) row.result = e.result || null;
   if (e.amount !== undefined) row.amount = e.amount ?? null;
   if (e.note !== undefined) row.note = e.note || null;
+  if (e.data !== undefined) row.data = e.data && Object.keys(e.data).length ? e.data : null;
   return row;
 }
 

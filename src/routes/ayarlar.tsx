@@ -39,6 +39,7 @@ import { useConfirm } from "@/components/app/confirm";
 import {
   LOCKED_CASE_STATUSES,
   LOCKED_ENFORCEMENT_STATUSES,
+  LOCKED_EVENT_TYPES,
   LOCKED_FEE_KINDS,
   type CategoryKey,
   type FirmProfile,
@@ -51,6 +52,7 @@ import { sendSentryTest, sentryEnabled } from "@/lib/sentry";
 import { PermissionsTab } from "@/components/settings/PermissionsTab";
 import { CronTab } from "@/components/settings/CronTab";
 import { CompanyListsTab } from "@/components/settings/CompanyListsTab";
+import { IcraRulesSettings } from "@/components/settings/IcraRulesSettings";
 import { formatDate, today } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { archiveCandidates } from "@/lib/finance";
@@ -523,6 +525,19 @@ const CAT_GROUPS: Array<{
         title: "Durdurulma sebepleri",
         desc: "Durum \"Durdurulmuş\" seçilince sorulur",
       },
+      {
+        key: "enforcementCloseReasons",
+        title: "Kapanış sebepleri",
+        desc: "Durum \"Kapalı\" seçilince sorulur (İnfaz: tamamı tahsil edilince otomatik)",
+        locked: ["İnfaz"],
+        canEmpty: true,
+      },
+      {
+        key: "claimTypes",
+        title: "Takip bilgileri",
+        desc: "Çek, senet, kira alacağı... (listede olmayan elle yazılabilir)",
+        canEmpty: true,
+      },
       { key: "enforcementTypes", title: "Takip türleri", desc: "İlamsız, ilamlı, kambiyo..." },
       {
         key: "enforcementOffices",
@@ -543,8 +558,13 @@ const CAT_GROUPS: Array<{
       {
         key: "enforcementEventTypes",
         title: "İşlem türleri",
-        desc: "Tebliğ, itiraz, kesinleştirme, sorgu, haciz... (Sorgu ve Haciz ek alan açar)",
-        locked: ["Sorgu", "Haciz"],
+        desc: "Tebliğ, kesinleşme, sorgu, haciz, 89/1... (kilitliler süre hesabında ve ek alanlarda kullanılır)",
+        locked: LOCKED_EVENT_TYPES,
+      },
+      {
+        key: "bankAnswerTypes",
+        title: "Banka cevapları (89/1)",
+        desc: "Hacizli, rehinli, olumsuz... (bir bankada birden fazla seçilebilir)",
       },
       {
         key: "inquiryTypes",
@@ -568,12 +588,12 @@ function ClosedCaseSettings({ canEdit }: { canEdit: boolean }) {
   const [months, setMonths] = useState(String(current));
   useEffect(() => setMonths(String(current)), [current]);
   const m = Number(months);
-  const valid = Number.isInteger(m) && m >= 1 && m <= 120;
+  const valid = Number.isInteger(m) && m >= 0 && m <= 120;
   const closed = state.cases.filter((c) => c.status === "Kapalı").length;
   return (
     <Section
       title="Kapalı dosyaların saklanma süresi"
-      description={`Kapatılan dava dosyası bu süre boyunca kayıtlarıyla birlikte saklanır; süre dolunca bir sonraki ay başında (her ayın 1'i) otomatik silinir; müvekkilde yalnızca toplam alacak / verecek ve ücret toplamları kalır. Şu an ${closed} kapalı dosya var.`}
+      description={`Kapatılan dava dosyası kayıtlarıyla birlikte kapalı olarak saklanır. 0 ise hiç otomatik silinmez (yalnızca siz "Şimdi kalıcı sil" derseniz silinir). Süre verirseniz dolunca bir sonraki ay başında (her ayın 1'i) silinir; müvekkilde yalnızca toplam alacak / verecek ve ücret toplamları kalır. Şu an ${closed} kapalı dosya var.`}
     >
       <form
         inert={!canEdit}
@@ -581,7 +601,7 @@ function ClosedCaseSettings({ canEdit }: { canEdit: boolean }) {
         onSubmit={(e) => {
           e.preventDefault();
           if (!valid) {
-            toast.error("Süre 1–120 ay olmalı");
+            toast.error("Süre 0–120 ay olmalı (0: otomatik silme yok)");
             return;
           }
           updateSettings({ closedCaseRetentionMonths: m });
@@ -589,10 +609,10 @@ function ClosedCaseSettings({ canEdit }: { canEdit: boolean }) {
         }}
       >
         <label className="space-y-1.5">
-          <span className="text-[14px] font-medium">Kapanıştan sonra kaç ay saklansın</span>
+          <span className="text-[14px] font-medium">Kaç ay sonra otomatik silinsin (0: hiç silinmesin)</span>
           <Input
             type="number"
-            min={1}
+            min={0}
             max={120}
             value={months}
             onChange={(e) => setMonths(e.target.value)}
@@ -700,6 +720,7 @@ function CategoriesTab({ access }: { access: SectionAccess }) {
           </div>
           {g.title === "Dosyalar" && <ClosedCaseSettings canEdit={access.edit} />}
           {g.title === "İcra" && <SeizureSettings canEdit={access.edit} />}
+          {g.title === "İcra işlem geçmişi" && <IcraRulesSettings access={access} />}
         </div>
       ))}
     </div>

@@ -10,6 +10,7 @@ import {
   FileWarning,
   Gavel,
   Hourglass,
+  Timer,
   Info,
   MessageSquare,
   Wallet,
@@ -198,6 +199,7 @@ export const alertIcon: Record<Alert["category"], LucideIcon> = {
   "Ödeme sözü": Gavel,
   Ajanda: Clock,
   Haciz: Hourglass,
+  Süre: Timer,
 };
 
 export const toneStyle: Record<Alert["tone"], string> = {

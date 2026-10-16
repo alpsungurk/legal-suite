@@ -439,6 +439,7 @@ export function ImportDialog({
         rememberOption("enforcementOffices", e.office);
         rememberOption("enforcementTypes", e.type);
         if (e.stopReason) rememberOption("enforcementStopReasons", e.stopReason);
+        if (e.closeReason) rememberOption("enforcementCloseReasons", e.closeReason);
       }
       const icra = kind === "enforcements" || kind === "enforcementsOwed";
       const extraParties = icra ? (batch.debtors?.length ?? 0) : 0;

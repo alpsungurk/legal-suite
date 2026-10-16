@@ -14,8 +14,8 @@ export const CRON_META: Record<string, { label: string; hint: string }> = {
     hint: "Eski bildirim ve aktivite kayıtları temizlenir",
   },
   "lexkasa-haciz": {
-    label: "Haciz hatırlatması",
-    hint: "Haczin düşmesine yaklaşan icra dosyaları sorumlularına bildirilir",
+    label: "İcra süreleri ve haciz",
+    hint: "Kesinleştirme / tahliye, 89/2, işveren borçlu ekleme günleri ve haczin düşmesine yaklaşan dosyalar sorumlularına bildirilir",
   },
   "lexkasa-kapali-dosya": {
     label: "Kapalı dosya silme",

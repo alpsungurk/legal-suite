@@ -11,17 +11,18 @@ import type { CaseFile } from "@/lib/erp-types";
  * ilk ay başı. Silme işi her ayın 1'inde çalışır.
  */
 export function purgeDateFor(closingDate: string | undefined, months: number) {
+  if (months <= 0) return "";
   const due = addMonths(closingDate || today(), months);
   return due.endsWith("-01") ? due : `${addMonths(due, 1).slice(0, 8)}01`;
 }
 
 export function casePurgeDate(c: Pick<CaseFile, "status" | "closingDate">, months: number) {
-  return c.status === "Kapalı" ? purgeDateFor(c.closingDate, months) : undefined;
+  return c.status === "Kapalı" && months > 0 ? purgeDateFor(c.closingDate, months) : undefined;
 }
 
 /**
- * Kapatma onayı. Dosya hemen silinmez: kayıtlarıyla birlikte saklanır ve kapanıştan
- * ayardaki süre dolunca (varsayılan 12 ay) bir sonraki ay başında otomatik silinir.
+ * Kapatma onayı. Dosya silinmez: kayıtlarıyla birlikte kapalı olarak saklanır. Yalnızca Ayarlar'da
+ * otomatik silme süresi verildiyse o süre dolunca bir sonraki ay başında silinir.
  */
 export function useCloseConfirm() {
   const { state } = useErp();
@@ -35,15 +36,24 @@ export function useCloseConfirm() {
       confirmLabel: "Kapat",
       description: (
         <span className="space-y-2">
-          <span className="block">
-            {caseLabel(c)} dosyası ve bütün kayıtları (masraf, tahsilat, belge, ajanda){" "}
-            <b>{months} ay</b> boyunca kapalı olarak saklanır; bu sürede yeniden açabilirsiniz.
-          </span>
-          <span className="block">
-            {formatDate(purgeDateFor(undefined, months))} tarihinde (silme işi ayın başında
-            çalışır) kayıtlar silinir. Müvekkilde yalnızca toplam alacak / verecek ve ücret
-            toplamları kalır.
-          </span>
+          {months > 0 ? (
+            <>
+              <span className="block">
+                {caseLabel(c)} dosyası ve bütün kayıtları (masraf, tahsilat, belge, ajanda){" "}
+                <b>{months} ay</b> boyunca kapalı olarak saklanır; bu sürede yeniden açabilirsiniz.
+              </span>
+              <span className="block">
+                {formatDate(purgeDateFor(undefined, months))} tarihinde (silme işi ayın başında
+                çalışır) kayıtlar silinir. Müvekkilde yalnızca toplam alacak / verecek ve ücret
+                toplamları kalır.
+              </span>
+            </>
+          ) : (
+            <span className="block">
+              {caseLabel(c)} dosyası ve bütün kayıtları (masraf, tahsilat, belge, ajanda) kapalı
+              olarak saklanır; siz silmedikçe silinmez. İstediğiniz zaman yeniden açabilirsiniz.
+            </span>
+          )}
         </span>
       ),
     });

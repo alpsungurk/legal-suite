@@ -57,6 +57,12 @@ let kullaniciErr = null;
 try { await db.exec(kullaniciSql); await db.exec(kullaniciSql); } catch (e) { kullaniciErr = e; }
 ok("kullanıcı yönetimi devri migration'ı çalıştı (iki kez)", !kullaniciErr, kullaniciErr ? kullaniciErr.message : "");
 if (kullaniciErr) { console.log(R.join(String.fromCharCode(10))); process.exit(1); }
+const SURE = fileURLToPath(new URL("../migrations/20261016150000_icra_sureler.sql", import.meta.url));
+const sureSql = readFileSync(SURE, "utf8");
+let sureErr = null;
+try { await db.exec(sureSql); await db.exec(sureSql); } catch (e) { sureErr = e; }
+ok("icra süreleri migration'ı çalıştı (iki kez)", !sureErr, sureErr ? sureErr.message : "");
+if (sureErr) { console.log(R.join(String.fromCharCode(10))); process.exit(1); }
 const KAPALI = fileURLToPath(new URL("../migrations/20261016120000_kapali_dosya_saklama.sql", import.meta.url));
 const kapaliSql = readFileSync(KAPALI, "utf8");
 let kapaliErr = null;
@@ -407,8 +413,23 @@ ok("gece işi: müvekkilde kapanan dosya sayısı arttı", (await one(`select cl
 ok("gece işi: ikinci çalıştırma bir şey silmez", (await one(`select app.cron_purge_closed_cases() n`)).n === 0);
 ok("şimdi kalıcı sil (close_case) hâlâ çalışır, avukat yapamaz", await fails(() => asUser(U, () => q(`select public.close_case($1)`, [kNew])), /yetkiniz yok/)
   && !!(await asUser(A, () => one(`select public.close_case($1) r`, [kNew]))).r);
-ok("ayar: saklama süresi varsayılan 12 ay, sınır dışı reddedilir", (await one(`select closed_case_retention_months m from public.org_settings where org_id=$1`, [orgA])).m === 12
-  && await fails(() => asUser(A, () => q(`update public.org_settings set closed_case_retention_months = 0`)), /check/i));
+ok("ayar: saklama süresi başta 12 ay", (await one(`select closed_case_retention_months m from public.org_settings where org_id=$1`, [orgA])).m === 12);
+// Borçlu olduğumuz dosyada süre + kapalı dosyalar büro silmedikçe silinmez
+const BS = fileURLToPath(new URL("../migrations/20261016160000_borclu_sureler_kapali_saklama.sql", import.meta.url));
+const bsSql = readFileSync(BS, "utf8");
+let bsErr = null;
+try { await db.exec(bsSql); await db.exec(bsSql); } catch (e) { bsErr = e; }
+ok("borçlu süreleri + kapalı saklama migration'ı çalıştı (iki kez)", !bsErr, bsErr ? bsErr.message : "");
+if (bsErr) { console.log(R.join(String.fromCharCode(10))); process.exit(1); }
+ok("ayar: saklama süresi 12 iken 0'a (silme yok) çekildi, varsayılan 0, eksi değer reddedilir",
+  (await one(`select closed_case_retention_months m from public.org_settings where org_id=$1`, [orgA])).m === 0
+  && await fails(() => asUser(A, () => q(`update public.org_settings set closed_case_retention_months = -1`)), /check/i));
+const kX = await kc('2025/902');
+await asUser(A, () => q(`update public.cases set status='Kapalı', closing_date = current_date - interval '40 months' where id=$1`, [kX]));
+ok("gece işi: süre 0 ise çok eski kapalı dosya bile silinmez", (await one(`select app.cron_purge_closed_cases() n`)).n === 0 && (await q(`select 1 from public.cases where id=$1`, [kX])).length === 1);
+await asUser(A, () => q(`update public.org_settings set closed_case_retention_months = 6`));
+ok("gece işi: süre verilirse yine silinir (6 ay)", (await one(`select app.cron_purge_closed_cases() n`)).n === 1);
+await asUser(A, () => q(`update public.org_settings set closed_case_retention_months = 0`));
 ok("gece işi: istemci çağıramaz", await fails(() => asUser(A, () => q(`select app.cron_purge_closed_cases()`)), /permission denied/));
 
 // ── Ayarlar bölümlerini avukata verme (Görüntüle / Ekle / Düzenle / Sil ayrı ayrı)
@@ -483,6 +504,55 @@ ok("kullanıcılar: my_permissions ekle / düzenle anahtarlarını verir", (awai
   && (await asUser(U, () => one(`select public.my_permissions() p`))).p["settings_users.create"] === false);
 await setAs(U, {});
 
+// ── İcra süreleri (takip şekline göre kesinleştirme, 89/2, işveren, taksit günü)
+const st2 = await asUser(A, () => one(`select procedures p, enforcement_close_reasons c, claim_types t, bank_answer_types b from public.org_settings`));
+ok("süreler: 14 takip şekli, kapanış sebepleri ve hazır takip bilgileri geldi", st2.p.length === 14 && st2.c.includes("İnfaz") && st2.t.includes("Çek Alacağı") && st2.b.includes("Hacizli"));
+ok("süreler: Örnek No 7 → 7 gün kesinleştirme, Örnek No 14 → 15 gün tahliye",
+  st2.p.find((x) => x.name === "Örnek No: 7").days === 7 && st2.p.find((x) => x.name === "Örnek No: 14").action === "Tahliye");
+const sf = await enfNew("2026/700 E.", ", procedure, responsible_ids", `, 'Örnek No: 7', array['${S}']::uuid[]`);
+const evIns = (type, date, data = null) => asUser(A, async () => (await one(`insert into public.enforcement_events (enforcement_id, type, date, data) values ($1,$2,${date},$3) returning id`, [sf.id, type, data])).id);
+const teb = await evIns("Ödeme emri tebliği", "current_date - 8");
+const dl = async (key) => (await asUser(S, () => q(`select * from public.v_icra_deadlines where enforcement_id=$1 and kind=$2`, [sf.id, key])))[0];
+let k1 = await dl("Kesinleştirme");
+ok("süreler: tebliğ + 7 + 1 gün = kesinleştirme bugün (avukat da görür)", k1 && k1.due_date.toISOString().slice(0, 10) === (await one(`select current_date::text d`)).d && k1.resolved === false, JSON.stringify(k1));
+const b891 = await evIns("89/1 haciz ihbarnamesi", "current_date - 14", JSON.stringify({ banks: [{ name: "Ziraat", answers: ["Olumsuz"] }, { name: "Garanti", answers: [] }] }));
+let b = await dl("89/2 haciz ihbarnamesi");
+ok("süreler: 89/1'den 13 gün sonra cevapsız banka → 89/2 bugün", b && b.resolved === false);
+const maas = await evIns("Maaş haczi tebliği", "current_date - 31");
+ok("süreler: maaş haczi tebliğinden 31. gün → işveren borçlu ekleme", !!(await dl("İşveren borçlu ekleme")));
+const nSure = (await one(`select app.cron_icra_deadlines() n`)).n;
+const sn = await asUser(S, () => q(`select title from public.notifications where type='İcra süresi'`));
+ok("süreler: sorumluya 3 bildirim (kesinleştirme, 89/2, işveren)", nSure === 3 && sn.length === 3, JSON.stringify(sn));
+ok("süreler: ikinci çalıştırma yinelemez", (await one(`select app.cron_icra_deadlines() n`)).n === 0);
+await evIns("Kesinleşme", "current_date");
+await db.exec(`update public.enforcement_events set data = '{"banks":[{"name":"Ziraat","answers":["Olumsuz"]},{"name":"Garanti","answers":["Hacizli","Rehinli"]}]}'::jsonb where id='${b891}'`);
+k1 = await dl("Kesinleştirme"); b = await dl("89/2 haciz ihbarnamesi");
+ok("süreler: kesinleşme girilince ve bankalar cevaplanınca süre kapanır", k1.resolved === true && b.resolved === true);
+await db.exec(`update public.enforcement_events set data = '{"doneAt":"2026-01-01"}'::jsonb where id='${maas}'`);
+ok("süreler: 'tamamlandı' işaretlenen süre kapanır", (await dl("İşveren borçlu ekleme")).resolved === true);
+await db.exec(`update public.enforcements set status='Kapalı', close_reason='İnfaz' where id='${sf.id}'`);
+ok("süreler: kapalı dosyanın süresi listelenmez", (await asUser(A, () => q(`select 1 from public.v_icra_deadlines where enforcement_id=$1`, [sf.id]))).length === 0);
+ok("süreler: başka büro göremez", (await asUser(B, () => q(`select 1 from public.v_icra_deadlines`))).length === 0);
+await setAs(U, { "settings_categories.view": true });
+ok("süreler: takip şekillerini yalnızca Kategoriler → Düzenle izni olan değiştirir", (await asUser(U, () => q(`update public.org_settings set procedures = '[]'::jsonb returning org_id`))).length === 0);
+await setAs(U, {});
+
+// ── Borçlu olduğumuz dosyada tebliğ süresi (itiraz / ödeme)
+const bf = await enfNew("2026/800 E.", ", side, procedure, responsible_ids", `, 'Borçlu', 'Örnek No: 7', array['${S}']::uuid[]`);
+const bev = await asUser(A, async () => (await one(`insert into public.enforcement_events (enforcement_id, type, date) values ($1,'Ödeme emri tebliği', current_date - 5) returning id`, [bf.id])).id);
+const bd = (await asUser(S, () => q(`select * from public.v_icra_deadlines where enforcement_id=$1`, [bf.id])))[0];
+ok("borçlu süre: tebliğ + 7 gün son gün, 2 gün önce hatırlatma", bd && bd.kind === "İtiraz / ödeme süresi"
+  && bd.due_date.toISOString().slice(0, 10) === (await one(`select (current_date + 2)::text d`)).d
+  && bd.remind_from.toISOString().slice(0, 10) === (await one(`select current_date::text d`)).d && bd.resolved === false, JSON.stringify(bd));
+const nb = (await one(`select app.cron_icra_deadlines() n`)).n;
+const bn = await asUser(S, () => q(`select title from public.notifications where title like 'İtiraz%'`));
+ok("borçlu süre: sorumluya bildirim gitti, tekrarlanmadı", nb === 1 && bn.length === 1 && (await one(`select app.cron_icra_deadlines() n`)).n === 0, JSON.stringify(bn));
+await evIns("89/1 haciz ihbarnamesi", "current_date - 14").catch(() => {});
+await asUser(A, () => q(`insert into public.enforcement_events (enforcement_id, type, date) values ($1,'89/1 haciz ihbarnamesi', current_date - 14)`, [bf.id]));
+ok("borçlu süre: 89/1 vb. alacaklı süreleri borçlu dosyada üretilmez", (await asUser(S, () => q(`select 1 from public.v_icra_deadlines where enforcement_id=$1`, [bf.id]))).length === 1);
+await db.exec(`update public.enforcement_events set data = '{"doneAt":"2026-01-01"}'::jsonb where id='${bev}'`);
+ok("borçlu süre: tamamlandı işaretlenince kapanır", (await asUser(S, () => one(`select resolved from public.v_icra_deadlines where enforcement_id=$1 and kind='İtiraz / ödeme süresi'`, [bf.id]))).resolved === true);
+
 // ── cron zamanlaması (pg_cron taklidiyle)
 await db.exec(`
   create schema cron;
@@ -495,7 +565,7 @@ try { await db.exec(sql); await db.exec(sql); } catch (e) { cronErr = e; }
 ok("cron: zamanlama bölümü çalıştı", !cronErr, cronErr?.message);
 const jobs = await q(`select jobname, schedule from cron.job order by jobname`);
 ok("cron: 4 iş, tekrarlanmadı", jobs.length === 4, JSON.stringify(jobs));
-await db.exec(icraSql); await db.exec(icraSql); await db.exec(kapaliSql); await db.exec(kapaliSql); await db.exec(ayarSql); await db.exec(kullaniciSql);
+await db.exec(icraSql); await db.exec(icraSql); await db.exec(kapaliSql); await db.exec(kapaliSql); await db.exec(ayarSql); await db.exec(kullaniciSql); await db.exec(sureSql); await db.exec(bsSql);
 const jobs2 = await q(`select jobname, schedule from cron.job order by jobname`);
 ok("cron: kapalı dosya işi her ayın 1'i 03:45 (TR), tekrarlanmadı", jobs2.filter((j) => j.jobname === "lexkasa-kapali-dosya").length === 1 && jobs2.some((j) => j.jobname === "lexkasa-kapali-dosya" && j.schedule === "45 0 1 * *"), JSON.stringify(jobs2));
 ok("cron: haciz işi her gün 08:00 (TR), tekrarlanmadı", jobs2.length === 6 && jobs2.some((j) => j.jobname === "lexkasa-haciz" && j.schedule === "0 5 * * *"), JSON.stringify(jobs2));

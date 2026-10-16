@@ -8,6 +8,7 @@ import {
   Gavel,
   Hourglass,
   Info,
+  Timer,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
@@ -34,6 +35,7 @@ const CATEGORIES: Array<{ key: Alert["category"]; icon: LucideIcon }> = [
   { key: "Ödeme sözü", icon: Gavel },
   { key: "Ajanda", icon: Clock },
   { key: "Haciz", icon: Hourglass },
+  { key: "Süre", icon: Timer },
 ];
 
 const PRIORITY: Record<Alert["tone"], { label: string; rank: number; tone: "red" | "amber" | "blue" | "green" }> = {

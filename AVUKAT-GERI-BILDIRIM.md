@@ -216,22 +216,39 @@ Bir değer listeden çıkarılırsa, o değerle girilmiş **eski kayıtlar silin
 
 | Ayarlar'ı avukata verme | Ayarlar → İzinler'de **Ayarlar sayfası** tablosu (üstteki izin tablosuyla aynı biçimde): Büro bilgileri (Görüntüle / Düzenle), Kategoriler ve Şirket listeleri (Görüntüle / Ekle / Düzenle / Sil), Kullanıcılar (Görüntüle / Ekle / Düzenle) ve Yedekleme (Görüntüle) ayrı ayrı verilir; tüm avukatlar için ya da tek bir avukat için ayarlanır. Örneğin bir avukat kategorilere değer ekleyebilir ama silemez. Kural veritabanında da zorunlu (arayüzü atlayarak değiştirmek mümkün değil). **İzinler sekmesi, Zamanlama ve arşivleme yalnızca Admin'de kalır.** İsteğe bağlı **"Kullanıcı ekleme ve düzenleme"** izni de verilebilir; ama bu izinle avukat sadece avukat rolünde kullanıcı ekler / düzenler / pasife alır / geçici şifre verir. Admin hesaplarına dokunamaz, kimseyi Admin yapamaz, izin veremez, e-posta değiştiremez, kendini pasife alamaz (veritabanında zorunlu). | Ayarlar → İzinler → Ayarlar sayfası |
 
+### 7.1 "İcra Örnek Liste Talimat.xlsx" (avukatın ikinci dosyası)
+
+Avukat örnek listeye **Takip Şekli** sütununu ekledi ve her sütunun seçeneklerini, takip şekline göre hangi gün ne hatırlatılacağını yazdı.
+
+| Talimat | Ne yapıldı | Nereden kullanılır |
+|---|---|---|
+| Dosya durumu biçimi | Durum seçenekleri talimattaki gibi: **Açık**, **Açık (Durdurulmuş : sebep)**, **Kapalı (sebep)**. Durdurulma sebepleri: Takibe İtiraz, İcra Mahkemesine İtiraz, İhtiyati Tedbir, Tehir-i İcra Kararı, Diğer. Kapanış sebepleri: Yetkisizlik, Takipsizlik, Vazgeçme/Feragat, Takibin İptali, İnfaz, Haricen Tahsil. Excel'e bu biçimde yazılır, Excel'den bu biçimde okunur. | İcra dosyası formu → Dosya durumu |
+| Otomatik "Kapalı (İnfaz)" | Tahsilatlar takip çıkış rakamına ulaşınca dosya kendiliğinden **Kapalı (İnfaz)** olur. | Tahsilat gir |
+| Takip Şekli (Örnek No) | Yeni alan: Örnek No: 2, 3, 4-5, 6, 7, 8, 9, 10, 11, 12, 13, 13 (hasılat kirası), 14, 44. Her birinin **gün sayısı** ve süre dolunca **ne yapılacağı** (kesinleştirme / tahliye) ayarlardan değiştirilebilir. | İcra dosyası formu; Ayarlar → Kategoriler → Takip şekilleri ve süreleri |
+| Kesinleştirme / tahliye hatırlatması | "Ödeme emri tebliği" işlemi girilince: tebliğ + takip şeklinin günü dolduktan **sonraki gün** hatırlatılır (Örnek 7: 30.09 tebliğ → 08.10 kesinleştirme; Örnek 10: 11. gün; Örnek 14: 16. gün tahliye). "Kesinleşme" / "Tahliye talebi" işlemi girilince süre kapanır. | İcra → **Süreler** |
+| 89/1 → 89/2 | "89/1 haciz ihbarnamesi" işlemine **bankalar** ve her bankanın cevabı (Hacizli, Rehinli, Olumsuz, Tahsil edilebilir; birden fazla seçilebilir) girilir. **13 gün** sonra cevap vermeyen banka varsa 89/2 hatırlatılır. | İşlem ekle → 89/1 haciz ihbarnamesi |
+| Maaş haczi | "Maaş haczi tebliği" işleminden **30 gün** sonra işverenin borçlu olarak eklenmesi hatırlatılır; "Borçlu ekleme talebi" girilince kapanır. | İcra → Süreler |
+| Sorgu sonuçları (7 başlık) | "Sorgu" işleminde tek tür yerine 7 başlığın hepsi bir arada: Araç (adet), Taşınmaz (adet), Alacaklı olduğu icra dosyası (adet), Banka (adet ve hangi bankalar), SGK maaş (aktif/pasif), SGK Mosip (aktif/pasif), Firma (aktif firma sayısı). | İşlem ekle → Sorgu |
+| Takip bilgileri | Hazır seçenekler (Çek Alacağı, Kira Alacağı, Fatura Alacağı…) listeden seçilir, listede olmayan elle yazılır ve listeye eklenir. | İcra dosyası formu |
+| Süreler sayfası | Menü → İcra → **Süreler**: bütün dosyaların kesinleştirme, tahliye, 89/2, işveren, haciz yenileme ve taksit günleri tek listede. Gecikmiş / Bugün / Bu hafta sayıları, filtre, tarih aralığı, sıralama, Excel. **Tamamlandı** ile listeden düşer. Her sabah 08:00'de aynı kurallarla sorumlu avukata bildirim gider. | Menü → İcra → Süreler |
+| Excel şablonu | Boş şablon talimattaki 11 sütunla (Takip Şekli dahil) yenilendi. Aktarımda "Takip Şekli" sütunu ("7" yazılsa da tanınır) ve "Kapalı (İnfaz)" gibi birleşik durumlar çözülür. | Excel ile aktar → Boş şablon |
+
 **Test edildi:**
-- Örnek listedeki 3 satırın hepsi hatasız ayrıştı.
-- Veritabanı testleri 125/125 geçti: yeni alanlar, işlem geçmişi yetkileri, haciz bildirimi, cron kurulumu.
+- Örnek listedeki 3 satırın hepsi hatasız ayrıştı. Durum metinleri ("Açık (Durdurulmuş : Takibe İtiraz)", "Kapalı (İnfaz)") ve takip şekli ("7", "Örnek 7", "Örnek No: 13 (hasılat kirası)") doğru eşlendi.
+- Veritabanı testleri 186/186 geçti: yeni alanlar, işlem geçmişi yetkileri, haciz bildirimi, cron kurulumu, icra süreleri (tebliğ + 7 + 1 gün, 89/1 → 89/2, maaş → işveren, tamamlandı işareti, kapalı dosya, başka büro).
 - Ekranlar tarayıcıda denenmedi.
 
 ## 8. Senin yapman gerekenler
 
 1. **Yeni migration'ları sırayla çalıştır (zorunlu, önce bu):**
-   - Supabase → SQL Editor'de önce `supabase/migrations/20261016000000_icra_geri_bildirim.sql`, sonra `supabase/migrations/20261016120000_kapali_dosya_saklama.sql`, sonra `supabase/migrations/20261016130000_ayarlar_izinleri.sql`, en son `supabase/migrations/20261016140000_kullanici_yonetimi_devri.sql` dosyasının tamamını çalıştır. Alternatif: `npx supabase db push`.
+   - Supabase → SQL Editor'de önce `supabase/migrations/20261016000000_icra_geri_bildirim.sql`, sonra `supabase/migrations/20261016120000_kapali_dosya_saklama.sql`, sonra `supabase/migrations/20261016130000_ayarlar_izinleri.sql`, sonra `supabase/migrations/20261016140000_kullanici_yonetimi_devri.sql`, en son `supabase/migrations/20261016150000_icra_sureler.sql` dosyasının tamamını çalıştır. Alternatif: `npx supabase db push`.
    - Bu çalışmadan uygulama açılır, ama icra dosyası kaydetmek ve yeni ayarları kaydetmek **hata verir**.
 2. **pg_cron açık mı kontrol et:**
    - Supabase → Database → Extensions → `pg_cron` açık olmalı.
    - Kapalıysa aç ve migration'ı bir kez daha çalıştır; tekrar çalıştırmak güvenli.
-   - Sonra Ayarlar → Zamanlama'da **Haciz hatırlatması** işi görünmeli.
+   - Sonra Ayarlar → Zamanlama'da **İcra süreleri ve haciz** işi görünmeli.
 3. **`invite-user` fonksiyonunu yayınla** (önceki işten kalan adım, kullanıcı eklemek için gerekli): `npx supabase functions deploy invite-user`.
-4. **Avukattan durdurulma sebeplerini al**, Ayarlar → Kategoriler → Durdurulma sebepleri'ne gir. Şimdilik geçici değerler var: Borçlu itirazı, Şikâyet, Tedbir kararı, Diğer.
+4. **Takip şekli günlerini avukatla teyit et.** Talimatta Örnek 7 (7 gün) ve Örnek 10 (11. gün) açıkça yazıyor; diğerlerinin günleri genel kurala göre girildi (Ayarlar → Kategoriler → Takip şekilleri ve süreleri'nden değiştirilebilir). 89/1 için 13 gün, maaş haczi için 30 gün de oradan değişir. Durdurulma sebepleri artık talimattaki listeyle geliyor.
 5. **Ayarlar → Şirket listeleri**'nde 5–6 şirketi tanımla; şirket isimleri avukattan alınacak.
 6. **12 ay / 14 gün kuralını avukatla teyit et.** Farklıysa Ayarlar → Kategoriler → Haciz süresi'nden değiştir.
 7. **Avukatın icra süreç notları gelince** işlem türlerini Kategoriler'den güncelle.

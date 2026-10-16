@@ -18,17 +18,22 @@ import {
   Wallet,
   XCircle,
   Send,
+  Timer,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useErp } from "@/lib/erp-store";
 import {
+  DEADLINE_TITLES,
   enforcementSummary,
+  icraDeadlines,
   promiseStatus,
   seizureDueDate,
   seizureWarning,
 } from "@/lib/finance";
-import { STOPPED_ENFORCEMENT_STATUS } from "@/lib/erp-types";
-import { formatDate, formatDateLong, formatMoney, relativeDue } from "@/lib/format";
+import { CLOSED_ENFORCEMENT_STATUS, STOPPED_ENFORCEMENT_STATUS } from "@/lib/erp-types";
+import { EventDataSummary, doneData } from "@/components/icra/event-data";
+import { procedureRule } from "@/components/forms/other";
+import { formatDate, formatDateLong, formatMoney, relativeDue, today } from "@/lib/format";
 import { ExpenseTable } from "@/components/lists/tables";
 import { PageHeader } from "@/components/app/PageHeader";
 import {
@@ -132,6 +137,15 @@ function Page() {
   const events = state.events
     .filter((x) => x.enforcementId === e.id)
     .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
+  // Bu dosyanın bekleyen süreleri (kesinleştirme, 89/2, işveren…); haciz ve taksit yukarıda ayrıca görünür
+  const deadlines = icraDeadlines(state).filter(
+    (d) =>
+      d.enforcementId === e.id &&
+      !d.resolved &&
+      d.kind !== "Haciz yenileme" &&
+      d.kind !== "Taksit / ödeme sözü",
+  );
+  const procedure = state.settings.procedures.find((p) => p.name === e.procedure);
 
   return (
     <PageShell>
@@ -150,6 +164,9 @@ function Page() {
             </StatusBadge>
             {e.status === STOPPED_ENFORCEMENT_STATUS && e.stopReason && (
               <span className="text-sm text-muted-foreground">Sebep: {e.stopReason}</span>
+            )}
+            {e.status === CLOSED_ENFORCEMENT_STATUS && e.closeReason && (
+              <span className="text-sm text-muted-foreground">Sebep: {e.closeReason}</span>
             )}
             {client && (
               <Link
@@ -314,6 +331,53 @@ function Page() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,1fr)]">
         <div className="space-y-4">
+          {deadlines.length > 0 && (
+            <Section
+              title="Bekleyen süreler"
+              description={procedureRule(procedure) ?? "Takip şekli seçilmedi"}
+              bodyClassName="p-0"
+            >
+              <ul className="divide-y">
+                {deadlines.map((d) => {
+                  const ev = state.events.find((x) => x.id === d.eventId);
+                  const late = d.dueDate < today();
+                  return (
+                    <li key={d.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                      <span
+                        className={cn(
+                          "grid h-8 w-8 shrink-0 place-items-center rounded-lg",
+                          late
+                            ? "bg-rose-500/15 text-rose-600 dark:text-rose-400"
+                            : "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+                        )}
+                      >
+                        <Timer className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium">{DEADLINE_TITLES[d.kind]}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatDate(d.dueDate)} · {relativeDue(d.dueDate)}
+                          {ev && ` · ${ev.type} ${formatDate(ev.date)}`}
+                        </p>
+                      </div>
+                      {can && ev && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            patch("events", ev.id, { data: doneData(ev, true) });
+                            toast.success("Süre tamamlandı olarak işaretlendi");
+                          }}
+                        >
+                          <CheckCircle2 /> Tamamlandı
+                        </Button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </Section>
+          )}
           <Section
             title="İşlem geçmişi"
             description="Tebliğ, itiraz, kesinleştirme, sorgu, haciz ve banka cevapları"
@@ -369,6 +433,7 @@ function Page() {
                         {ev.debtorId && ` · ${debtorName(ev.debtorId)}`}
                         {ev.amount != null && ` · ${formatMoney(ev.amount)}`}
                       </p>
+                      <EventDataSummary data={ev.data} />
                       {ev.note && <p className="mt-0.5 whitespace-pre-line text-sm">{ev.note}</p>}
                     </div>
                     {can && (
@@ -723,6 +788,7 @@ function Page() {
                 { label: "Birim", value: e.office },
                 { label: "Dosya no", value: e.no },
                 { label: "Takip türü", value: e.type },
+                { label: "Takip şekli", value: e.procedure || undefined },
                 { label: "Takip tarihi", value: formatDate(e.openingDate) },
                 ...(owed
                   ? []
@@ -742,6 +808,9 @@ function Page() {
                     ]),
                 ...(e.status === STOPPED_ENFORCEMENT_STATUS
                   ? [{ label: "Durdurulma sebebi", value: e.stopReason || "—" }]
+                  : []),
+                ...(e.status === CLOSED_ENFORCEMENT_STATUS
+                  ? [{ label: "Kapanış sebebi", value: e.closeReason || "—" }]
                   : []),
                 { label: "Sorumlu", value: <AvatarStack names={e.responsibleIds.map(userName)} /> },
                 {

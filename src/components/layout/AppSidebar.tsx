@@ -15,6 +15,7 @@ import {
   LayoutDashboard,
   Receipt,
   Scale,
+  Timer,
   Search,
   Settings,
   UserX,
@@ -44,7 +45,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useErp } from "@/lib/erp-store";
-import { allInstallments, promiseStatus, seizureWarning } from "@/lib/finance";
+import { allInstallments, icraDeadlines, promiseStatus, seizureWarning } from "@/lib/finance";
 import { listIcon } from "@/lib/list-icons";
 import { today } from "@/lib/format";
 import type { Permissions } from "@/lib/erp-types";
@@ -243,6 +244,11 @@ export function AppSidebar() {
                                     <Link to={c.url} onClick={closeMobile}>
                                       <c.icon />
                                       <span>{c.title}</span>
+                                      {!!c.badge && (
+                                        <span className={cn("ml-auto", badgeClass(c.badgeTone))}>
+                                          {c.badge}
+                                        </span>
+                                      )}
                                     </Link>
                                   </SidebarMenuSubButton>
                                 </SidebarMenuSubItem>
@@ -387,6 +393,16 @@ function buildGroups(
   ).length;
   const brokenPromises = state.promises.filter((pr) => promiseStatus(pr) === "Gecikmiş").length;
   const seizureSoon = state.enforcements.filter((e) => seizureWarning(e, state.settings)).length;
+  // Süresi gelmiş icra işlemleri (kesinleştirme, 89/2, işveren…); haciz ve taksit yukarıda sayılıyor
+  const dueDeadlines = p.can("enforcements")
+    ? icraDeadlines(state).filter(
+        (d) =>
+          !d.resolved &&
+          d.remindFrom <= t &&
+          d.kind !== "Haciz yenileme" &&
+          d.kind !== "Taksit / ödeme sözü",
+      ).length
+    : 0;
   const unread = state.notifications.filter((n) => n.userId === userId && !n.read).length;
 
   const groups: Group[] = [
@@ -445,11 +461,18 @@ function buildGroups(
           id: "icra",
           title: "İcra",
           icon: Gavel,
-          badge: brokenPromises + seizureSoon,
+          badge: brokenPromises + seizureSoon + dueDeadlines,
           badgeTone: "red",
           children: [
             { title: "Alacaklı olduğumuz", url: "/icra", icon: Gavel },
             { title: "Borçlu olduğumuz", url: "/icra/borclu", icon: Scale },
+            {
+              title: "Süreler",
+              url: "/icra/sureler",
+              icon: Timer,
+              badge: dueDeadlines,
+              badgeTone: "red",
+            },
             {
               id: "sirket-listeleri",
               title: "Şirket listeleri",

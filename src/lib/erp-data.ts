@@ -22,6 +22,12 @@ import {
   DEFAULT_SEIZURE_VALID_MONTHS,
   DEFAULT_SEIZURE_REMINDER_DAYS,
   DEFAULT_CLOSED_CASE_RETENTION_MONTHS,
+  DEFAULT_CLOSE_REASONS,
+  DEFAULT_CLAIM_TYPES,
+  DEFAULT_BANK_ANSWER_TYPES,
+  DEFAULT_PROCEDURES,
+  DEFAULT_BANK_RESPONSE_DAYS,
+  DEFAULT_SALARY_RESPONSE_DAYS,
   STATE_VERSION,
   type Account,
   type AccountTx,
@@ -100,6 +106,12 @@ export function defaultSettings(): Settings {
     seizureReminderDays: DEFAULT_SEIZURE_REMINDER_DAYS,
     companyLists: [],
     closedCaseRetentionMonths: DEFAULT_CLOSED_CASE_RETENTION_MONTHS,
+    enforcementCloseReasons: [...DEFAULT_CLOSE_REASONS],
+    claimTypes: [...DEFAULT_CLAIM_TYPES],
+    bankAnswerTypes: [...DEFAULT_BANK_ANSWER_TYPES],
+    procedures: DEFAULT_PROCEDURES.map((p) => ({ ...p })),
+    bankResponseDays: DEFAULT_BANK_RESPONSE_DAYS,
+    salaryResponseDays: DEFAULT_SALARY_RESPONSE_DAYS,
   };
 }
 

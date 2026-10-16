@@ -174,7 +174,7 @@ function Page() {
           <>
             <StatusBadge status={c.status} />
             <StatusBadge status={c.type} tone="slate" dot={false} />
-            {c.status === "Kapalı" && (
+            {c.status === "Kapalı" && casePurgeDate(c, state.settings.closedCaseRetentionMonths) && (
               <span className="text-sm font-medium text-amber-600 dark:text-amber-400">
                 {formatDate(casePurgeDate(c, state.settings.closedCaseRetentionMonths))} tarihinde
                 kayıtları silinecek (müvekkilde toplamlar kalır)

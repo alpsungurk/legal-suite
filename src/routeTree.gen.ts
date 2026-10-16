@@ -31,6 +31,7 @@ import { Route as DosyalarIdRouteImport } from './routes/dosyalar/$id'
 import { Route as IcraIndexRouteImport } from './routes/icra/index'
 import { Route as IcraIdRouteImport } from './routes/icra/$id'
 import { Route as IcraBorcluRouteImport } from './routes/icra/borclu'
+import { Route as IcraSurelerRouteImport } from './routes/icra/sureler'
 import { Route as MuvekkillerIndexRouteImport } from './routes/muvekkiller/index'
 import { Route as MuvekkillerIdRouteImport } from './routes/muvekkiller/$id'
 import { Route as IcraListeListIdRouteImport } from './routes/icra/liste.$listId'
@@ -147,6 +148,11 @@ const IcraBorcluRoute = IcraBorcluRouteImport.update({
   path: '/icra/borclu',
   getParentRoute: () => rootRouteImport,
 } as any)
+const IcraSurelerRoute = IcraSurelerRouteImport.update({
+  id: '/icra/sureler',
+  path: '/icra/sureler',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MuvekkillerIndexRoute = MuvekkillerIndexRouteImport.update({
   id: '/muvekkiller/',
   path: '/muvekkiller/',
@@ -193,6 +199,7 @@ export interface FileRoutesByFullPath {
   '/dosyalar/$id': typeof DosyalarIdRoute
   '/icra/$id': typeof IcraIdRoute
   '/icra/borclu': typeof IcraBorcluRoute
+  '/icra/sureler': typeof IcraSurelerRoute
   '/muvekkiller/$id': typeof MuvekkillerIdRoute
   '/borclular/': typeof BorclularIndexRoute
   '/dosyalar/': typeof DosyalarIndexRoute
@@ -222,6 +229,7 @@ export interface FileRoutesByTo {
   '/dosyalar/$id': typeof DosyalarIdRoute
   '/icra/$id': typeof IcraIdRoute
   '/icra/borclu': typeof IcraBorcluRoute
+  '/icra/sureler': typeof IcraSurelerRoute
   '/muvekkiller/$id': typeof MuvekkillerIdRoute
   '/borclular': typeof BorclularIndexRoute
   '/dosyalar': typeof DosyalarIndexRoute
@@ -252,6 +260,7 @@ export interface FileRoutesById {
   '/dosyalar/$id': typeof DosyalarIdRoute
   '/icra/$id': typeof IcraIdRoute
   '/icra/borclu': typeof IcraBorcluRoute
+  '/icra/sureler': typeof IcraSurelerRoute
   '/muvekkiller/$id': typeof MuvekkillerIdRoute
   '/borclular/': typeof BorclularIndexRoute
   '/dosyalar/': typeof DosyalarIndexRoute
@@ -283,6 +292,7 @@ export interface FileRouteTypes {
     | '/dosyalar/$id'
     | '/icra/$id'
     | '/icra/borclu'
+    | '/icra/sureler'
     | '/muvekkiller/$id'
     | '/borclular/'
     | '/dosyalar/'
@@ -312,6 +322,7 @@ export interface FileRouteTypes {
     | '/dosyalar/$id'
     | '/icra/$id'
     | '/icra/borclu'
+    | '/icra/sureler'
     | '/muvekkiller/$id'
     | '/borclular'
     | '/dosyalar'
@@ -341,6 +352,7 @@ export interface FileRouteTypes {
     | '/dosyalar/$id'
     | '/icra/$id'
     | '/icra/borclu'
+    | '/icra/sureler'
     | '/muvekkiller/$id'
     | '/borclular/'
     | '/dosyalar/'
@@ -371,6 +383,7 @@ export interface RootRouteChildren {
   DosyalarIdRoute: typeof DosyalarIdRoute
   IcraIdRoute: typeof IcraIdRoute
   IcraBorcluRoute: typeof IcraBorcluRoute
+  IcraSurelerRoute: typeof IcraSurelerRoute
   MuvekkillerIdRoute: typeof MuvekkillerIdRoute
   BorclularIndexRoute: typeof BorclularIndexRoute
   DosyalarIndexRoute: typeof DosyalarIndexRoute
@@ -537,6 +550,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IcraBorcluRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/icra/sureler': {
+      id: '/icra/sureler'
+      path: '/icra/sureler'
+      fullPath: '/icra/sureler'
+      preLoaderRoute: typeof IcraSurelerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/muvekkiller/': {
       id: '/muvekkiller/'
       path: '/muvekkiller'
@@ -595,6 +615,7 @@ const rootRouteChildren: RootRouteChildren = {
   DosyalarIdRoute: DosyalarIdRoute,
   IcraIdRoute: IcraIdRoute,
   IcraBorcluRoute: IcraBorcluRoute,
+  IcraSurelerRoute: IcraSurelerRoute,
   MuvekkillerIdRoute: MuvekkillerIdRoute,
   BorclularIndexRoute: BorclularIndexRoute,
   DosyalarIndexRoute: DosyalarIndexRoute,

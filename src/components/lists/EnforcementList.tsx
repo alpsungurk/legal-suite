@@ -30,7 +30,9 @@ import {
 } from "@/lib/finance";
 import { fileNoKey, formatDate, formatMoney, relativeDue, sumBy } from "@/lib/format";
 import {
+  CLOSED_ENFORCEMENT_STATUS,
   STOPPED_ENFORCEMENT_STATUS,
+  enforcementStatusLabel,
   isEnforcementClosed,
   type EnforcementFile,
   type EnforcementSide,
@@ -103,6 +105,11 @@ export function EnforcementList({
               {r.e.stopReason}
             </p>
           )}
+          {r.e.status === CLOSED_ENFORCEMENT_STATUS && r.e.closeReason && (
+            <p className="mt-1 max-w-[140px] truncate text-xs text-muted-foreground">
+              {r.e.closeReason}
+            </p>
+          )}
         </div>
       ),
     },
@@ -133,7 +140,14 @@ export function EnforcementList({
       header: "Takip türü",
       hideBelow: "lg",
       sort: (r) => r.e.type,
-      cell: (r) => <span className="text-sm">{r.e.type}</span>,
+      cell: (r) => (
+        <div className="min-w-0 text-sm">
+          <p>{r.e.type}</p>
+          {r.e.procedure && (
+            <p className="truncate text-xs text-muted-foreground">{r.e.procedure}</p>
+          )}
+        </div>
+      ),
     },
     {
       id: "claim",
@@ -224,7 +238,7 @@ export function EnforcementList({
 
   // Büronun Excel düzeni (AVUKAT-GERI-BILDIRIM.md §3.2), ardından uygulamanın ek bilgileri
   const exportColumns: ExportColumn<R>[] = [
-    { header: "Dosya Durumu", get: (r) => r.e.status },
+    { header: "Dosya Durumu", get: (r) => enforcementStatusLabel(r.e), width: 26 },
     ...(owed
       ? [
           { header: "Borçlu", get: (r: R) => debtor(r.e), width: 28 },
@@ -237,6 +251,7 @@ export function EnforcementList({
     { header: "Birim", get: (r) => r.e.office, width: 30 },
     { header: "Dosya No", get: (r) => r.e.no, width: 16 },
     { header: "Takip Türü", get: (r) => r.e.type },
+    { header: "Takip Şekli", get: (r) => r.e.procedure ?? "", width: 16 },
     { header: "Takip Bilgileri", get: (r) => r.e.details ?? "", width: 36 },
     { header: "Takip Çıkış Rakamı", get: (r) => r.s.claim, money: true },
     { header: "Açıklamalar", get: (r) => r.e.note ?? "", width: 60 },
@@ -248,7 +263,6 @@ export function EnforcementList({
           { header: "Tahsil Edilen", get: (r: R) => r.s.collected, money: true },
           { header: "Kalan", get: (r: R) => r.s.remaining, money: true },
         ]),
-    { header: "Durdurulma Sebebi", get: (r) => r.e.stopReason ?? "" },
     { header: "Takip Tarihi", get: (r) => formatDate(r.e.openingDate) },
     {
       header: "Sorumlu",
@@ -345,6 +359,8 @@ export function EnforcementList({
           ...partyNames(r.e),
           r.e.details,
           r.e.stopReason,
+          r.e.closeReason,
+          r.e.procedure,
         ]}
         searchPlaceholder="Dosya no, birim, alacaklı, borçlu veya takip bilgisi ara..."
         filters={[
@@ -365,6 +381,18 @@ export function EnforcementList({
             label: "Durdurulma sebebi",
             options: [...new Set(rows.map((r) => r.e.stopReason).filter(Boolean) as string[])],
             get: (r) => r.e.stopReason,
+          },
+          {
+            id: "close",
+            label: "Kapanış sebebi",
+            options: [...new Set(rows.map((r) => r.e.closeReason).filter(Boolean) as string[])],
+            get: (r) => r.e.closeReason,
+          },
+          {
+            id: "procedure",
+            label: "Takip şekli",
+            options: [...new Set(rows.map((r) => r.e.procedure).filter(Boolean) as string[])],
+            get: (r) => r.e.procedure,
           },
         ]}
         dateRange={{ label: "Takip tarihi", get: (r) => r.e.openingDate }}

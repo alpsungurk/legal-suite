@@ -82,6 +82,14 @@ export function useOptions() {
       inquiryTypes: state.settings.inquiryTypes,
       seizureTypes: state.settings.seizureTypes,
       resultTypes: state.settings.resultTypes,
+      enforcementCloseReasons: state.settings.enforcementCloseReasons,
+      claimTypes: state.settings.claimTypes,
+      bankAnswerTypes: state.settings.bankAnswerTypes,
+      procedures: state.settings.procedures.map((p) => ({
+        value: p.name,
+        label: p.name,
+        hint: p.days != null && p.action ? `${p.days} gün → ${p.action}` : undefined,
+      })) as Option[],
     };
   }, [state, staff, lawyers]);
 }

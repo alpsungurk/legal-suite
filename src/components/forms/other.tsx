@@ -4,11 +4,21 @@ import { AttachmentList } from "@/components/app/files";
 import { useErp } from "@/lib/erp-store";
 import { useOptions } from "@/lib/options";
 import {
+  CLOSE_REASON_INFAZ,
+  CLOSED_ENFORCEMENT_STATUS,
   DEFAULT_ENFORCEMENT_STATUS,
+  EVENT_TYPE_BANK_891,
   EVENT_TYPE_INQUIRY,
+  EVENT_TYPE_SALARY,
   EVENT_TYPE_SEIZURE,
+  EVENT_TYPE_SERVICE,
+  INQUIRY_FIELDS,
   STOPPED_ENFORCEMENT_STATUS,
   isEnforcementClosed,
+  type BankAnswer,
+  type EventData,
+  type InquiryResult,
+  type Procedure,
   type Collection,
   type ContactLog,
   type Debtor,
@@ -43,6 +53,99 @@ import { Money } from "@/components/app/bits";
 import { Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FormProps } from "@/components/forms/core";
+
+/** Takip şeklinin süre kuralını tek cümleyle anlatır */
+export function procedureRule(p?: Procedure) {
+  if (!p) return undefined;
+  if (p.days == null || !p.action) return `${p.name}: süre hatırlatması yok`;
+  return `Ödeme emri tebliğinden ${p.days} gün sonra, ${p.days + 1}. gün ${p.action.toLocaleLowerCase("tr")} hatırlatılır`;
+}
+
+/** 89/1 haciz ihbarnamesi: gönderilen bankalar ve her bankanın cevabı (birden fazla seçilebilir) */
+function BankAnswersEditor({
+  value,
+  answerTypes,
+  onChange,
+}: {
+  value: BankAnswer[];
+  answerTypes: string[];
+  onChange: (v: BankAnswer[]) => void;
+}) {
+  const update = (i: number, p: Partial<BankAnswer>) =>
+    onChange(value.map((b, j) => (j === i ? { ...b, ...p } : b)));
+  const waiting = value.filter((b) => b.name.trim() && b.answers.length === 0).length;
+  return (
+    <div className="rounded-lg border p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-medium">Bankalar ve cevapları</p>
+          <p className="text-xs text-muted-foreground">
+            Cevap seçilmeyen banka "cevap vermedi" sayılır; süre dolunca 89/2 hatırlatılır.
+            {waiting > 0 && ` Cevap bekleyen: ${waiting}`}
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onChange([...value, { name: "", answers: [] }])}
+        >
+          <Plus /> Banka ekle
+        </Button>
+      </div>
+      {value.length === 0 ? (
+        <p className="py-2 text-center text-xs text-muted-foreground">Henüz banka eklenmedi</p>
+      ) : (
+        <div className="space-y-2">
+          {value.map((b, i) => (
+            <div key={i} className="flex flex-col gap-2 rounded-md bg-muted/40 p-2 sm:flex-row sm:items-center">
+              <Input
+                value={b.name}
+                placeholder="Banka adı"
+                className="h-9 sm:w-48"
+                onChange={(e) => update(i, { name: e.target.value })}
+              />
+              <div className="flex flex-1 flex-wrap gap-1.5">
+                {answerTypes.map((a) => {
+                  const on = b.answers.includes(a);
+                  return (
+                    <button
+                      key={a}
+                      type="button"
+                      onClick={() =>
+                        update(i, {
+                          answers: on ? b.answers.filter((x) => x !== a) : [...b.answers, a],
+                        })
+                      }
+                      className={cn(
+                        "rounded-full border px-2.5 py-1 text-xs transition-colors",
+                        on
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "bg-background text-muted-foreground hover:bg-accent",
+                      )}
+                    >
+                      {a}
+                    </button>
+                  );
+                })}
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0 self-end sm:self-auto"
+                aria-label="Bankayı kaldır"
+                onClick={() => onChange(value.filter((_, j) => j !== i))}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /* ───────────── Ajanda ───────────── */
 
@@ -232,11 +335,34 @@ export function EnforcementForm({
         },
         { name: "type", label: "Takip türü", type: "select", options: o.enforcementTypes },
         {
+          name: "procedure",
+          label: "Takip şekli",
+          type: "combobox",
+          options: o.procedures,
+          allowClear: true,
+          placeholder: "Örnek No seçin",
+          hint: (v) =>
+            procedureRule(state.settings.procedures.find((p) => p.name === v.procedure)) ??
+            "Kesinleştirme / tahliye hatırlatması buna göre hesaplanır",
+        },
+        {
           name: "status",
           label: "Dosya durumu",
           type: "select",
           options: o.enforcementStatuses,
-          onChange: (val) => (val === STOPPED_ENFORCEMENT_STATUS ? {} : { stopReason: "" }),
+          onChange: (val) => ({
+            ...(val === STOPPED_ENFORCEMENT_STATUS ? {} : { stopReason: "" }),
+            ...(val === CLOSED_ENFORCEMENT_STATUS ? {} : { closeReason: "" }),
+          }),
+        },
+        {
+          name: "closeReason",
+          label: "Kapanış sebebi",
+          type: "combobox",
+          options: o.enforcementCloseReasons,
+          creatable: true,
+          visible: (v) => v.status === CLOSED_ENFORCEMENT_STATUS,
+          placeholder: "İnfaz, Haricen Tahsil, Takipsizlik…",
         },
         {
           name: "stopReason",
@@ -297,9 +423,11 @@ export function EnforcementForm({
         {
           name: "details",
           label: "Takip bilgileri",
-          type: "textarea",
-          placeholder:
-            "Dosyaya özgü bilgiler: alacağın niteliği (çek, bono…), örnek alınacak ayrıntılar, ilgili dosya…",
+          type: "combobox",
+          options: o.claimTypes,
+          creatable: true,
+          allowClear: true,
+          placeholder: "Çek Alacağı, Kira Alacağı… ya da yazın",
         },
         { name: "note", label: "Açıklamalar", type: "textarea" },
       ]}
@@ -323,6 +451,9 @@ export function EnforcementForm({
         rememberOption("enforcementOffices", v.office);
         const stopped = v.status === STOPPED_ENFORCEMENT_STATUS;
         if (stopped) rememberOption("enforcementStopReasons", v.stopReason);
+        const closed = v.status === CLOSED_ENFORCEMENT_STATUS;
+        if (closed && v.closeReason) rememberOption("enforcementCloseReasons", v.closeReason);
+        if (v.details) rememberOption("claimTypes", v.details);
         const item = save("enforcements", {
           id: record?.id,
           side: owed(v) ? "Borçlu" : "Alacaklı",
@@ -331,6 +462,8 @@ export function EnforcementForm({
           type: v.type,
           status: v.status,
           stopReason: stopped ? String(v.stopReason ?? "").trim() : "",
+          closeReason: closed ? String(v.closeReason ?? "").trim() : "",
+          procedure: v.procedure || "",
           clientId: v.clientId,
           debtorIds: v.debtorIds,
           principal: round2(Number(v.principal) || 0),
@@ -365,6 +498,36 @@ export function EnforcementEventForm({
   const parties = state.debtors
     .filter((d) => ef?.debtorIds.includes(d.id))
     .map((d) => ({ value: d.id, label: d.name }));
+  const s = state.settings;
+  /** İşlemin doğuracağı süre (talimattaki kurallar) */
+  const deadlineHint = (v: FormValues) => {
+    if (!v.date || !ef || ef.side === "Borçlu") return undefined;
+    if (v.type === EVENT_TYPE_SERVICE) {
+      const p = s.procedures.find((x) => x.name === ef.procedure);
+      if (!p) return "Dosyada takip şekli seçilmemiş: kesinleştirme hatırlatılmaz";
+      if (p.days == null || !p.action) return `${p.name}: süre hatırlatması yok`;
+      return `${p.name}: ${formatDate(addDays(v.date, p.days + 1))} günü ${p.action.toLocaleLowerCase("tr")} hatırlatılır`;
+    }
+    if (v.type === EVENT_TYPE_BANK_891)
+      return `Cevap vermeyen banka varsa ${formatDate(addDays(v.date, s.bankResponseDays + 1))} günü 89/2 hatırlatılır`;
+    if (v.type === EVENT_TYPE_SALARY)
+      return `${formatDate(addDays(v.date, s.salaryResponseDays + 1))} günü işverenin borçlu olarak eklenmesi hatırlatılır`;
+    return undefined;
+  };
+  const inquiry = record?.data?.inquiry ?? {};
+  const inquiryFields = INQUIRY_FIELDS.map((f, i) => ({
+    name: `inq_${f.key}`,
+    label: f.label,
+    type: (f.kind === "count" ? "number" : f.kind === "status" ? "select" : "text") as
+      | "number"
+      | "select"
+      | "text",
+    options: f.kind === "status" ? ["Aktif", "Pasif"] : undefined,
+    allowClear: f.kind === "status",
+    placeholder: f.kind === "count" ? "Adet" : f.kind === "text" ? "Hangi bankalar" : undefined,
+    section: i === 0 ? "Sorgu sonuçları" : undefined,
+    visible: (v: FormValues) => v.type === EVENT_TYPE_INQUIRY,
+  }));
   return (
     <FormDialog
       open={open}
@@ -372,7 +535,7 @@ export function EnforcementEventForm({
       title={record ? "İşlemi düzenle" : "İşlem ekle"}
       description={ef ? `${ef.no} · ${ef.office}` : undefined}
       fields={[
-        { name: "date", label: "Tarih", type: "date", required: true },
+        { name: "date", label: "Tarih", type: "date", required: true, hint: deadlineHint },
         {
           name: "type",
           label: "İşlem türü",
@@ -380,13 +543,6 @@ export function EnforcementEventForm({
           options: o.enforcementEventTypes,
           creatable: true,
           required: true,
-        },
-        {
-          name: "inquiryType",
-          label: "Sorgu türü",
-          type: "select",
-          options: o.inquiryTypes,
-          visible: (v) => v.type === EVENT_TYPE_INQUIRY,
         },
         {
           name: "seizureType",
@@ -403,23 +559,63 @@ export function EnforcementEventForm({
           allowClear: true,
           placeholder: "Tümü",
         },
-        { name: "result", label: "Sonuç", type: "select", options: o.resultTypes },
+        {
+          name: "result",
+          label: "Sonuç",
+          type: "select",
+          options: o.resultTypes,
+          visible: (v) => v.type !== EVENT_TYPE_INQUIRY && v.type !== EVENT_TYPE_BANK_891,
+        },
         { name: "amount", label: "Tutar (varsa)", type: "money" },
+        ...inquiryFields,
         { name: "note", label: "Not", type: "textarea" },
       ]}
-      initial={{ date: today(), ...preset, ...record }}
+      initial={{
+        date: today(),
+        ...preset,
+        ...record,
+        ...Object.fromEntries(INQUIRY_FIELDS.map((f) => [`inq_${f.key}`, inquiry[f.key] ?? ""])),
+        banks: record?.data?.banks ?? [],
+      }}
+      validate={(v) =>
+        v.type === EVENT_TYPE_BANK_891 && (v.banks as BankAnswer[]).some((b) => !b.name.trim())
+          ? { type: "Banka adı boş bırakılamaz" }
+          : undefined
+      }
       onSubmit={(v) => {
         if (!enfId) return false;
         const type = String(v.type).trim();
+        // Ek bilgiler (sorgu sonuçları, bankalar) data'da; "tamamlandı" işareti korunur
+        const data: EventData = { doneAt: record?.data?.doneAt };
+        if (type === EVENT_TYPE_INQUIRY) {
+          const inq: InquiryResult = {};
+          for (const f of INQUIRY_FIELDS) {
+            const raw = v[`inq_${f.key}`];
+            if (raw === "" || raw == null) continue;
+            if (f.kind === "count") {
+              const n = Number(raw);
+              if (Number.isFinite(n) && n >= 0) (inq as Record<string, unknown>)[f.key] = Math.round(n);
+            } else (inq as Record<string, unknown>)[f.key] = String(raw).trim();
+          }
+          if (Object.keys(inq).length) data.inquiry = inq;
+        }
+        if (type === EVENT_TYPE_BANK_891) {
+          const banks = (v.banks as BankAnswer[])
+            .map((b) => ({ name: b.name.trim(), answers: b.answers }))
+            .filter((b) => b.name);
+          if (banks.length) data.banks = banks;
+        }
+        if (!data.doneAt) delete data.doneAt;
         const item = save("events", {
           id: record?.id,
           enforcementId: enfId,
           date: v.date,
           type,
           debtorId: v.debtorId || "",
-          inquiryType: type === EVENT_TYPE_INQUIRY ? v.inquiryType || "" : "",
+          inquiryType: type === EVENT_TYPE_INQUIRY ? record?.inquiryType || "" : "",
           seizureType: type === EVENT_TYPE_SEIZURE ? v.seizureType || "" : "",
-          result: v.result || "",
+          result: type === EVENT_TYPE_INQUIRY || type === EVENT_TYPE_BANK_891 ? "" : v.result || "",
+          data,
           amount: Number(v.amount) > 0 ? round2(Number(v.amount)) : undefined,
           note: v.note?.trim() || "",
         });
@@ -436,7 +632,17 @@ export function EnforcementEventForm({
         toast.success(record ? "İşlem güncellendi" : "İşlem eklendi");
         onSaved?.(item);
       }}
-    />
+    >
+      {(v, set) =>
+        v.type === EVENT_TYPE_BANK_891 ? (
+          <BankAnswersEditor
+            value={v.banks as BankAnswer[]}
+            answerTypes={o.bankAnswerTypes}
+            onChange={(banks) => set({ banks })}
+          />
+        ) : null
+      }
+    </FormDialog>
   );
 }
 
@@ -824,7 +1030,7 @@ export function CollectionForm({ open, onOpenChange, record, preset }: FormProps
           note: v.note || undefined,
         });
         if (v.promiseId) patch("promises", v.promiseId, { status: "Tutuldu" });
-        // Alacağın tamamı tahsil edildiyse icra dosyası kendiliğinden "Tahsil edildi" olur
+        // Alacağın tamamı tahsil edildiyse icra dosyası kendiliğinden "Kapalı (İnfaz)" olur (avukatın talimatı)
         const ef = state.enforcements.find((e) => e.id === v.enforcementId);
         const others = state.collections
           .filter((c) => c.enforcementId === v.enforcementId && c.id !== record?.id)
@@ -836,9 +1042,13 @@ export function CollectionForm({ open, onOpenChange, record, preset }: FormProps
           others + Number(v.amount) >= claim - 0.005 &&
           !isEnforcementClosed(ef.status)
         ) {
-          patch("enforcements", ef.id, { status: "Tahsil edildi" });
+          patch("enforcements", ef.id, {
+            status: CLOSED_ENFORCEMENT_STATUS,
+            closeReason: CLOSE_REASON_INFAZ,
+            stopReason: "",
+          });
           toast.success("Tahsilat kaydedildi", {
-            description: `Alacağın tamamı tahsil edildi; ${ef.no} "Tahsil edildi" yapıldı.`,
+            description: `Alacağın tamamı tahsil edildi; ${ef.no} "Kapalı (${CLOSE_REASON_INFAZ})" yapıldı.`,
           });
         } else toast.success("Tahsilat kaydedildi");
       }}

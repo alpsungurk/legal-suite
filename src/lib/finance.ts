@@ -16,7 +16,16 @@ import type {
   User,
   YearStats,
 } from "@/lib/erp-types";
-import { isEnforcementClosed } from "@/lib/erp-types";
+import {
+  EVENT_TYPE_ADD_DEBTOR,
+  EVENT_TYPE_BANK_891,
+  EVENT_TYPE_BANK_892,
+  EVENT_TYPE_EVICTION,
+  EVENT_TYPE_FINALIZED,
+  EVENT_TYPE_SALARY,
+  EVENT_TYPE_SERVICE,
+  isEnforcementClosed,
+} from "@/lib/erp-types";
 import {
   addDays,
   addMonths,
@@ -680,6 +689,153 @@ export function seizureWarning(
   return { due, left };
 }
 
+/* ───────────── İcra süreleri ───────────── */
+
+export type DeadlineKind =
+  | "Kesinleştirme"
+  | "Tahliye"
+  | "İtiraz / ödeme süresi"
+  | "Haciz yenileme"
+  | "89/2 haciz ihbarnamesi"
+  | "İşveren borçlu ekleme"
+  | "Taksit / ödeme sözü";
+
+export type IcraDeadline = {
+  id: string;
+  kind: DeadlineKind;
+  enforcementId: string;
+  /** Süreyi doğuran işlem (tebliğ, 89/1, maaş haczi tebliği) */
+  eventId?: string;
+  promiseId?: string;
+  debtorId?: string;
+  /** Sürenin başladığı tarih (tebliğ, haciz…) */
+  baseDate: ISODate;
+  /** Son gün / yapılması gereken gün */
+  dueDate: ISODate;
+  /** Hatırlatmanın başladığı gün */
+  remindFrom: ISODate;
+  /** İşlem yapıldı ya da "tamamlandı" işaretlendi */
+  resolved: boolean;
+};
+
+/**
+ * Avukatın talimatındaki süreler. Kurallar veritabanındaki v_icra_deadlines görünümüyle aynıdır
+ * (günlük bildirimleri o üretir); burada ekranda anında görünsün diye aynı hesap yapılır.
+ * Yalnızca alacaklı olduğumuz ve kapanmamış dosyalar.
+ */
+export function icraDeadlines(state: ErpState): IcraDeadline[] {
+  const s = state.settings;
+  // Borçlu olduğumuz dosyalarda yalnızca tebliğ süresi (itiraz / ödeme) izlenir
+  const open = new Map(
+    state.enforcements.filter((e) => !isEnforcementClosed(e.status)).map((e) => [e.id, e]),
+  );
+  const later = (enfId: string, date: ISODate, exceptId: string, type: string) =>
+    state.events.some(
+      (l) => l.enforcementId === enfId && l.id !== exceptId && l.date >= date && l.type === type,
+    );
+  const out: IcraDeadline[] = [];
+  for (const ev of state.events) {
+    const en = open.get(ev.enforcementId);
+    if (!en) continue;
+    const done = !!ev.data?.doneAt;
+    const base = { enforcementId: en.id, eventId: ev.id, debtorId: ev.debtorId, baseDate: ev.date };
+    if (ev.type === EVENT_TYPE_SERVICE) {
+      const proc = s.procedures.find((p) => p.name === en.procedure);
+      if (!proc || proc.days == null) continue;
+      if (en.side === "Borçlu") {
+        // Son gün = tebliğ + süre; kaçırılmasın diye 2 gün önceden hatırlatılır
+        const last = addDays(ev.date, proc.days);
+        out.push({
+          ...base,
+          id: `teb:${ev.id}`,
+          kind: "İtiraz / ödeme süresi",
+          dueDate: last,
+          remindFrom: addDays(last, -2),
+          resolved: done,
+        });
+        continue;
+      }
+      const kind: DeadlineKind = proc.action === "Tahliye" ? "Tahliye" : "Kesinleştirme";
+      const due = addDays(ev.date, proc.days + 1);
+      out.push({
+        ...base,
+        id: `teb:${ev.id}`,
+        kind,
+        dueDate: due,
+        remindFrom: due,
+        resolved:
+          done ||
+          later(en.id, ev.date, ev.id, kind === "Tahliye" ? EVENT_TYPE_EVICTION : EVENT_TYPE_FINALIZED),
+      });
+    } else if (en.side === "Borçlu") {
+      continue;
+    } else if (ev.type === EVENT_TYPE_BANK_891) {
+      const due = addDays(ev.date, s.bankResponseDays + 1);
+      const banks = ev.data?.banks ?? [];
+      out.push({
+        ...base,
+        id: `b89:${ev.id}`,
+        kind: "89/2 haciz ihbarnamesi",
+        dueDate: due,
+        remindFrom: due,
+        resolved:
+          done ||
+          (banks.length > 0 && banks.every((b) => b.answers.length > 0)) ||
+          later(en.id, ev.date, ev.id, EVENT_TYPE_BANK_892),
+      });
+    } else if (ev.type === EVENT_TYPE_SALARY) {
+      const due = addDays(ev.date, s.salaryResponseDays + 1);
+      out.push({
+        ...base,
+        id: `maas:${ev.id}`,
+        kind: "İşveren borçlu ekleme",
+        dueDate: due,
+        remindFrom: due,
+        resolved: done || later(en.id, ev.date, ev.id, EVENT_TYPE_ADD_DEBTOR),
+      });
+    }
+  }
+  for (const en of open.values()) {
+    if (!en.lastSeizureDate || en.side === "Borçlu") continue;
+    const due = addMonths(en.lastSeizureDate, s.seizureValidMonths);
+    out.push({
+      id: `hz:${en.id}:${due}`,
+      kind: "Haciz yenileme",
+      enforcementId: en.id,
+      baseDate: en.lastSeizureDate,
+      dueDate: due,
+      remindFrom: addDays(due, -s.seizureReminderDays),
+      resolved: false,
+    });
+  }
+  for (const p of state.promises) {
+    if (p.status !== "Bekliyor" || open.get(p.enforcementId)?.side !== "Alacaklı") continue;
+    out.push({
+      id: `prm:${p.id}`,
+      kind: "Taksit / ödeme sözü",
+      enforcementId: p.enforcementId,
+      promiseId: p.id,
+      debtorId: p.debtorId,
+      baseDate: p.dueDate,
+      dueDate: p.dueDate,
+      remindFrom: p.dueDate,
+      resolved: false,
+    });
+  }
+  return out.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+}
+
+/** Süre başlıkları (bildirim ve uyarılarda) */
+export const DEADLINE_TITLES: Record<DeadlineKind, string> = {
+  Kesinleştirme: "Kesinleştirme zamanı",
+  Tahliye: "Tahliye talebi zamanı",
+  "İtiraz / ödeme süresi": "İtiraz / ödeme süresi doluyor",
+  "Haciz yenileme": "Haciz yenilenmeli",
+  "89/2 haciz ihbarnamesi": "89/2 gönderilmeli: cevap vermeyen banka var",
+  "İşveren borçlu ekleme": "Maaş haczi: işveren borçlu eklenmeli",
+  "Taksit / ödeme sözü": "Taksit / ödeme sözü günü",
+};
+
 /* ───────────── Uyarılar ───────────── */
 
 export type Alert = {
@@ -689,7 +845,7 @@ export type Alert = {
   detail: string;
   link: string;
   date: ISODate;
-  category: "Taksit" | "Ödeme sözü" | "Ajanda" | "Haciz";
+  category: "Taksit" | "Ödeme sözü" | "Ajanda" | "Haciz" | "Süre";
 };
 
 export function computeAlerts(
@@ -758,6 +914,24 @@ export function computeAlerts(
       link: `/icra/${p.enforcementId}`,
       date: p.dueDate,
       category: "Ödeme sözü",
+    });
+  }
+
+  // Takip şekline göre süreler: kesinleştirme, tahliye, 89/2, işveren borçlu ekleme
+  // (haciz yenileme yukarıda, taksit / ödeme sözü "Ödeme sözü" uyarılarında)
+  const visibleIds = new Set(visibleEnforcements.map((e) => e.id));
+  for (const d of icraDeadlines(state)) {
+    if (d.resolved || d.kind === "Haciz yenileme" || d.kind === "Taksit / ödeme sözü") continue;
+    if (!visibleIds.has(d.enforcementId) || d.remindFrom > t) continue;
+    const e = state.enforcements.find((x) => x.id === d.enforcementId);
+    alerts.push({
+      id: `dl-${d.id}`,
+      tone: d.dueDate < t ? "danger" : "warning",
+      title: DEADLINE_TITLES[d.kind],
+      detail: `${e?.no ?? ""} · ${e?.office ?? ""}`,
+      link: `/icra/${d.enforcementId}`,
+      date: d.dueDate,
+      category: "Süre",
     });
   }
 

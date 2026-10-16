@@ -23,7 +23,8 @@ Geri bildirimleriniz doğrultusunda panele eklenenler ve değişenler aşağıda
 13. [Cari hesap ve silme işlemleri](#13-cari-hesap-ve-silme-işlemleri)
 14. [İzinler: kim neyi görür, ne yapar](#14-izinler-kim-neyi-görür-ne-yapar)
 15. [Menü](#15-menü)
-16. [Sizden beklediklerimiz](#16-sizden-beklediklerimiz)
+16. [İcra süreleri: talimat dosyanıza göre](#16-icra-süreleri-talimat-dosyanıza-göre)
+17. [Sizden beklediklerimiz](#17-sizden-beklediklerimiz)
 
 ---
 
@@ -197,12 +198,12 @@ Formlardaki bütün açılır listeler buradan yönetilir. Değer ekleyebilir, s
 
 - **Önceden:** Bir dava dosyası kapatılınca **hemen** siliniyordu.
 - **Şimdi:**
-  - Dosya kapatılınca bütün kayıtlarıyla (masraf, tahsilat, belge, ajanda) **12 ay** kapalı olarak saklanır.
-  - Bu sürede dosya sayfasından **"Yeniden aç"** ile geri açılabilir.
-  - Süre dolunca, sonraki **ayın 1'inde** otomatik silinir. Dosya sayfasında kayıtların hangi tarihte silineceği yazar.
+  - Dosya kapatılınca bütün kayıtlarıyla (masraf, tahsilat, belge, ajanda) kapalı olarak saklanır ve **siz kalıcı olarak silmedikçe silinmez**.
+  - İstediğiniz zaman dosya sayfasından **"Yeniden aç"** ile geri açılabilir.
+  - İsterseniz Ayarlar'dan otomatik silme süresi verebilirsiniz; varsayılan **0 (hiç silinmesin)**.
 - **Silinince kalanlar:** Müvekkil kartında toplam alacak / verecek ve ücret toplamları, yıllık raporlarda tutarlar kalır. Kasa ve banka bakiyeleri değişmez.
 - **Beklemeden silmek:** Kapalı bir dosyada **"Şimdi kalıcı sil"** düğmesi var (yalnızca silme yetkisi olanlarda).
-- **Süreyi değiştirmek:** Ayarlar → Kategoriler → Dosyalar'dan 1 ile 120 ay arası seçilebilir.
+- **Otomatik silmeyi açmak:** Ayarlar → Kategoriler → Dosyalar'dan 1 ile 120 ay arası verilebilir; 0 ise otomatik silme kapalıdır.
 - **İcra dosyaları:** Kapatılınca silinmez, kapalı olarak listede kalır.
 
 ## 12. Bildirimler ve "Dikkat gerektirenler"
@@ -271,12 +272,75 @@ Formlardaki bütün açılır listeler buradan yönetilir. Değer ekleyebilir, s
 
 ---
 
-## 16. Sizden beklediklerimiz
+## 16. İcra süreleri: talimat dosyanıza göre
 
-1. **Durdurulma sebepleri:** Kullandığınız sebepleri iletirseniz Kategoriler'e ekleyelim. Şu an geçici değerler var.
+"İcra Örnek Liste Talimat" dosyanızdaki her şey panele işlendi.
+
+**Dosya durumu**
+- Seçenekler sizin yazdığınız gibi: **Açık**, **Açık (Durdurulmuş : Takibe İtiraz / İcra Mahkemesine İtiraz / İhtiyati Tedbir / Tehir-i İcra Kararı / Diğer)**, **Kapalı (Yetkisizlik / Takipsizlik / Vazgeçme/Feragat / Takibin İptali / İnfaz / Haricen Tahsil)**.
+- Formda durum "Kapalı" seçilince **kapanış sebebi** sorulur.
+- Tahsilatlar takip çıkış rakamına ulaşınca dosya kendiliğinden **Kapalı (İnfaz)** olur.
+- Listede ve Excel'de durum aynı biçimde ("Kapalı (İnfaz)") görünür.
+
+**Takip şekli (Örnek No)**
+- İcra dosyası formunda yeni alan: Örnek No: 2, 3, 4-5, 6, 7, 8, 9, 10, 11, 12, 13, 13 (hasılat kirası), 14, 44.
+- Seçince altında kural yazar, örneğin "Ödeme emri tebliğinden 7 gün sonra, 8. gün kesinleştirme hatırlatılır".
+
+**Hangi gün ne hatırlatılır**
+
+| İşlem | Hatırlatma | Ne zaman kapanır |
+|---|---|---|
+| Ödeme emri tebliği | Takip şeklinin süresi dolduktan sonraki gün **kesinleştirme** (Örnek 14'te **tahliye**). Örnek: 30.09.2026 tebliğ, Örnek No: 7 → 08.10.2026 | "Kesinleşme" ya da "Tahliye talebi" işlemi girilince |
+| 89/1 haciz ihbarnamesi | 13 gün sonra cevap vermeyen banka varsa **89/2** | Bütün bankaların cevabı girilince ya da 89/2 işlemi girilince |
+| Maaş haczi tebliği | 30 gün sonra **işverenin borçlu olarak eklenmesi** | "Borçlu ekleme talebi" girilince |
+| Son haciz | 12 ay dolmadan 14 gün önce ve düşme günü **haciz yenileme** | Yeni haciz girilince |
+| Taksit / ödeme sözü | Ödeme günü | Tahsilat girilince |
+
+- Hatırlatmalar her sabah 08:00'de dosyanın sorumlu avukatına **bildirim** olarak gider. Aynı zamanda panelde "Dikkat gerektirenler"de görünür.
+- Bir süre başka yoldan halledildiyse **Tamamlandı** denir ve listeden düşer; istenirse yeniden açılır.
+
+**İcra → Süreler sayfası**
+- Menüde İcra'nın altında, bekleyen süre sayısıyla.
+- Bütün dosyaların süreleri tek listede: Gecikmiş, Bugün, Bu hafta ve Tamamlanan sayıları.
+- Filtreler: durum, süre türü, "benim dosyalarım". Tarih aralığı, sıralama ve Excel'e aktarım var.
+- Dosya sayfasında da üstte **Bekleyen süreler** kutusu çıkar.
+
+**İşlem ekle**
+- **Sorgu:** 7 başlık bir arada girilir: Araç, Taşınmaz, Alacaklı olduğu icra dosyası, Banka (adet ve hangi bankalar), SGK maaş (aktif/pasif), SGK Mosip (aktif/pasif), Firma (aktif firma sayısı). İşlem geçmişinde renkli etiketlerle görünür.
+- **89/1 haciz ihbarnamesi:** Bankalar tek tek eklenir. Her bankanın cevabı Hacizli, Rehinli, Olumsuz, Tahsil edilebilir seçeneklerinden bir ya da birkaçı olarak işaretlenir. Cevabı boş banka "cevap bekleniyor" sayılır.
+- Tarih alanının altında, işlemin doğuracağı hatırlatmanın günü yazar.
+
+**Takip bilgileri**
+- Hazır seçenekler: Araç Mahrumiyet Bedeli, Dekont, Kira, Çek, Senet, Bono, Fatura, Ürün Bedeli, İlam Vekalet Ücreti Alacağı.
+- Listede olmayan elle yazılır ve listeye eklenir.
+
+**Ayarlar → Kategoriler**
+- Yeni listeler: **Kapanış sebepleri**, **Takip bilgileri**, **Banka cevapları (89/1)**.
+- **Takip şekilleri ve süreleri:** Her Örnek No'nun gün sayısı ve süre dolunca ne yapılacağı (kesinleştirme / tahliye) değiştirilebilir, yeni takip şekli eklenebilir. Gün boş bırakılırsa hatırlatma yapılmaz.
+- **Banka ve maaş haczi süreleri:** 89/1 için 13 gün, maaş haczi için 30 gün; değiştirilebilir.
+- Süre hesabında kullanılan işlem türleri (Ödeme emri tebliği, Kesinleşme, 89/1, 89/2, Maaş haczi tebliği, Borçlu ekleme talebi, Tahliye talebi, Sorgu, Haciz) kilitli; silinemez.
+
+**Excel**
+- Boş şablon talimatınızdaki 11 sütunla (Takip Şekli dahil) yenilendi.
+- Aktarımda "Takip Şekli" sütunu tanınır; "7" ya da "Örnek 7" yazılsa da olur.
+- "Açık (Durdurulmuş : Takibe İtiraz)", "Kapalı (İnfaz)" gibi durumlar ayrıştırılır.
+
+---
+
+## 16.1 Borçlu olduğumuz dosyalarda süre
+
+- Borçlu olduğumuz dosyada da takip şekli seçilir ve "Ödeme emri tebliği" işlemi girilir.
+- Süre son gün = tebliğ tarihi + takip şeklinin günü. **Son günden 2 gün önce** ve son gün **İtiraz / ödeme süresi** bildirimi gider; aynı kayıtlar İcra → Süreler sayfasında da görünür.
+- İşlem yapıldıysa **Tamamlandı** denir. Kesinleştirme, 89/2, maaş gibi alacaklı tarafı süreleri borçlu dosyalarda çıkmaz.
+
+---
+
+## 17. Sizden beklediklerimiz
+
+1. **Takip şekli günleri:** Talimatta Örnek 7 (8. gün) ve Örnek 10 (11. gün) açıkça yazıyordu. Diğerleri genel kurala göre girildi: 2, 4-5 ve 8'de 7–15 gün, 6, 9 ve 13'te 30 gün, hasılat kirasında 60 gün, 14'te 15 gün sonra tahliye; 3, 11, 12 ve 44'te hatırlatma yok. Ayarlar → Kategoriler'den kontrol edip gerekirse düzeltebilirsiniz.
 2. **Şirket listeleri:** Ayrı listesi tutulacak 5–6 şirketin isimleri.
 3. **Haciz süresi:** "Son haciz + 12 ay, 14 gün önce ve düşme günü hatırlatma" kuralı sizin için uygun mu?
-4. **Kapalı dava dosyaları:** Kapatıldıktan sonra 12 ay saklanıp silinmesi uygun mu? Yasal bir saklama süresi varsa ona göre ayarlarız.
+4. **Kapalı dava dosyaları:** Dediğiniz gibi artık hiçbir dosya kendiliğinden silinmiyor; yalnızca siz "Şimdi kalıcı sil" dediğinizde silinir.
 5. **İcra süreç notları:** Bir icra dosyasının başlangıçtan sonuçlanmaya kadarki adımlarını notlarınızla gönderdiğinizde, işlem türlerini ve listeyi birlikte son hâline getirebiliriz.
 
 Kullanırken takıldığınız ya da farklı olmasını istediğiniz her şeyi iletebilirsiniz.
