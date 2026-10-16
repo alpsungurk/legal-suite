@@ -19,6 +19,7 @@ import {
   type InstallmentPayment,
   type Permissions,
   permissionsFor,
+  type CategoryKey,
   type Settings,
   type User,
 } from "@/lib/erp-types";
@@ -163,6 +164,11 @@ const ENTITY: { [K in CollectionKey]: EntityMeta } = {
     audit: true,
     describe: (c: Collections["collections"]) => money(c.amount),
   },
+  events: {
+    label: "İcra işlemi",
+    audit: true,
+    describe: (e: Collections["events"]) => `${e.type} · ${e.date}`,
+  },
   contacts: {
     label: "Görüşme notu",
     audit: false,
@@ -230,10 +236,11 @@ type ErpContextValue = {
     changes: Partial<Collections[K]>,
     opts?: SaveOptions,
   ) => void;
-  remove: <K extends CollectionKey>(key: K, id: string) => void;
+  /** reload: veritabanında bağlı kayıtlar da silindiyse (cascade) ekran yeniden yüklenir */
+  remove: <K extends CollectionKey>(key: K, id: string, opts?: { reload?: boolean }) => void;
   removeMany: <K extends CollectionKey>(key: K, ids: string[]) => void;
   updateSettings: (patch: Partial<Settings>) => void;
-  rememberOption: (key: "courts" | "enforcementOffices", value?: string) => void;
+  rememberOption: (key: CategoryKey, value?: string) => void;
   recordInstallmentPayment: (
     planId: string,
     installmentId: string,
@@ -532,7 +539,7 @@ export function ErpProvider({ children }: { children: ReactNode }) {
   );
 
   const removeMany = useCallback(
-    <K extends CollectionKey>(key: K, ids: string[]) => {
+    <K extends CollectionKey>(key: K, ids: string[], opts?: { reload?: boolean }) => {
       if (key === "activities") return;
       const idSet = new Set(ids);
       setState((prev) => {
@@ -542,6 +549,7 @@ export function ErpProvider({ children }: { children: ReactNode }) {
       void (async () => {
         try {
           await persistRemove(key, ids);
+          if (opts?.reload) await reloadFromServer();
         } catch (err) {
           toast.error(sbError(err));
           void reloadFromServer();
@@ -552,7 +560,8 @@ export function ErpProvider({ children }: { children: ReactNode }) {
   );
 
   const remove = useCallback(
-    <K extends CollectionKey>(key: K, id: string) => removeMany(key, [id]),
+    <K extends CollectionKey>(key: K, id: string, opts?: { reload?: boolean }) =>
+      removeMany(key, [id], opts),
     [removeMany],
   );
 
@@ -576,16 +585,21 @@ export function ErpProvider({ children }: { children: ReactNode }) {
     [reloadFromServer],
   );
 
+  // Listeye yeni değer ekleyebilmek için "Kategoriler" bölümü izni gerekir (veritabanı da aynısını ister)
+  const canManageSettings = permissions.settingsAccess.categories.create;
   const rememberOption = useCallback(
-    (key: "courts" | "enforcementOffices", value?: string) => {
+    (key: CategoryKey, value?: string) => {
       const v = value?.trim();
       if (!v) return;
+      // Listeleri yalnızca yönetici değiştirebilir (veritabanı kuralı); avukatın yazdığı
+      // yeni değer kayıtta kalır, listeye eklenmez — hata göstermeye gerek yok.
+      if (!canManageSettings) return;
       const list = stateRef.current.settings[key];
       if (list.some((x) => x.toLocaleLowerCase("tr") === v.toLocaleLowerCase("tr"))) return;
       const next = [...list, v].sort((a, b) => a.localeCompare(b, "tr"));
       updateSettings({ [key]: next } as Partial<Settings>);
     },
-    [updateSettings],
+    [updateSettings, canManageSettings],
   );
 
   /* ───────────── Auth ───────────── */
@@ -1121,3 +1135,10 @@ export { today };
 
 // ActivityLog tipini export için tut (lint)
 export type { ActivityLog };
+
+// Geliştirme: bu dosya sıcak yenilenince React context'i yeniden oluşur, ErpProvider eski, sayfalar yeni
+// context'i kullanır ve "useErp must be used within ErpProvider" hatası çıkar. Bu yüzden değişiklikte
+// modül sıcak yenilenmez, sayfa baştan yüklenir.
+if (import.meta.hot) {
+  import.meta.hot.accept(() => import.meta.hot?.invalidate());
+}

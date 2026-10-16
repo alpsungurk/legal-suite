@@ -1,6 +1,7 @@
 /** Hem liste sayfalarında hem detay sekmelerinde kullanılan tablolar. */
 import { useNavigate } from "@tanstack/react-router";
 import {
+  ArrowRight,
   Ban,
   CheckCircle2,
   Download,
@@ -931,9 +932,105 @@ export function LedgerTable({
   from?: string;
   to?: string;
 }) {
-  const { state } = useErp();
+  const { state, permissions, currentUser, remove, patch, removeInstallmentPayment } = useErp();
   const n = useNames();
+  const confirm = useConfirm();
+  const navigate = useNavigate();
   const { entries, opening, closing } = clientLedger(state, clientId, { from, to });
+
+  /**
+   * Cari ayrı bir kayıt değildir; her satır asıl kaydından (masraf, plan, tahsilat, aktarım) gelir.
+   * Satırı silmek o asıl kaydı siler; yetki o kaydın modülüne göre denetlenir.
+   */
+  const planOfPayment = (paymentId: string) =>
+    state.plans.find((p) => p.installments.some((i) => i.payments.some((x) => x.id === paymentId)));
+  const canEnf = permissions.can("enforcements", "create") || permissions.can("enforcements", "edit");
+  const deletable = (e: LedgerEntry): boolean => {
+    switch (e.kind) {
+      case "Masraf": {
+        const x = state.expenses.find((r) => r.id === e.id);
+        return !!x && (permissions.can("expenses", "delete") || x.createdBy === currentUser.id);
+      }
+      case "Ücret tahakkuku":
+        return permissions.can("fees", "delete");
+      case "Ücret tahsilatı":
+        return permissions.can("fees", "edit") && !!planOfPayment(e.id);
+      case "İcra tahsilatı":
+        return canEnf;
+      case "Müvekkile aktarım":
+        return permissions.can("accounts", "delete");
+      default:
+        return false; // "Kapanan dosyalar" bir özet satırıdır, silinmez
+    }
+  };
+  const openSource = (e: LedgerEntry) => {
+    if (e.kind === "İcra tahsilatı") {
+      const c = state.collections.find((x) => x.id === e.id);
+      if (c) navigate({ to: "/icra/$id", params: { id: c.enforcementId } });
+    } else if (e.kind === "Masraf") navigate({ to: "/masraflar" });
+    else if (e.kind === "Müvekkile aktarım") navigate({ to: "/banka-kasa" });
+    else if (e.kind === "Ücret tahakkuku" || e.kind === "Ücret tahsilatı") navigate({ to: "/tahsilatlar" });
+  };
+  const deleteEntry = async (e: LedgerEntry) => {
+    if (e.kind === "Ücret tahakkuku") {
+      const plan = state.plans.find((p) => p.id === e.id);
+      const paid = plan?.installments.reduce((s, i) => s + i.payments.length, 0) ?? 0;
+      if (paid) {
+        toast.error(
+          `Bu planda ${paid} tahsilat var; plan silinirse kasa ve cari bakiye değişir. Önce tahsilatları geri alın.`,
+        );
+        return;
+      }
+    }
+    const ok = await confirm({
+      title: `${e.kind} silinsin mi?`,
+      confirmLabel: "Sil",
+      description: (
+        <span className="space-y-2">
+          <span className="block">
+            {e.description} · {formatDate(e.date)} ·{" "}
+            {(e.debit || e.credit).toLocaleString("tr-TR", { style: "currency", currency: "TRY" })}
+          </span>
+          <span className="block">
+            {e.kind === "Masraf"
+              ? "Masraf kaydı makbuzlarıyla silinir; kasadan çıkış da geri alınır."
+              : e.kind === "Ücret tahsilatı"
+                ? "Tahsilat geri alınır; taksit yeniden ödenmemiş görünür, kasa girişi de silinir."
+                : e.kind === "İcra tahsilatı"
+                  ? "İcra tahsilatı silinir; bağlı ödeme sözü yeniden bekliyor olur."
+                  : e.kind === "Müvekkile aktarım"
+                    ? "Aktarım hareketi silinir; hesap bakiyesi geri döner."
+                    : "Tahsilat planı taksitleriyle silinir."}{" "}
+            Müvekkilin cari bakiyesi buna göre değişir. Bu işlem geri alınamaz.
+          </span>
+        </span>
+      ),
+    });
+    if (!ok) return;
+    switch (e.kind) {
+      case "Masraf":
+        remove("expenses", e.id);
+        break;
+      case "Ücret tahakkuku":
+        remove("plans", e.id, { reload: true });
+        break;
+      case "Ücret tahsilatı": {
+        const plan = planOfPayment(e.id);
+        if (plan) removeInstallmentPayment(plan.id, e.id);
+        return; // kendi bildirimini gösterir
+      }
+      case "İcra tahsilatı": {
+        const c = state.collections.find((x) => x.id === e.id);
+        remove("collections", e.id);
+        if (c?.promiseId) patch("promises", c.promiseId, { status: "Bekliyor" });
+        break;
+      }
+      case "Müvekkile aktarım":
+        remove("transactions", e.id);
+        break;
+    }
+    toast.success(`${e.kind} silindi`);
+  };
   const columns: Column<LedgerEntry>[] = [
     {
       id: "date",
@@ -1005,6 +1102,23 @@ export function LedgerTable({
       columns={columns}
       getId={(e) => `${e.kind}-${e.id}`}
       exportName={`Ekstre ${n.client(clientId)?.name ?? ""}`}
+      rowActions={(e) =>
+        e.kind === "Kapanan dosyalar" ? null : (
+          <>
+            <DropdownMenuItem onClick={() => openSource(e)}>
+              <ArrowRight /> Kaydın sayfasına git
+            </DropdownMenuItem>
+            {deletable(e) && (
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={() => void deleteEntry(e)}
+              >
+                <Trash2 /> Sil
+              </DropdownMenuItem>
+            )}
+          </>
+        )
+      }
       pageSize={100}
       footer={() => (
         <tr>

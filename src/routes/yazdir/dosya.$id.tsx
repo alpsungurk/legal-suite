@@ -11,7 +11,7 @@ function Page() {
   const { id } = Route.useParams();
   const { state, permissions } = useErp();
   const c = state.cases.find((x) => x.id === id);
-  if (!c || !permissions.can("expenses")) return <NoAccess />;
+  if (!c || !permissions.can("expenses") || !permissions.can("statements")) return <NoAccess />;
   const client = state.clients.find((x) => x.id === c.clientId);
   const expenses = state.expenses
     .filter((e) => e.caseId === c.id)

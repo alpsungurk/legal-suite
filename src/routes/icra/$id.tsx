@@ -4,6 +4,9 @@ import {
   CheckCircle2,
   Gavel,
   HandCoins,
+  Hourglass,
+  ListPlus,
+  ListTree,
   MessageSquarePlus,
   Pencil,
   Phone,
@@ -18,7 +21,13 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useErp } from "@/lib/erp-store";
-import { enforcementSummary, promiseStatus } from "@/lib/finance";
+import {
+  enforcementSummary,
+  promiseStatus,
+  seizureDueDate,
+  seizureWarning,
+} from "@/lib/finance";
+import { STOPPED_ENFORCEMENT_STATUS } from "@/lib/erp-types";
 import { formatDate, formatDateLong, formatMoney, relativeDue } from "@/lib/format";
 import { ExpenseTable } from "@/components/lists/tables";
 import { PageHeader } from "@/components/app/PageHeader";
@@ -37,6 +46,11 @@ import { StatusBadge } from "@/components/app/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { useQuick } from "@/components/forms/quick";
 import { useConfirm } from "@/components/app/confirm";
+import {
+  useDeleteContact,
+  useDeleteEnforcement,
+  useDeletePromise,
+} from "@/components/forms/delete-actions";
 import { EmptyState } from "@/components/EmptyState";
 import { cn } from "@/lib/utils";
 
@@ -46,6 +60,10 @@ function Page() {
   const { id } = Route.useParams();
   const { state, permissions, patch, remove, currentUser } = useErp();
   const quick = useQuick();
+  // Hook'lar erken dönüşlerden (dosya bulunamadı) önce çağrılmalı
+  const deleteEnforcement = useDeleteEnforcement();
+  const deletePromise = useDeletePromise();
+  const deleteContact = useDeleteContact();
   const confirm = useConfirm();
   const e = state.enforcements.find((x) => x.id === id);
   if (!permissions.can("enforcements")) return <NoAccess />;
@@ -106,23 +124,40 @@ function Page() {
   const canDelete = permissions.can("enforcements", "delete");
   const canExpense = permissions.can("expenses", "create");
   const can = canCreate || canEdit;
+  // Borçlu olduğumuz dosyada tahsilat, ödeme sözü ve taksit yok
+  const owed = e.side === "Borçlu";
+  const listLink = owed ? "/icra/borclu" : "/icra";
+  const due = owed ? undefined : seizureDueDate(e, state.settings.seizureValidMonths);
+  const hz = seizureWarning(e, state.settings);
+  const events = state.events
+    .filter((x) => x.enforcementId === e.id)
+    .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
 
   return (
     <PageShell>
       <PageHeader
-        crumbs={[{ label: "İcra dosyaları", to: "/icra" }, { label: e.no }]}
+        crumbs={[
+          { label: owed ? "Borçlu olduğumuz" : "Alacaklı olduğumuz", to: listLink },
+          { label: e.no },
+        ]}
         title={e.no}
         description={`${e.office} · ${e.type} takip · ${formatDateLong(e.openingDate)}`}
         meta={
           <>
             <StatusBadge status={e.status} />
+            <StatusBadge tone={owed ? "amber" : "blue"}>
+              {owed ? "Borçlu olduğumuz" : "Alacaklı olduğumuz"}
+            </StatusBadge>
+            {e.status === STOPPED_ENFORCEMENT_STATUS && e.stopReason && (
+              <span className="text-sm text-muted-foreground">Sebep: {e.stopReason}</span>
+            )}
             {client && (
               <Link
                 to="/muvekkiller/$id"
                 params={{ id: client.id }}
                 className="text-sm font-medium text-muted-foreground hover:text-primary"
               >
-                Alacaklı: {client.name}
+                {owed ? "Borçlu" : "Alacaklı"}: {client.name}
               </Link>
             )}
           </>
@@ -142,7 +177,17 @@ function Page() {
                   <MessageSquarePlus /> Görüşme notu
                 </Button>
               )}
-              {canCreate && (
+              {can && (
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    quick.open("enforcementEvent", { preset: { enforcementId: e.id } })
+                  }
+                >
+                  <ListPlus /> İşlem ekle
+                </Button>
+              )}
+              {canCreate && !owed && (
                 <Button
                   variant="outline"
                   onClick={() =>
@@ -166,7 +211,7 @@ function Page() {
                   <Receipt /> Masraf ekle
                 </Button>
               )}
-              {canCreate && (
+              {canCreate && !owed && (
                 <Button
                   variant="outline"
                   onClick={() =>
@@ -183,7 +228,16 @@ function Page() {
                   <Pencil /> Düzenle
                 </Button>
               )}
-              {canCreate && (
+              {canDelete && (
+                <Button
+                  variant="outline"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => void deleteEnforcement(e)}
+                >
+                  <Trash2 /> Sil
+                </Button>
+              )}
+              {canCreate && !owed && (
                 <Button
                   onClick={() =>
                     quick.open("collection", {
@@ -201,39 +255,151 @@ function Page() {
 
       <StatGrid>
         <StatTile
-          label="Toplam alacak"
+          label="Takip çıkış rakamı"
           value={formatMoney(s.claim)}
           icon={Target}
           tone="blue"
-          hint={`Asıl ${formatMoney(e.principal)} + faiz ${formatMoney(e.interest)} + masraf ${formatMoney(e.costs)}`}
+          hint={`Takip tarihi ${formatDate(e.openingDate)}`}
         />
-        <StatTile
-          label="Tahsil edilen"
-          value={formatMoney(s.collected)}
-          icon={TrendingUp}
-          tone="green"
-          hint={`%${Math.round(s.progress * 100)}`}
-        />
-        <StatTile label="Kalan" value={formatMoney(s.remaining)} icon={Wallet} tone="violet" />
-        <StatTile
-          label="Müvekkile aktarılacak"
-          value={formatMoney(s.untransferred)}
-          icon={Send}
-          tone={s.untransferred ? "amber" : "green"}
-          to="/banka-kasa"
-        />
+        {owed ? (
+          <StatTile
+            label="İşlem geçmişi"
+            value={events.length}
+            icon={ListTree}
+            tone="violet"
+            hint={events[0] ? `Son: ${events[0].type} · ${formatDate(events[0].date)}` : "Henüz işlem yok"}
+          />
+        ) : (
+          <>
+            <StatTile
+              label="Tahsil edilen"
+              value={formatMoney(s.collected)}
+              icon={TrendingUp}
+              tone="green"
+              hint={`%${Math.round(s.progress * 100)} · kalan ${formatMoney(s.remaining)}`}
+            />
+            <StatTile
+              label="Haczin düşeceği tarih"
+              value={due ? formatDate(due) : "—"}
+              icon={Hourglass}
+              tone={hz ? "red" : "violet"}
+              hint={
+                due
+                  ? hz
+                    ? relativeDue(due)
+                    : `Son haciz ${formatDate(e.lastSeizureDate)}`
+                  : "Son haciz tarihi girilmedi"
+              }
+              hintTone={hz ? "red" : undefined}
+            />
+            <StatTile
+              label="Müvekkile aktarılacak"
+              value={formatMoney(s.untransferred)}
+              icon={Send}
+              tone={s.untransferred ? "amber" : "green"}
+              to="/banka-kasa"
+            />
+          </>
+        )}
       </StatGrid>
-      <div className="animate-fade-up">
-        <ProgressBar
-          value={s.progress}
-          tone={s.progress >= 1 ? "green" : "primary"}
-          className="h-2"
-        />
-      </div>
+      {!owed && (
+        <div className="animate-fade-up">
+          <ProgressBar
+            value={s.progress}
+            tone={s.progress >= 1 ? "green" : "primary"}
+            className="h-2"
+          />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,1fr)]">
         <div className="space-y-4">
-          {plans.length > 0 && (
+          <Section
+            title="İşlem geçmişi"
+            description="Tebliğ, itiraz, kesinleştirme, sorgu, haciz ve banka cevapları"
+            actions={
+              can && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    quick.open("enforcementEvent", { preset: { enforcementId: e.id } })
+                  }
+                >
+                  <ListPlus /> İşlem ekle
+                </Button>
+              )
+            }
+            bodyClassName="p-4"
+          >
+            {events.length === 0 ? (
+              <EmptyState
+                icon={ListTree}
+                title="Henüz işlem yok"
+                description="Ödeme emri tebliği, sorgu, haciz gibi adımları buraya ekleyin. Excel'deki açıklamalar aşağıda 'Açıklamalar' bölümünde durur."
+                compact
+              />
+            ) : (
+              <ol className="relative space-y-4 before:absolute before:bottom-1 before:left-[7px] before:top-1 before:w-px before:bg-border">
+                {events.map((ev) => (
+                  <li key={ev.id} className="group relative flex gap-3 pl-6">
+                    <span className="absolute left-0 top-1.5 h-[15px] w-[15px] rounded-full border-2 border-card bg-primary" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm">
+                        <span className="font-medium">{ev.type}</span>
+                        {ev.inquiryType && ` · ${ev.inquiryType}`}
+                        {ev.seizureType && ` · ${ev.seizureType}`}
+                        {ev.result && (
+                          <StatusBadge
+                            className="ml-2 h-5 px-2 text-[12px]"
+                            tone={
+                              /olumlu/i.test(ev.result) && !/olumsuz/i.test(ev.result)
+                                ? "green"
+                                : /olumsuz/i.test(ev.result)
+                                  ? "red"
+                                  : "amber"
+                            }
+                          >
+                            {ev.result}
+                          </StatusBadge>
+                        )}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatDate(ev.date)}
+                        {ev.debtorId && ` · ${debtorName(ev.debtorId)}`}
+                        {ev.amount != null && ` · ${formatMoney(ev.amount)}`}
+                      </p>
+                      {ev.note && <p className="mt-0.5 whitespace-pre-line text-sm">{ev.note}</p>}
+                    </div>
+                    {can && (
+                      <span className="flex opacity-0 transition-opacity group-hover:opacity-100">
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          onClick={() => quick.open("enforcementEvent", { record: ev })}
+                        >
+                          <Pencil />
+                        </Button>
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          className="hover:text-destructive"
+                          onClick={async () => {
+                            if (await confirm({ title: "İşlem kaydı silinsin mi?" }))
+                              remove("events", ev.id);
+                          }}
+                        >
+                          <Trash2 />
+                        </Button>
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            )}
+          </Section>
+
+          {!owed && plans.length > 0 && (
             <Section
               title="Taksitler"
               description="Borçluya tanımlanan ödeme planları"
@@ -292,14 +458,24 @@ function Page() {
                               </Button>
                             )}
                             {can && (
-                              <Button
-                                size="icon-sm"
-                                variant="ghost"
-                                className="opacity-0 group-hover:opacity-100"
-                                onClick={() => quick.open("promise", { record: p })}
-                              >
-                                <Pencil />
-                              </Button>
+                              <span className="flex opacity-0 transition-opacity group-hover:opacity-100">
+                                <Button
+                                  size="icon-sm"
+                                  variant="ghost"
+                                  onClick={() => quick.open("promise", { record: p })}
+                                >
+                                  <Pencil />
+                                </Button>
+                                <Button
+                                  size="icon-sm"
+                                  variant="ghost"
+                                  className="hover:text-destructive"
+                                  title="Sil"
+                                  onClick={() => void deletePromise(p)}
+                                >
+                                  <Trash2 />
+                                </Button>
+                              </span>
                             )}
                           </li>
                         );
@@ -311,6 +487,7 @@ function Page() {
             </Section>
           )}
 
+          {!owed && (
           <Section
             title="Ödeme sözleri"
             description="Borçlunun taahhütleri ve gerçekleşme durumu"
@@ -385,14 +562,24 @@ function Page() {
                         </div>
                       )}
                       {can && (
-                        <Button
-                          size="icon-sm"
-                          variant="ghost"
-                          className="opacity-0 group-hover:opacity-100"
-                          onClick={() => quick.open("promise", { record: p })}
-                        >
-                          <Pencil />
-                        </Button>
+                        <span className="flex opacity-0 transition-opacity group-hover:opacity-100">
+                          <Button
+                            size="icon-sm"
+                            variant="ghost"
+                            onClick={() => quick.open("promise", { record: p })}
+                          >
+                            <Pencil />
+                          </Button>
+                          <Button
+                            size="icon-sm"
+                            variant="ghost"
+                            className="hover:text-destructive"
+                            title="Sil"
+                            onClick={() => void deletePromise(p)}
+                          >
+                            <Trash2 />
+                          </Button>
+                        </span>
                       )}
                     </li>
                   );
@@ -400,7 +587,9 @@ function Page() {
               </ul>
             )}
           </Section>
+          )}
 
+          {!owed && (
           <Section title="Tahsilatlar" bodyClassName="p-2">
             {collections.length === 0 ? (
               <EmptyState icon={HandCoins} title="Henüz tahsilat yok" compact />
@@ -456,6 +645,7 @@ function Page() {
               </ul>
             )}
           </Section>
+          )}
 
           <Section title="Masraflar" description="Bu icra dosyası için yapılan masraflar">
             {expenses.length === 0 ? (
@@ -494,7 +684,7 @@ function Page() {
         </div>
 
         <div className="space-y-4">
-          <Section title="Borçlular" bodyClassName="p-2">
+          <Section title={owed ? "Alacaklı (karşı taraf)" : "Borçlular"} bodyClassName="p-2">
             <ul className="space-y-1">
               {debtors.map((d) => (
                 <li
@@ -529,8 +719,30 @@ function Page() {
             <DetailList
               className="sm:grid-cols-1"
               items={[
-                { label: "İcra dairesi", value: e.office },
+                { label: "Taraf", value: owed ? "Borçlu olduğumuz" : "Alacaklı olduğumuz" },
+                { label: "Birim", value: e.office },
+                { label: "Dosya no", value: e.no },
                 { label: "Takip türü", value: e.type },
+                { label: "Takip tarihi", value: formatDate(e.openingDate) },
+                ...(owed
+                  ? []
+                  : [
+                      {
+                        label: "Son haciz tarihi",
+                        value: e.lastSeizureDate ? formatDate(e.lastSeizureDate) : undefined,
+                      },
+                      {
+                        label: "Haczin düşeceği tarih",
+                        value: due ? (
+                          <span className={cn(hz && "font-semibold text-rose-600 dark:text-rose-400")}>
+                            {formatDate(due)} · {relativeDue(due)}
+                          </span>
+                        ) : undefined,
+                      },
+                    ]),
+                ...(e.status === STOPPED_ENFORCEMENT_STATUS
+                  ? [{ label: "Durdurulma sebebi", value: e.stopReason || "—" }]
+                  : []),
                 { label: "Sorumlu", value: <AvatarStack names={e.responsibleIds.map(userName)} /> },
                 {
                   label: "İlgili dava",
@@ -546,10 +758,21 @@ function Page() {
                 },
               ]}
             />
+            {e.details && (
+              <div className="mt-3">
+                <p className="mb-1 text-xs font-medium text-muted-foreground">Takip bilgileri</p>
+                <p className="whitespace-pre-line rounded-xl bg-secondary/40 p-3 text-sm">
+                  {e.details}
+                </p>
+              </div>
+            )}
             {e.note && (
-              <p className="mt-3 whitespace-pre-line rounded-xl bg-secondary/40 p-3 text-sm">
-                {e.note}
-              </p>
+              <div className="mt-3">
+                <p className="mb-1 text-xs font-medium text-muted-foreground">Açıklamalar</p>
+                <p className="whitespace-pre-line rounded-xl bg-secondary/40 p-3 text-sm">
+                  {e.note}
+                </p>
+              </div>
             )}
           </Section>
           <Section title="Görüşme notları" bodyClassName="p-4">
@@ -558,7 +781,7 @@ function Page() {
             ) : (
               <ol className="relative space-y-4 before:absolute before:bottom-1 before:left-[15px] before:top-1 before:w-px before:bg-border">
                 {contacts.map((c) => (
-                  <li key={c.id} className="relative flex gap-3">
+                  <li key={c.id} className="group relative flex gap-3">
                     <Avatar
                       name={userName(c.userId)}
                       size="sm"
@@ -570,6 +793,17 @@ function Page() {
                       </p>
                       <p className="mt-0.5 text-sm">{c.note}</p>
                     </div>
+                    {can && (
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        className="opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                        title="Sil"
+                        onClick={() => void deleteContact(c)}
+                      >
+                        <Trash2 />
+                      </Button>
+                    )}
                   </li>
                 ))}
               </ol>

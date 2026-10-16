@@ -9,8 +9,10 @@ import {
   MessageSquarePlus,
   Pencil,
   Phone,
+  Trash2,
   UserX,
 } from "lucide-react";
+import { useDeleteContact, useDeleteDebtor } from "@/components/forms/delete-actions";
 import { useErp } from "@/lib/erp-store";
 import { debtorSummary, enforcementSummary, promiseStatus } from "@/lib/finance";
 import { formatDate, formatMoney, relativeDue } from "@/lib/format";
@@ -40,6 +42,9 @@ function waLink(phone: string) {
 function Page() {
   const { id } = Route.useParams();
   const { state, permissions } = useErp();
+  const deleteDebtor = useDeleteDebtor();
+  const deleteContact = useDeleteContact();
+  const canWrite = permissions.can("enforcements", "create") || permissions.can("enforcements", "edit");
   const quick = useQuick();
   const d = state.debtors.find((x) => x.id === id);
   if (!permissions.can("enforcements")) return <NoAccess />;
@@ -105,6 +110,15 @@ function Page() {
             {permissions.can("enforcements", "edit") && (
               <Button variant="outline" onClick={() => quick.open("debtor", { record: d })}>
                 <Pencil /> Düzenle
+              </Button>
+            )}
+            {permissions.can("enforcements", "delete") && (
+              <Button
+                variant="outline"
+                className="text-destructive hover:text-destructive"
+                onClick={() => void deleteDebtor(d)}
+              >
+                <Trash2 /> Sil
               </Button>
             )}
             {permissions.can("enforcements", "create") && (
@@ -246,7 +260,7 @@ function Page() {
             ) : (
               <ol className="relative space-y-4 before:absolute before:bottom-1 before:left-[15px] before:top-1 before:w-px before:bg-border">
                 {contacts.map((c) => (
-                  <li key={c.id} className="relative flex gap-3">
+                  <li key={c.id} className="group relative flex gap-3">
                     <Avatar
                       name={userName(c.userId)}
                       size="sm"
@@ -259,6 +273,17 @@ function Page() {
                       </p>
                       <p className="mt-0.5 text-sm">{c.note}</p>
                     </div>
+                    {canWrite && (
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        className="opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                        title="Sil"
+                        onClick={() => void deleteContact(c)}
+                      >
+                        <Trash2 />
+                      </Button>
+                    )}
                   </li>
                 ))}
               </ol>

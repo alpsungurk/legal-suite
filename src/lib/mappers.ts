@@ -26,6 +26,9 @@ import type {
   User,
   UserRole,
   YearStats,
+  CompanyList,
+  EnforcementEvent,
+  EnforcementSide,
 } from "@/lib/erp-types";
 
 export function roleToDb(role: UserRole): "admin" | "avukat" {
@@ -141,7 +144,31 @@ export function settingsFromRow(r: Record<string, unknown> | null): Settings {
     courts: (r.courts as string[]) ?? [],
     enforcementOffices: (r.enforcement_offices as string[]) ?? [],
     rolePermissions: (r.role_permissions as Record<string, boolean>) ?? base.rolePermissions,
+    // Aşağıdakiler 20261016 migration'ı ile geldi; çalıştırılmadıysa varsayılanlar kullanılır
+    enforcementStopReasons:
+      (r.enforcement_stop_reasons as string[]) ?? base.enforcementStopReasons,
+    enforcementEventTypes: (r.enforcement_event_types as string[]) ?? base.enforcementEventTypes,
+    inquiryTypes: (r.inquiry_types as string[]) ?? base.inquiryTypes,
+    seizureTypes: (r.seizure_types as string[]) ?? base.seizureTypes,
+    resultTypes: (r.result_types as string[]) ?? base.resultTypes,
+    seizureValidMonths: num(r.seizure_valid_months, base.seizureValidMonths),
+    seizureReminderDays: num(r.seizure_reminder_days, base.seizureReminderDays),
+    companyLists: companyListsFromJson(r.company_lists),
+    closedCaseRetentionMonths: num(r.closed_case_retention_months, base.closedCaseRetentionMonths),
   };
+}
+
+function companyListsFromJson(v: unknown): CompanyList[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter((x): x is Record<string, unknown> => !!x && typeof x === "object")
+    .map((x) => ({
+      id: String(x.id ?? ""),
+      name: String(x.name ?? ""),
+      clientIds: Array.isArray(x.clientIds) ? x.clientIds.map(String) : [],
+      icon: typeof x.icon === "string" && x.icon ? x.icon : undefined,
+    }))
+    .filter((x) => x.id && x.name);
 }
 
 export function settingsToRow(s: Partial<Settings>) {
@@ -160,6 +187,16 @@ export function settingsToRow(s: Partial<Settings>) {
   if (s.courts != null) row.courts = s.courts;
   if (s.enforcementOffices != null) row.enforcement_offices = s.enforcementOffices;
   if (s.rolePermissions != null) row.role_permissions = s.rolePermissions;
+  if (s.enforcementStopReasons != null) row.enforcement_stop_reasons = s.enforcementStopReasons;
+  if (s.enforcementEventTypes != null) row.enforcement_event_types = s.enforcementEventTypes;
+  if (s.inquiryTypes != null) row.inquiry_types = s.inquiryTypes;
+  if (s.seizureTypes != null) row.seizure_types = s.seizureTypes;
+  if (s.resultTypes != null) row.result_types = s.resultTypes;
+  if (s.seizureValidMonths != null) row.seizure_valid_months = s.seizureValidMonths;
+  if (s.seizureReminderDays != null) row.seizure_reminder_days = s.seizureReminderDays;
+  if (s.companyLists != null) row.company_lists = s.companyLists;
+  if (s.closedCaseRetentionMonths != null)
+    row.closed_case_retention_months = s.closedCaseRetentionMonths;
   return row;
 }
 
@@ -372,15 +409,19 @@ export function enforcementFromRow(
     no: String(r.no ?? ""),
     office: String(r.office ?? ""),
     type: String(r.type ?? "İlamsız"),
+    side: (r.side === "Borçlu" ? "Borçlu" : "Alacaklı") as EnforcementSide,
     clientId: String(r.client_id),
     debtorIds,
     principal: num(r.principal),
     interest: num(r.interest),
     costs: num(r.costs),
-    status: String(r.status ?? "Derdest"),
+    status: String(r.status ?? "Açık"),
+    stopReason: optStr(r.stop_reason),
     openingDate: dateOnly(r.opening_date as string),
     responsibleIds: (r.responsible_ids as string[]) ?? [],
     caseId: optStr(r.case_id),
+    details: optStr(r.details),
+    lastSeizureDate: optStr(dateOnly(r.last_seizure_date as string)),
     note: optStr(r.note),
   };
 }
@@ -398,6 +439,44 @@ export function enforcementToRow(e: Partial<EnforcementFile>) {
   if (e.openingDate != null) row.opening_date = e.openingDate;
   if (e.responsibleIds != null) row.responsible_ids = e.responsibleIds;
   if (e.caseId !== undefined) row.case_id = e.caseId || null;
+  if (e.note !== undefined) row.note = e.note || null;
+  if (e.side != null) row.side = e.side;
+  if (e.stopReason !== undefined) row.stop_reason = e.stopReason || null;
+  if (e.details !== undefined) row.details = e.details || null;
+  if (e.lastSeizureDate !== undefined) row.last_seizure_date = e.lastSeizureDate || null;
+  return row;
+}
+
+/* ───── İcra işlem geçmişi ───── */
+
+export function eventFromRow(r: Record<string, unknown>): EnforcementEvent {
+  return {
+    id: String(r.id),
+    firmId: String(r.org_id),
+    createdAt: iso(r.created_at as string),
+    updatedAt: iso(r.updated_at as string),
+    enforcementId: String(r.enforcement_id),
+    debtorId: optStr(r.debtor_id),
+    date: dateOnly(r.date as string),
+    type: String(r.type ?? ""),
+    inquiryType: optStr(r.inquiry_type),
+    seizureType: optStr(r.seizure_type),
+    result: optStr(r.result),
+    amount: optNum(r.amount),
+    note: optStr(r.note),
+  };
+}
+
+export function eventToRow(e: Partial<EnforcementEvent>) {
+  const row: Record<string, unknown> = {};
+  if (e.enforcementId != null) row.enforcement_id = e.enforcementId;
+  if (e.debtorId !== undefined) row.debtor_id = e.debtorId || null;
+  if (e.date != null) row.date = e.date;
+  if (e.type != null) row.type = e.type;
+  if (e.inquiryType !== undefined) row.inquiry_type = e.inquiryType || null;
+  if (e.seizureType !== undefined) row.seizure_type = e.seizureType || null;
+  if (e.result !== undefined) row.result = e.result || null;
+  if (e.amount !== undefined) row.amount = e.amount ?? null;
   if (e.note !== undefined) row.note = e.note || null;
   return row;
 }

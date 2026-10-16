@@ -10,6 +10,8 @@ import {
   ChevronRight,
   Download,
   FileSpreadsheet,
+  UserRound,
+  Wand2,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -23,7 +25,15 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Combobox, Segmented, type Option } from "@/components/app/fields";
+import { Textarea } from "@/components/ui/textarea";
+import { Combobox, MultiCombobox, Segmented, type Option } from "@/components/app/fields";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { StatusBadge } from "@/components/app/StatusBadge";
 import { useErp } from "@/lib/erp-store";
 import { readSpreadsheet } from "@/lib/excel-read";
@@ -39,7 +49,7 @@ import {
   type RowCheck,
   type RowValues,
 } from "@/lib/import-specs";
-import { downloadImportTemplate, ERROR_COLUMN, REQUIRED_MARK } from "@/lib/import-template";
+import { downloadTemplate, ERROR_COLUMN, REQUIRED_MARK } from "@/lib/import-template";
 import { cn } from "@/lib/utils";
 import { OverlayLoader } from "@/components/app/Loader";
 
@@ -95,6 +105,7 @@ async function ingest(file: File, spec: ImportSpec) {
   });
   const missing = spec.columns.filter((c) => c.required && !used.has(c.key)).map((c) => c.header);
   const typeOf = new Map(spec.columns.map((c) => [c.key, c.type]));
+  const multiOf = new Set(spec.columns.filter((c) => c.multiline).map((c) => c.key));
 
   const rows: Row[] = [];
   const data = best.sheet.rows.slice(best.headerRow + 1);
@@ -102,7 +113,7 @@ async function ingest(file: File, spec: ImportSpec) {
     const raw = data[i] ?? [];
     const values: RowValues = {};
     for (const { index, key } of mapping)
-      values[key] = cellToText(raw[index] ?? null, typeOf.get(key), wb.date1904);
+      values[key] = cellToText(raw[index] ?? null, typeOf.get(key), wb.date1904, multiOf.has(key));
     if (Object.values(values).every((v) => !v)) continue;
     rows.push({ id: i, line: best.headerRow + i + 2, values });
   }
@@ -117,6 +128,125 @@ async function ingest(file: File, spec: ImportSpec) {
     truncated: rows.length >= MAX_ROWS && remaining,
   };
   return { rows, info };
+}
+
+/* ───────────── Toplu uygula (Excel'de "aşağı doldur" gibi) ───────────── */
+
+/** Çok değerli sütunlar (sorumlu avukat) hücrede "Ad; Ad" metni olarak durur */
+const splitMulti = (v: string) =>
+  v
+    .split(/[;,]/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+function BulkApply({
+  spec,
+  options,
+  multiOptions,
+  count,
+  userName,
+  onApply,
+}: {
+  spec: ImportSpec;
+  options: Map<string, Option[]>;
+  multiOptions: Map<string, Option[]>;
+  count: number;
+  userName: string;
+  onApply: (key: string, value: string, onlyEmpty: boolean) => void;
+}) {
+  const columns = spec.columns.filter((c) => c.key !== "no");
+  const [key, setKey] = useState(
+    columns.find((c) => c.key === "responsible")?.key ?? columns[0]?.key ?? "",
+  );
+  const [value, setValue] = useState("");
+  const [onlyEmpty, setOnlyEmpty] = useState(false);
+  const col = columns.find((c) => c.key === key);
+  if (!col) return null;
+  const single = options.get(key);
+  const multi = multiOptions.get(key);
+  const apply = (v: string) => {
+    onApply(key, v, onlyEmpty);
+    toast.success(
+      `${col.header}: ${v ? `"${v}"` : "boş"} ${count} satıra uygulandı${onlyEmpty ? " (yalnızca boş olanlara)" : ""}`,
+    );
+  };
+  return (
+    <div className="flex flex-wrap items-end gap-2 rounded-lg border border-border/70 bg-secondary/30 px-3 py-2">
+      <span className="flex items-center gap-1.5 self-center text-xs font-semibold text-muted-foreground">
+        <Wand2 className="h-3.5 w-3.5" /> Toplu uygula
+      </span>
+      <div className="w-44">
+        <Select
+          value={key}
+          onValueChange={(k) => {
+            setKey(k);
+            setValue("");
+          }}
+        >
+          <SelectTrigger className="h-9" aria-label="Sütun">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {columns.map((c) => (
+              <SelectItem key={c.key} value={c.key}>
+                {c.header}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="w-64">
+        {multi ? (
+          <MultiCombobox
+            value={splitMulti(value)}
+            onChange={(v) => setValue(v.join("; "))}
+            options={multi}
+            placeholder="Seçin"
+          />
+        ) : single ? (
+          <Combobox
+            value={value || undefined}
+            onChange={setValue}
+            options={single}
+            placeholder="Seçin"
+            creatable={col.creatable}
+            allowClear
+          />
+        ) : (
+          <Input
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder={col.type === "date" ? "GG.AA.YYYY" : "Değer"}
+            className="h-9"
+          />
+        )}
+      </div>
+      {col.key === "responsible" && (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-9"
+          onClick={() => setValue(userName)}
+          title="Sorumlu olarak sizi seçer"
+        >
+          <UserRound /> Kendim
+        </Button>
+      )}
+      <label className="flex cursor-pointer items-center gap-1.5 self-center text-xs font-medium">
+        <input
+          type="checkbox"
+          className="h-4 w-4 accent-[var(--primary)]"
+          checked={onlyEmpty}
+          onChange={(e) => setOnlyEmpty(e.target.checked)}
+        />
+        Yalnızca boş olanlar
+      </label>
+      <Button type="button" size="sm" className="ml-auto h-9" onClick={() => apply(value)}>
+        {value ? "Uygula" : "Temizle"} · {count} satır
+      </Button>
+    </div>
+  );
 }
 
 /* ───────────── Bileşen ───────────── */
@@ -217,6 +347,32 @@ export function ImportDialog({
     return map;
   }, [spec, ctx]);
 
+  // Çok değerli ve listeli sütunlar (sorumlu avukat): hücrede birden fazla seçim yapılabilir
+  const multiOptions = useMemo(() => {
+    const map = new Map<string, Option[]>();
+    for (const c of spec?.columns ?? [])
+      if (c.options && c.type === "multi")
+        map.set(
+          c.key,
+          c.options(ctx).map((o) => ({ value: o, label: o })),
+        );
+    return map;
+  }, [spec, ctx]);
+
+  /** Görünen (filtreye uyan) bütün satırlara aynı değeri yazar */
+  const applyToVisible = (key: string, value: string, onlyEmpty: boolean) => {
+    const ids = new Set(visible.map((r) => r.id));
+    setRows((rs) =>
+      rs
+        ? rs.map((r) =>
+            ids.has(r.id) && (!onlyEmpty || !(r.values[key] ?? "").trim())
+              ? { ...r, values: { ...r.values, [key]: value } }
+              : r,
+          )
+        : rs,
+    );
+  };
+
   const loadFile = async (file: File) => {
     if (!spec) return;
     setBusy(true);
@@ -279,10 +435,22 @@ export function ImportDialog({
       importRecords(batch, `${ready.length} ${spec.noun} · ${info?.name ?? "Excel"}`);
       // Yeni mahkeme / icra daireleri seçim listelerine eklenir
       for (const c of batch.cases ?? []) rememberOption("courts", c.court);
-      for (const e of batch.enforcements ?? []) rememberOption("enforcementOffices", e.office);
-      const extra = batch.debtors?.length && kind === "enforcements" ? batch.debtors.length : 0;
+      for (const e of batch.enforcements ?? []) {
+        rememberOption("enforcementOffices", e.office);
+        rememberOption("enforcementTypes", e.type);
+        if (e.stopReason) rememberOption("enforcementStopReasons", e.stopReason);
+      }
+      const icra = kind === "enforcements" || kind === "enforcementsOwed";
+      const extraParties = icra ? (batch.debtors?.length ?? 0) : 0;
+      const extraClients = icra ? (batch.clients?.length ?? 0) : 0;
       toast.success(
-        `${ready.length} ${spec.noun} aktarıldı${extra ? ` · ${extra} yeni borçlu oluşturuldu` : ""}`,
+        [
+          `${ready.length} ${spec.noun} aktarıldı`,
+          extraClients ? `${extraClients} yeni müvekkil` : "",
+          extraParties ? `${extraParties} yeni karşı taraf kartı` : "",
+        ]
+          .filter(Boolean)
+          .join(" · "),
       );
       if (counts.error) toast.warning(`${counts.error} hatalı satır aktarılmadı`);
       onOpenChange(false);
@@ -299,7 +467,7 @@ export function ImportDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className={cn(
-          "relative flex h-[min(92svh,920px)] w-[min(96vw,1600px)] max-w-[min(96vw,1600px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(96vw,1600px)]",
+          "flex h-[min(92svh,920px)] w-[min(96vw,1600px)] max-w-[min(96vw,1600px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(96vw,1600px)]",
         )}
       >
         {busy && rows ? <OverlayLoader label="Aktarılıyor…" /> : null}
@@ -313,7 +481,7 @@ export function ImportDialog({
         </DialogHeader>
 
         {!rows ? (
-          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
+          <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-6 py-5">
             {!fixedKind && (
               <div>
                 <p className="mb-2 text-[14px] font-medium">Ne aktarmak istiyorsunuz?</p>
@@ -349,14 +517,15 @@ export function ImportDialog({
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium">Şablonu indirin</p>
                     <p className="text-xs text-muted-foreground">
-                      Listeli sütunlarda (tür, müvekkil, dosya…) Excel'de açılır liste vardır.
-                      Açıklama sayfasında her sütun anlatılır.
+                      {spec.templateFile
+                        ? "Büronun kendi Excel şablonudur; sütunları değiştirmeden doldurup yükleyin."
+                        : "Listeli sütunlarda (tür, müvekkil, dosya…) Excel'de açılır liste vardır. Açıklama sayfasında her sütun anlatılır."}
                     </p>
                   </div>
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => downloadImportTemplate(spec, ctx)}
+                    onClick={() => downloadTemplate(spec, ctx)}
                   >
                     <Download /> Şablon
                   </Button>
@@ -394,7 +563,7 @@ export function ImportDialog({
                   if (f) void loadFile(f);
                 }}
                 className={cn(
-                  "flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed px-4 py-10 text-center transition-all duration-200 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/25",
+                  "flex min-h-[260px] flex-1 cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed px-4 py-10 text-center transition-all duration-200 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/25",
                   dragging
                     ? "border-primary bg-primary/5"
                     : "border-border hover:border-primary/40 hover:bg-secondary/40",
@@ -466,6 +635,15 @@ export function ImportDialog({
                     />
                   </div>
                 </div>
+                <BulkApply
+                  key={kind}
+                  spec={spec}
+                  options={options}
+                  multiOptions={multiOptions}
+                  count={visible.length}
+                  userName={currentUser.name}
+                  onApply={applyToVisible}
+                />
                 {(info?.missing.length || info?.unknown.length || info?.truncated) && (
                   <div className="space-y-1 rounded-lg border border-amber-200/80 bg-amber-50/70 px-3 py-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
                     {!!info?.missing.length && (
@@ -557,7 +735,15 @@ export function ImportDialog({
                           const opts = options.get(c.key);
                           return (
                             <td key={c.key} className="border-b border-border/50 px-1.5 py-1.5">
-                              {opts ? (
+                              {multiOptions.has(c.key) ? (
+                                <MultiCombobox
+                                  value={splitMulti(value)}
+                                  onChange={(v) => update(r.id, c.key, v.join("; "))}
+                                  options={multiOptions.get(c.key)!}
+                                  placeholder={value || "Seçin"}
+                                  invalid={!!error}
+                                />
+                              ) : opts ? (
                                 <Combobox
                                   value={
                                     c.creatable || opts.some((o) => o.value === value)
@@ -570,6 +756,13 @@ export function ImportDialog({
                                   creatable={c.creatable}
                                   allowClear
                                   invalid={!!error}
+                                />
+                              ) : c.multiline ? (
+                                <Textarea
+                                  value={value}
+                                  onChange={(e) => update(r.id, c.key, e.target.value)}
+                                  rows={2}
+                                  className="min-w-[280px] text-[13px]"
                                 />
                               ) : (
                                 <Input

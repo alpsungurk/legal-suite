@@ -18,6 +18,7 @@ import {
   DebtorForm,
   DebtorPlanForm,
   DocumentForm,
+  EnforcementEventForm,
   EnforcementForm,
   PromiseForm,
   ReminderForm,
@@ -33,6 +34,7 @@ import type {
   ContactLog,
   Debtor,
   DocumentFile,
+  EnforcementEvent,
   EnforcementFile,
   Expense,
   FeePlan,
@@ -60,6 +62,7 @@ type Kinds = {
   reminder: Spec<Reminder>;
   debtor: Spec<Debtor>;
   enforcement: Spec<EnforcementFile>;
+  enforcementEvent: Spec<EnforcementEvent>;
   promise: Spec<PaymentPromise>;
   import: { kind?: ImportKind };
   debtorPlan: { preset?: { enforcementId?: string; debtorId?: string; total?: number } };
@@ -107,6 +110,9 @@ export function QuickActionsProvider({ children }: { children: ReactNode }) {
       {active?.kind === "debtor" && <DebtorForm key={seq} {...common} {...active.props} />}
       {active?.kind === "enforcement" && (
         <EnforcementForm key={seq} {...common} {...active.props} />
+      )}
+      {active?.kind === "enforcementEvent" && (
+        <EnforcementEventForm key={seq} {...common} {...active.props} />
       )}
       {active?.kind === "promise" && <PromiseForm key={seq} {...common} {...active.props} />}
       {active?.kind === "import" && <ImportDialog key={seq} {...common} {...active.props} />}

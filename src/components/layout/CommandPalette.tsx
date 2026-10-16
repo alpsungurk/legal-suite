@@ -26,6 +26,7 @@ import {
 import { useErp } from "@/lib/erp-store";
 import { useQuick, type QuickKind } from "@/components/forms/quick";
 import { NAV_PAGES } from "@/components/layout/nav";
+import { fileNoKey } from "@/lib/format";
 
 const OPEN_EVENT = "lex:command-palette";
 
@@ -168,7 +169,7 @@ export function CommandPalette() {
                 {state.enforcements.map((e) => (
                   <CommandItem
                     key={e.id}
-                    value={`icra ${e.no} ${e.office}`}
+                    value={`icra ${e.no} ${fileNoKey(e.no)} ${e.office}`}
                     onSelect={() => go(`/icra/${e.id}`)}
                   >
                     <Gavel className="h-4 w-4 text-muted-foreground" />

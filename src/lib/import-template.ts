@@ -5,6 +5,17 @@ export const REQUIRED_MARK = " *";
 /** Hatalı satırlar indirilirken eklenen sütun; tekrar yüklendiğinde yok sayılır */
 export const ERROR_COLUMN = "Hata (silmeyin, yüklerken yok sayılır)";
 
+/** Şablon düğmesi: hazır şablon dosyası varsa onu, yoksa uygulamanın ürettiğini indirir */
+export function downloadTemplate(spec: ImportSpec, ctx: ImportContext) {
+  if (!spec.templateFile) return downloadImportTemplate(spec, ctx);
+  const a = document.createElement("a");
+  a.href = spec.templateFile.url;
+  a.download = spec.templateFile.filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 /**
  * Doldurulacak şablon: "Veri" sayfası (başlıklar + açılır listeler), açılır listelerin
  * değerlerini tutan "Listeler" sayfası ve her sütunun açıklandığı "Açıklama" sayfası.

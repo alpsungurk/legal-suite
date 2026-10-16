@@ -23,14 +23,17 @@ import { Route as SifreSifirlaRouteImport } from './routes/sifre-sifirla'
 import { Route as TahsilatlarRouteImport } from './routes/tahsilatlar'
 import { Route as TaksitlerRouteImport } from './routes/taksitler'
 import { Route as TakvimRouteImport } from './routes/takvim'
+import { Route as UyarilarRouteImport } from './routes/uyarilar'
 import { Route as BorclularIndexRouteImport } from './routes/borclular/index'
 import { Route as BorclularIdRouteImport } from './routes/borclular/$id'
 import { Route as DosyalarIndexRouteImport } from './routes/dosyalar/index'
 import { Route as DosyalarIdRouteImport } from './routes/dosyalar/$id'
 import { Route as IcraIndexRouteImport } from './routes/icra/index'
 import { Route as IcraIdRouteImport } from './routes/icra/$id'
+import { Route as IcraBorcluRouteImport } from './routes/icra/borclu'
 import { Route as MuvekkillerIndexRouteImport } from './routes/muvekkiller/index'
 import { Route as MuvekkillerIdRouteImport } from './routes/muvekkiller/$id'
+import { Route as IcraListeListIdRouteImport } from './routes/icra/liste.$listId'
 import { Route as YazdirDosyaIdRouteImport } from './routes/yazdir/dosya.$id'
 import { Route as YazdirEkstreIdRouteImport } from './routes/yazdir/ekstre.$id'
 
@@ -104,6 +107,11 @@ const TakvimRoute = TakvimRouteImport.update({
   path: '/takvim',
   getParentRoute: () => rootRouteImport,
 } as any)
+const UyarilarRoute = UyarilarRouteImport.update({
+  id: '/uyarilar',
+  path: '/uyarilar',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BorclularIndexRoute = BorclularIndexRouteImport.update({
   id: '/borclular/',
   path: '/borclular/',
@@ -134,6 +142,11 @@ const IcraIdRoute = IcraIdRouteImport.update({
   path: '/icra/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const IcraBorcluRoute = IcraBorcluRouteImport.update({
+  id: '/icra/borclu',
+  path: '/icra/borclu',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MuvekkillerIndexRoute = MuvekkillerIndexRouteImport.update({
   id: '/muvekkiller/',
   path: '/muvekkiller/',
@@ -142,6 +155,11 @@ const MuvekkillerIndexRoute = MuvekkillerIndexRouteImport.update({
 const MuvekkillerIdRoute = MuvekkillerIdRouteImport.update({
   id: '/muvekkiller/$id',
   path: '/muvekkiller/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IcraListeListIdRoute = IcraListeListIdRouteImport.update({
+  id: '/icra/liste/$listId',
+  path: '/icra/liste/$listId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const YazdirDosyaIdRoute = YazdirDosyaIdRouteImport.update({
@@ -170,14 +188,17 @@ export interface FileRoutesByFullPath {
   '/tahsilatlar': typeof TahsilatlarRoute
   '/taksitler': typeof TaksitlerRoute
   '/takvim': typeof TakvimRoute
+  '/uyarilar': typeof UyarilarRoute
   '/borclular/$id': typeof BorclularIdRoute
   '/dosyalar/$id': typeof DosyalarIdRoute
   '/icra/$id': typeof IcraIdRoute
+  '/icra/borclu': typeof IcraBorcluRoute
   '/muvekkiller/$id': typeof MuvekkillerIdRoute
   '/borclular/': typeof BorclularIndexRoute
   '/dosyalar/': typeof DosyalarIndexRoute
   '/icra/': typeof IcraIndexRoute
   '/muvekkiller/': typeof MuvekkillerIndexRoute
+  '/icra/liste/$listId': typeof IcraListeListIdRoute
   '/yazdir/dosya/$id': typeof YazdirDosyaIdRoute
   '/yazdir/ekstre/$id': typeof YazdirEkstreIdRoute
 }
@@ -196,14 +217,17 @@ export interface FileRoutesByTo {
   '/tahsilatlar': typeof TahsilatlarRoute
   '/taksitler': typeof TaksitlerRoute
   '/takvim': typeof TakvimRoute
+  '/uyarilar': typeof UyarilarRoute
   '/borclular/$id': typeof BorclularIdRoute
   '/dosyalar/$id': typeof DosyalarIdRoute
   '/icra/$id': typeof IcraIdRoute
+  '/icra/borclu': typeof IcraBorcluRoute
   '/muvekkiller/$id': typeof MuvekkillerIdRoute
   '/borclular': typeof BorclularIndexRoute
   '/dosyalar': typeof DosyalarIndexRoute
   '/icra': typeof IcraIndexRoute
   '/muvekkiller': typeof MuvekkillerIndexRoute
+  '/icra/liste/$listId': typeof IcraListeListIdRoute
   '/yazdir/dosya/$id': typeof YazdirDosyaIdRoute
   '/yazdir/ekstre/$id': typeof YazdirEkstreIdRoute
 }
@@ -223,14 +247,17 @@ export interface FileRoutesById {
   '/tahsilatlar': typeof TahsilatlarRoute
   '/taksitler': typeof TaksitlerRoute
   '/takvim': typeof TakvimRoute
+  '/uyarilar': typeof UyarilarRoute
   '/borclular/$id': typeof BorclularIdRoute
   '/dosyalar/$id': typeof DosyalarIdRoute
   '/icra/$id': typeof IcraIdRoute
+  '/icra/borclu': typeof IcraBorcluRoute
   '/muvekkiller/$id': typeof MuvekkillerIdRoute
   '/borclular/': typeof BorclularIndexRoute
   '/dosyalar/': typeof DosyalarIndexRoute
   '/icra/': typeof IcraIndexRoute
   '/muvekkiller/': typeof MuvekkillerIndexRoute
+  '/icra/liste/$listId': typeof IcraListeListIdRoute
   '/yazdir/dosya/$id': typeof YazdirDosyaIdRoute
   '/yazdir/ekstre/$id': typeof YazdirEkstreIdRoute
 }
@@ -251,14 +278,17 @@ export interface FileRouteTypes {
     | '/tahsilatlar'
     | '/taksitler'
     | '/takvim'
+    | '/uyarilar'
     | '/borclular/$id'
     | '/dosyalar/$id'
     | '/icra/$id'
+    | '/icra/borclu'
     | '/muvekkiller/$id'
     | '/borclular/'
     | '/dosyalar/'
     | '/icra/'
     | '/muvekkiller/'
+    | '/icra/liste/$listId'
     | '/yazdir/dosya/$id'
     | '/yazdir/ekstre/$id'
   fileRoutesByTo: FileRoutesByTo
@@ -277,14 +307,17 @@ export interface FileRouteTypes {
     | '/tahsilatlar'
     | '/taksitler'
     | '/takvim'
+    | '/uyarilar'
     | '/borclular/$id'
     | '/dosyalar/$id'
     | '/icra/$id'
+    | '/icra/borclu'
     | '/muvekkiller/$id'
     | '/borclular'
     | '/dosyalar'
     | '/icra'
     | '/muvekkiller'
+    | '/icra/liste/$listId'
     | '/yazdir/dosya/$id'
     | '/yazdir/ekstre/$id'
   id:
@@ -303,14 +336,17 @@ export interface FileRouteTypes {
     | '/tahsilatlar'
     | '/taksitler'
     | '/takvim'
+    | '/uyarilar'
     | '/borclular/$id'
     | '/dosyalar/$id'
     | '/icra/$id'
+    | '/icra/borclu'
     | '/muvekkiller/$id'
     | '/borclular/'
     | '/dosyalar/'
     | '/icra/'
     | '/muvekkiller/'
+    | '/icra/liste/$listId'
     | '/yazdir/dosya/$id'
     | '/yazdir/ekstre/$id'
   fileRoutesById: FileRoutesById
@@ -330,14 +366,17 @@ export interface RootRouteChildren {
   TahsilatlarRoute: typeof TahsilatlarRoute
   TaksitlerRoute: typeof TaksitlerRoute
   TakvimRoute: typeof TakvimRoute
+  UyarilarRoute: typeof UyarilarRoute
   BorclularIdRoute: typeof BorclularIdRoute
   DosyalarIdRoute: typeof DosyalarIdRoute
   IcraIdRoute: typeof IcraIdRoute
+  IcraBorcluRoute: typeof IcraBorcluRoute
   MuvekkillerIdRoute: typeof MuvekkillerIdRoute
   BorclularIndexRoute: typeof BorclularIndexRoute
   DosyalarIndexRoute: typeof DosyalarIndexRoute
   IcraIndexRoute: typeof IcraIndexRoute
   MuvekkillerIndexRoute: typeof MuvekkillerIndexRoute
+  IcraListeListIdRoute: typeof IcraListeListIdRoute
   YazdirDosyaIdRoute: typeof YazdirDosyaIdRoute
   YazdirEkstreIdRoute: typeof YazdirEkstreIdRoute
 }
@@ -442,6 +481,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TakvimRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/uyarilar': {
+      id: '/uyarilar'
+      path: '/uyarilar'
+      fullPath: '/uyarilar'
+      preLoaderRoute: typeof UyarilarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/borclular/': {
       id: '/borclular/'
       path: '/borclular'
@@ -484,6 +530,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IcraIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/icra/borclu': {
+      id: '/icra/borclu'
+      path: '/icra/borclu'
+      fullPath: '/icra/borclu'
+      preLoaderRoute: typeof IcraBorcluRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/muvekkiller/': {
       id: '/muvekkiller/'
       path: '/muvekkiller'
@@ -496,6 +549,13 @@ declare module '@tanstack/react-router' {
       path: '/muvekkiller/$id'
       fullPath: '/muvekkiller/$id'
       preLoaderRoute: typeof MuvekkillerIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/icra/liste/$listId': {
+      id: '/icra/liste/$listId'
+      path: '/icra/liste/$listId'
+      fullPath: '/icra/liste/$listId'
+      preLoaderRoute: typeof IcraListeListIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/yazdir/dosya/$id': {
@@ -530,14 +590,17 @@ const rootRouteChildren: RootRouteChildren = {
   TahsilatlarRoute: TahsilatlarRoute,
   TaksitlerRoute: TaksitlerRoute,
   TakvimRoute: TakvimRoute,
+  UyarilarRoute: UyarilarRoute,
   BorclularIdRoute: BorclularIdRoute,
   DosyalarIdRoute: DosyalarIdRoute,
   IcraIdRoute: IcraIdRoute,
+  IcraBorcluRoute: IcraBorcluRoute,
   MuvekkillerIdRoute: MuvekkillerIdRoute,
   BorclularIndexRoute: BorclularIndexRoute,
   DosyalarIndexRoute: DosyalarIndexRoute,
   IcraIndexRoute: IcraIndexRoute,
   MuvekkillerIndexRoute: MuvekkillerIndexRoute,
+  IcraListeListIdRoute: IcraListeListIdRoute,
   YazdirDosyaIdRoute: YazdirDosyaIdRoute,
   YazdirEkstreIdRoute: YazdirEkstreIdRoute,
 }

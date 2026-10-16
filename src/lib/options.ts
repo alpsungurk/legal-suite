@@ -48,6 +48,10 @@ export function useOptions() {
       label: e.no,
       hint: clientName(e.clientId),
     }));
+    /** Tahsilat / ödeme sözü / borçlu planı yalnızca alacaklı olduğumuz dosyalarda */
+    const creditorEnforcements: Option[] = state.enforcements
+      .filter((e) => e.side !== "Borçlu")
+      .map((e) => ({ value: e.id, label: e.no, hint: clientName(e.clientId) }));
     return {
       clients,
       allClients,
@@ -60,6 +64,7 @@ export function useOptions() {
       lawyers: lawyerOpts,
       debtors,
       enforcements,
+      creditorEnforcements,
       caseTypes: state.settings.caseTypes,
       expenseTypes: state.settings.expenseTypes,
       reminderTypes: state.settings.reminderTypes,
@@ -72,6 +77,11 @@ export function useOptions() {
       contactChannels: state.settings.contactChannels,
       courts: state.settings.courts,
       enforcementOffices: state.settings.enforcementOffices,
+      enforcementStopReasons: state.settings.enforcementStopReasons,
+      enforcementEventTypes: state.settings.enforcementEventTypes,
+      inquiryTypes: state.settings.inquiryTypes,
+      seizureTypes: state.settings.seizureTypes,
+      resultTypes: state.settings.resultTypes,
     };
   }, [state, staff, lawyers]);
 }

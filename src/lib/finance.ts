@@ -6,6 +6,7 @@ import type {
   AccountTx,
   CaseFile,
   Collection,
+  EnforcementFile,
   ErpState,
   Expense,
   FeePlan,
@@ -15,8 +16,10 @@ import type {
   User,
   YearStats,
 } from "@/lib/erp-types";
+import { isEnforcementClosed } from "@/lib/erp-types";
 import {
   addDays,
+  addMonths,
   daysFromToday,
   formatMoney,
   monthKey,
@@ -255,8 +258,11 @@ export function clientLedger(
       credit: closed.payable,
     });
   }
+  // Borçlu olduğumuz dosyalar müvekkil carisine girmez
   const enfIds = new Set(
-    state.enforcements.filter((e) => e.clientId === clientId).map((e) => e.id),
+    state.enforcements
+      .filter((e) => e.clientId === clientId && e.side !== "Borçlu")
+      .map((e) => e.id),
   );
   for (const c of state.collections.filter((c) => enfIds.has(c.enforcementId))) {
     const ef = state.enforcements.find((e) => e.id === c.enforcementId);
@@ -465,7 +471,10 @@ export function enforcementSummary(state: ErpState, enforcementId: string) {
 }
 
 export function debtorSummary(state: ErpState, debtorId: string) {
-  const files = state.enforcements.filter((e) => e.debtorIds.includes(debtorId));
+  // Borçlu olduğumuz dosyalardaki karşı taraf (alacaklı) borçlu sayılmaz
+  const files = state.enforcements.filter(
+    (e) => e.side !== "Borçlu" && e.debtorIds.includes(debtorId),
+  );
   const claim = sumBy(files, (f) => f.principal + f.interest + f.costs);
   const collected = sumBy(
     state.collections.filter((c) => c.debtorId === debtorId),
@@ -651,6 +660,26 @@ export function receivableAging(state: ErpState) {
   return buckets;
 }
 
+/* ───────────── Haciz süresi ───────────── */
+
+/** Haczin düşeceği tarih: son haciz tarihi + ayardaki ay (varsayılan 12) */
+export function seizureDueDate(e: Pick<EnforcementFile, "lastSeizureDate">, months: number) {
+  return e.lastSeizureDate ? addMonths(e.lastSeizureDate, months) : undefined;
+}
+
+/** Hatırlatma penceresine girmiş mi (cron ile aynı kural: düşme tarihi − gün ≤ bugün) */
+export function seizureWarning(
+  e: EnforcementFile,
+  settings: { seizureValidMonths: number; seizureReminderDays: number },
+) {
+  if (e.side === "Borçlu" || isEnforcementClosed(e.status)) return null;
+  const due = seizureDueDate(e, settings.seizureValidMonths);
+  if (!due) return null;
+  const left = daysFromToday(due);
+  if (left > settings.seizureReminderDays) return null;
+  return { due, left };
+}
+
 /* ───────────── Uyarılar ───────────── */
 
 export type Alert = {
@@ -660,7 +689,7 @@ export type Alert = {
   detail: string;
   link: string;
   date: ISODate;
-  category: "Taksit" | "Ödeme sözü" | "Ajanda";
+  category: "Taksit" | "Ödeme sözü" | "Ajanda" | "Haciz";
 };
 
 export function computeAlerts(
@@ -691,11 +720,31 @@ export function computeAlerts(
     }
   }
 
-  const myEnforcements = new Set(
-    state.enforcements
-      .filter((e) => canSeeFinance || e.responsibleIds.includes(user.id))
-      .map((e) => e.id),
+  const visibleEnforcements = state.enforcements.filter(
+    (e) => canSeeFinance || e.responsibleIds.includes(user.id),
   );
+  const myEnforcements = new Set(
+    visibleEnforcements.filter((e) => e.side !== "Borçlu").map((e) => e.id),
+  );
+
+  for (const e of visibleEnforcements) {
+    const w = seizureWarning(e, state.settings);
+    if (!w) continue;
+    alerts.push({
+      id: `hz-${e.id}`,
+      tone: w.left <= 0 ? "danger" : "warning",
+      title:
+        w.left < 0
+          ? "Haciz süresi doldu"
+          : w.left === 0
+            ? "Haciz bugün düşüyor"
+            : `Haczin düşmesine ${w.left} gün kaldı`,
+      detail: `${e.no} · ${e.office}`,
+      link: `/icra/${e.id}`,
+      date: w.due,
+      category: "Haciz",
+    });
+  }
   for (const p of state.promises) {
     if (p.status !== "Bekliyor" || !myEnforcements.has(p.enforcementId) || p.dueDate > soon)
       continue;

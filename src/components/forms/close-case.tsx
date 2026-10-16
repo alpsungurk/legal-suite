@@ -3,12 +3,67 @@ import { toast } from "sonner";
 import { useConfirm } from "@/components/app/confirm";
 import { useErp } from "@/lib/erp-store";
 import { caseLabel } from "@/lib/finance";
+import { addMonths, formatDate, today } from "@/lib/format";
+import type { CaseFile } from "@/lib/erp-types";
 
 /**
- * Dosyayı kapatır: dosya, masraf/makbuz, tahsilat planı, ajanda ve belgeleri silinir;
- * müvekkil kalır ve yalnızca toplam alacak / verecek ile ücret toplamları sayı olarak saklanır.
+ * Kapalı dosyanın kalıcı silineceği tarih: saklama süresi (kapanış + ayardaki ay) dolduktan sonraki
+ * ilk ay başı. Silme işi her ayın 1'inde çalışır.
  */
+export function purgeDateFor(closingDate: string | undefined, months: number) {
+  const due = addMonths(closingDate || today(), months);
+  return due.endsWith("-01") ? due : `${addMonths(due, 1).slice(0, 8)}01`;
+}
+
+export function casePurgeDate(c: Pick<CaseFile, "status" | "closingDate">, months: number) {
+  return c.status === "Kapalı" ? purgeDateFor(c.closingDate, months) : undefined;
+}
+
+/**
+ * Kapatma onayı. Dosya hemen silinmez: kayıtlarıyla birlikte saklanır ve kapanıştan
+ * ayardaki süre dolunca (varsayılan 12 ay) bir sonraki ay başında otomatik silinir.
+ */
+export function useCloseConfirm() {
+  const { state } = useErp();
+  const confirm = useConfirm();
+  return async (caseId: string): Promise<boolean> => {
+    const c = state.cases.find((x) => x.id === caseId);
+    if (!c) return false;
+    const months = state.settings.closedCaseRetentionMonths;
+    return confirm({
+      title: "Dosya kapatılsın mı?",
+      confirmLabel: "Kapat",
+      description: (
+        <span className="space-y-2">
+          <span className="block">
+            {caseLabel(c)} dosyası ve bütün kayıtları (masraf, tahsilat, belge, ajanda){" "}
+            <b>{months} ay</b> boyunca kapalı olarak saklanır; bu sürede yeniden açabilirsiniz.
+          </span>
+          <span className="block">
+            {formatDate(purgeDateFor(undefined, months))} tarihinde (silme işi ayın başında
+            çalışır) kayıtlar silinir. Müvekkilde yalnızca toplam alacak / verecek ve ücret
+            toplamları kalır.
+          </span>
+        </span>
+      ),
+    });
+  };
+}
+
+/** Dosyayı kapatır (silmez) */
 export function useCloseCase() {
+  const { patch } = useErp();
+  const ask = useCloseConfirm();
+  return async (caseId: string): Promise<boolean> => {
+    if (!(await ask(caseId))) return false;
+    patch("cases", caseId, { status: "Kapalı", closingDate: today() });
+    toast.success("Dosya kapatıldı");
+    return true;
+  };
+}
+
+/** Kapalı dosyayı beklemeden kalıcı siler: müvekkilde yalnızca toplamlar kalır */
+export function usePurgeCase() {
   const { state, closeCase } = useErp();
   const confirm = useConfirm();
   const navigate = useNavigate();
@@ -23,8 +78,8 @@ export function useCloseCase() {
       reminders: state.reminders.filter((r) => r.caseId === caseId).length,
     };
     const ok = await confirm({
-      title: "Dosya kapatılsın ve silinsin mi?",
-      confirmLabel: "Kapat ve sil",
+      title: "Dosya şimdi kalıcı olarak silinsin mi?",
+      confirmLabel: "Kalıcı sil",
       description: (
         <span className="space-y-2">
           <span className="block">
@@ -40,7 +95,6 @@ export function useCloseCase() {
     });
     if (!ok) return false;
     closeCase(caseId);
-    toast.success("Dosya kapatıldı; müvekkilde yalnızca toplamlar kaldı");
     if (typeof window !== "undefined" && window.location.pathname.includes(caseId)) {
       void navigate({ to: "/dosyalar" });
     }

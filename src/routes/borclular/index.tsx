@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { FileSpreadsheet, Pencil, Plus, UserX } from "lucide-react";
+import { FileSpreadsheet, Pencil, Plus, Trash2, UserX } from "lucide-react";
+import { useDeleteDebtor } from "@/components/forms/delete-actions";
 import { useErp } from "@/lib/erp-store";
 import { debtorSummary } from "@/lib/finance";
 import { formatMoney, sumBy } from "@/lib/format";
@@ -19,9 +20,17 @@ export const Route = createFileRoute("/borclular/")({
 
 function Page() {
   const { state, permissions } = useErp();
+  const deleteDebtor = useDeleteDebtor();
   const quick = useQuick();
   const navigate = useNavigate();
-  const rows = state.debtors.map((d) => ({ d, s: debtorSummary(state, d.id) }));
+  // Yalnızca borçlu olduğumuz dosyalarda karşı taraf (alacaklı) olan kartlar burada listelenmez
+  const owedOnly = (id: string) => {
+    const files = state.enforcements.filter((e) => e.debtorIds.includes(id));
+    return files.length > 0 && files.every((e) => e.side === "Borçlu");
+  };
+  const rows = state.debtors
+    .filter((d) => !owedOnly(d.id))
+    .map((d) => ({ d, s: debtorSummary(state, d.id) }));
   type R = (typeof rows)[number];
 
   const columns: Column<R>[] = [
@@ -155,11 +164,23 @@ function Page() {
         exportName="Borçlular"
         onRowClick={(r) => navigate({ to: "/borclular/$id", params: { id: r.d.id } })}
         rowActions={
-          permissions.can("enforcements", "edit")
+          permissions.can("enforcements", "edit") || permissions.can("enforcements", "delete")
             ? (r) => (
-                <DropdownMenuItem onClick={() => quick.open("debtor", { record: r.d })}>
-                  <Pencil /> Düzenle
-                </DropdownMenuItem>
+                <>
+                  {permissions.can("enforcements", "edit") && (
+                    <DropdownMenuItem onClick={() => quick.open("debtor", { record: r.d })}>
+                      <Pencil /> Düzenle
+                    </DropdownMenuItem>
+                  )}
+                  {permissions.can("enforcements", "delete") && (
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onClick={() => void deleteDebtor(r.d)}
+                    >
+                      <Trash2 /> Sil
+                    </DropdownMenuItem>
+                  )}
+                </>
               )
             : undefined
         }

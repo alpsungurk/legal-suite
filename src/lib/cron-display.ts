@@ -13,6 +13,14 @@ export const CRON_META: Record<string, { label: string; hint: string }> = {
     label: "Saklama / arşiv",
     hint: "Eski bildirim ve aktivite kayıtları temizlenir",
   },
+  "lexkasa-haciz": {
+    label: "Haciz hatırlatması",
+    hint: "Haczin düşmesine yaklaşan icra dosyaları sorumlularına bildirilir",
+  },
+  "lexkasa-kapali-dosya": {
+    label: "Kapalı dosya silme",
+    hint: "Ayın başında saklama süresi dolan kapalı dava dosyaları silinir; müvekkilde toplamlar kalır",
+  },
   "lexkasa-keepalive": {
     label: "Uyanık tut",
     hint: "Proje uykuya girmesin diye küçük bir ping atılır (veri yazılmaz)",
@@ -43,6 +51,11 @@ export function describeCronTr(schedule: string): string {
   const time = `${pad(h)}:${pad(m)}`;
 
   if (dom === "*/5" && dow === "*") return `Yaklaşık 5 günde bir, saat ${time}`;
+  if (/^\d+$/.test(dom) && dow === "*") {
+    let day = Number(dom);
+    if (dayShift === 1) day += 1; // UTC → TR gün kayması
+    return `Her ayın ${day}. günü saat ${time}`;
+  }
   if (dom === "*" && dow === "*") return `Her gün saat ${time}`;
 
   let d = Number(dow);

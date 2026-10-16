@@ -14,6 +14,14 @@ import {
   DEFAULT_DOCUMENT_CATEGORIES,
   DEFAULT_EXPENSE_TYPES,
   DEFAULT_REMINDER_TYPES,
+  DEFAULT_STOP_REASONS,
+  DEFAULT_ENFORCEMENT_EVENT_TYPES,
+  DEFAULT_INQUIRY_TYPES,
+  DEFAULT_SEIZURE_TYPES,
+  DEFAULT_RESULT_TYPES,
+  DEFAULT_SEIZURE_VALID_MONTHS,
+  DEFAULT_SEIZURE_REMINDER_DAYS,
+  DEFAULT_CLOSED_CASE_RETENTION_MONTHS,
   STATE_VERSION,
   type Account,
   type AccountTx,
@@ -83,6 +91,15 @@ export function defaultSettings(): Settings {
     contactChannels: [...CONTACT_CHANNELS],
     courts: [],
     enforcementOffices: [],
+    enforcementStopReasons: [...DEFAULT_STOP_REASONS],
+    enforcementEventTypes: [...DEFAULT_ENFORCEMENT_EVENT_TYPES],
+    inquiryTypes: [...DEFAULT_INQUIRY_TYPES],
+    seizureTypes: [...DEFAULT_SEIZURE_TYPES],
+    resultTypes: [...DEFAULT_RESULT_TYPES],
+    seizureValidMonths: DEFAULT_SEIZURE_VALID_MONTHS,
+    seizureReminderDays: DEFAULT_SEIZURE_REMINDER_DAYS,
+    companyLists: [],
+    closedCaseRetentionMonths: DEFAULT_CLOSED_CASE_RETENTION_MONTHS,
   };
 }
 
@@ -105,6 +122,7 @@ export function emptyState(): ErpState {
     promises: [],
     collections: [],
     contacts: [],
+    events: [],
     documents: [],
     notifications: [],
     activities: [],
@@ -848,6 +866,7 @@ export function createSeedState(): ErpState {
   const enforcements: EnforcementFile[] = [
     {
       ...base,
+      side: "Alacaklı",
       id: "enf-1",
       no: "2026/4521 E.",
       office: "İstanbul 14. İcra Dairesi",
@@ -864,6 +883,7 @@ export function createSeedState(): ErpState {
     },
     {
       ...base,
+      side: "Alacaklı",
       id: "enf-2",
       no: "2026/1877 E.",
       office: "İstanbul Anadolu 3. İcra Dairesi",
@@ -879,6 +899,7 @@ export function createSeedState(): ErpState {
     },
     {
       ...base,
+      side: "Alacaklı",
       id: "enf-3",
       no: "2026/990 E.",
       office: "İstanbul 2. İcra Dairesi",
@@ -1106,6 +1127,7 @@ export function createSeedState(): ErpState {
     promises,
     collections,
     contacts,
+    events: [],
     documents: [],
     notifications,
     activities,

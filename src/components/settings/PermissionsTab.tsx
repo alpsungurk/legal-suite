@@ -4,10 +4,11 @@
  *   1) Önce rol varsayılanı ("Tüm avukatlar") ayarlanır.
  *   2) İstenirse tek bir avukat seçilip ona özel istisna tanımlanır; rolden farklı olanlar işaretlenir.
  *
- * Admin her şeye sahiptir ve burada değiştirilemez. Kullanıcı yönetimi, ayarlar, yedek ve arşiv
- * yalnızca Admin'dedir.
+ * Admin her şeye sahiptir ve burada değiştirilemez. Ayarlar sayfasının bazı bölümleri (büro bilgileri,
+ * kategoriler, şirket listeleri, kullanıcı listesi, yedek indirme) tek tek verilebilir; izinler, kullanıcı
+ * yönetimi, zamanlama ve arşiv yalnızca Admin'dedir.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Lock, RotateCcw, ShieldCheck, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { useErp } from "@/lib/erp-store";
@@ -20,6 +21,7 @@ import {
   PERMISSION_ACTIONS,
   PERMISSION_ACTION_LABELS,
   PERMISSION_MODULES,
+  SETTINGS_PERMISSION_KEYS,
   permissionKey,
   type PermissionAction,
   type PermissionModule,
@@ -67,8 +69,14 @@ const PRESETS: Array<{ id: string; label: string; hint: string; build: () => Gra
   {
     id: "full",
     label: "Tam yetki",
-    hint: "Para ve raporlar dahil her şey (ayarlar hariç)",
-    build: () => Object.fromEntries(ALL_KEYS.map((k) => [k, true])),
+    hint: "Para ve raporlar dahil her şey (Ayarlar bölümleri hariç)",
+    // Ayarlar bölümleri bilerek hariç: onlar ayrıca, tek tek verilir
+    build: () =>
+      Object.fromEntries(
+        PERMISSION_MODULES.filter((m) => m.group !== "settings").flatMap((m) =>
+          m.actions.map((a) => [permissionKey(m.key, a), true]),
+        ),
+      ),
   },
   {
     id: "none",
@@ -118,6 +126,30 @@ export function PermissionsTab() {
     save(applyToggle(current, mod, action, on));
 
   const menu = PERMISSION_MODULES.filter((m) => m.menu && current[permissionKey(m.key, "view")]);
+  const mainModules = PERMISSION_MODULES.filter((m) => m.group !== "settings");
+  const settingsModules = PERMISSION_MODULES.filter((m) => m.group === "settings");
+  const settingsOpen = SETTINGS_PERMISSION_KEYS.filter((k) => current[permissionKey(k, "view")]);
+  // "Ayarlar sayfası" ana anahtarı: kapalıyken tablo gizlenir ve avukat Ayarlar'ı hiç görmez
+  const anySettings = settingsModules.some((m) =>
+    m.actions.some((a) => current[permissionKey(m.key, a)]),
+  );
+  const [settingsShown, setSettingsShown] = useState(anySettings);
+  // Kapsam (tüm avukatlar / tek avukat) değişince anahtar o kapsamın durumuna döner
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => setSettingsShown(anySettings), [scope]);
+  const toggleSettingsPage = (on: boolean) => {
+    setSettingsShown(on);
+    if (on) {
+      if (!anySettings) toast.info("Aşağıdan avukatın göreceği bölümleri seçin");
+      return;
+    }
+    if (!anySettings) return;
+    const next = { ...current };
+    for (const m of settingsModules)
+      for (const a of m.actions) next[permissionKey(m.key, a)] = false;
+    save(next);
+    toast.success("Ayarlar sayfası avukata kapatıldı");
+  };
 
   return (
     <div className="space-y-4">
@@ -192,65 +224,54 @@ export function PermissionsTab() {
       </Section>
 
       <Section title="İzin tablosu" bodyClassName="p-0">
-        <div className="grid grid-cols-[minmax(0,1fr)_repeat(4,3.4rem)] items-center gap-x-1 border-b border-border/60 bg-muted/40 px-3 py-2.5 text-[12.5px] font-semibold text-muted-foreground sm:grid-cols-[minmax(0,1fr)_repeat(4,5rem)] sm:px-5 sm:text-xs">
-          <span>Alan</span>
-          {PERMISSION_ACTIONS.map((a) => (
-            <span key={a} className="text-center">
-              {PERMISSION_ACTION_LABELS[a]}
-            </span>
-          ))}
-        </div>
-        <ul className="divide-y divide-border/60">
-          {PERMISSION_MODULES.map((m) => (
-            <li
-              key={m.key}
-              className="grid grid-cols-[minmax(0,1fr)_repeat(4,3.4rem)] items-center gap-x-1 px-3 py-3 sm:grid-cols-[minmax(0,1fr)_repeat(4,5rem)] sm:px-5"
-            >
-              <div className="min-w-0 pr-2">
-                <p className="text-sm font-medium">{m.label}</p>
-                <p className="text-[12.5px] leading-snug text-muted-foreground">{m.hint}</p>
-              </div>
-              {PERMISSION_ACTIONS.map((a) => {
-                if (!m.actions.includes(a)) {
-                  return (
-                    <span key={a} className="text-center text-muted-foreground/40">
-                      —
-                    </span>
-                  );
-                }
-                const key = permissionKey(m.key, a);
-                const on = !!current[key];
-                const changed = !!user && on !== !!roleGrants[key];
-                return (
-                  <span key={a} className="relative flex justify-center">
-                    <Switch
-                      checked={on}
-                      onCheckedChange={(v) => toggle(m, a, v)}
-                      aria-label={`${m.label}: ${PERMISSION_ACTION_LABELS[a]}${m.actionHints?.[a] ? ` (${m.actionHints[a]})` : ""}`}
-                      title={m.actionHints?.[a]}
-                    />
-                    {changed && (
-                      <span
-                        className="absolute -right-0.5 -top-1 h-2 w-2 rounded-full bg-amber-500"
-                        title="Rolün varsayılanından farklı"
-                      />
-                    )}
-                  </span>
-                );
-              })}
-              {PERMISSION_ACTIONS.some((a) => m.actionHints?.[a]) && (
-                <ul className="col-span-full mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[12.5px] text-muted-foreground">
-                  {PERMISSION_ACTIONS.filter((a) => m.actionHints?.[a]).map((a) => (
-                    <li key={a}>
-                      <span className="font-medium">{PERMISSION_ACTION_LABELS[a]}:</span>{" "}
-                      {m.actionHints?.[a]}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </li>
-          ))}
-        </ul>
+        <PermTable
+          mods={mainModules}
+          current={current}
+          roleGrants={roleGrants}
+          user={user}
+          toggle={toggle}
+        />
+      </Section>
+
+      <Section
+        title="Ayarlar sayfası"
+        description="Avukata Ayarlar sayfasının yalnızca seçtiğiniz bölümleri açılır. Her bölümde görme, ekleme, düzenleme ve silmeyi ayrı ayrı verebilirsiniz."
+        bodyClassName="p-0"
+        actions={
+          <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-muted-foreground">
+            {settingsShown ? "Açık" : "Kapalı"}
+            <Switch
+              checked={settingsShown}
+              onCheckedChange={toggleSettingsPage}
+              aria-label="Ayarlar sayfasını avukata aç / kapat"
+            />
+          </label>
+        }
+      >
+        {!settingsShown ? (
+          <p className="px-3 py-4 text-sm text-muted-foreground sm:px-5">
+            Kapalı: avukat Ayarlar sayfasını görmez; menüde de çıkmaz. Yalnızca kendi hesabını
+            (Hesabım) düzenleyebilir. Açmak için sağdaki anahtara basın.
+          </p>
+        ) : (
+          <>
+            <PermTable
+              mods={settingsModules}
+              current={current}
+              roleGrants={roleGrants}
+              user={user}
+              toggle={toggle}
+            />
+            <p className="flex items-start gap-2 border-t border-border/60 px-3 py-3 text-xs text-muted-foreground sm:px-5">
+              <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>
+                <strong>Yalnızca Admin'de kalanlar:</strong> İzinler sekmesi, Admin hesaplarını
+                yönetme, Zamanlama ve eski yılları arşivleme. "Kullanıcılar" izni verilse bile
+                avukat kimseyi Admin yapamaz, izin veremez ve Admin hesaplarına dokunamaz.
+              </span>
+            </p>
+          </>
+        )}
       </Section>
 
       <Section
@@ -269,11 +290,20 @@ export function PermissionsTab() {
               <MenuChip key={m.key}>{m.menu}</MenuChip>
             ))}
           <MenuChip>Bildirimler</MenuChip>
+          {settingsOpen.length > 0 && (
+            <MenuChip>
+              Ayarlar (
+              {settingsOpen
+                .map((k) => PERMISSION_MODULES.find((m) => m.key === k)?.label.split(" (")[0])
+                .join(", ")}
+              )
+            </MenuChip>
+          )}
         </div>
         <p className="mt-3 flex items-start gap-2 text-xs text-muted-foreground">
           <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>
-            <strong>Admin</strong> her şeyi görür ve yapar. Kullanıcı yönetimi, ayarlar, yedekleme
+            <strong>Admin</strong> her şeyi görür ve yapar. İzinler, kullanıcı yönetimi, zamanlama
             ve eski yılları arşivleme yalnızca Admin'dedir; bu izinler verilemez.
           </span>
         </p>
@@ -313,5 +343,84 @@ function MenuChip({ children }: { children: React.ReactNode }) {
       <UserRound className="h-3 w-3 text-muted-foreground" />
       {children}
     </span>
+  );
+}
+
+/** İzin tablosu: her satır bir alan, sağda Görüntüle / Ekle / Düzenle / Sil anahtarları */
+function PermTable({
+  mods,
+  current,
+  roleGrants,
+  user,
+  toggle,
+}: {
+  mods: PermissionModule[];
+  current: Grants;
+  roleGrants: Grants;
+  user?: { id: string; name: string } | undefined;
+  toggle: (mod: PermissionModule, action: PermissionAction, on: boolean) => void;
+}) {
+  return (
+    <>
+      <div className="grid grid-cols-[minmax(0,1fr)_repeat(4,3.4rem)] items-center gap-x-1 border-b border-border/60 bg-muted/40 px-3 py-2.5 text-[12.5px] font-semibold text-muted-foreground sm:grid-cols-[minmax(0,1fr)_repeat(4,5rem)] sm:px-5 sm:text-xs">
+        <span>Alan</span>
+        {PERMISSION_ACTIONS.map((a) => (
+          <span key={a} className="text-center">
+            {PERMISSION_ACTION_LABELS[a]}
+          </span>
+        ))}
+      </div>
+      <ul className="divide-y divide-border/60">
+        {mods.map((m) => (
+          <li
+            key={m.key}
+            className="grid grid-cols-[minmax(0,1fr)_repeat(4,3.4rem)] items-center gap-x-1 px-3 py-3 sm:grid-cols-[minmax(0,1fr)_repeat(4,5rem)] sm:px-5"
+          >
+            <div className="min-w-0 pr-2">
+              <p className="text-sm font-medium">{m.label}</p>
+              <p className="text-[12.5px] leading-snug text-muted-foreground">{m.hint}</p>
+            </div>
+            {PERMISSION_ACTIONS.map((a) => {
+              if (!m.actions.includes(a)) {
+                return (
+                  <span key={a} className="text-center text-muted-foreground/40">
+                    —
+                  </span>
+                );
+              }
+              const key = permissionKey(m.key, a);
+              const on = !!current[key];
+              const changed = !!user && on !== !!roleGrants[key];
+              return (
+                <span key={a} className="relative flex justify-center">
+                  <Switch
+                    checked={on}
+                    onCheckedChange={(v) => toggle(m, a, v)}
+                    aria-label={`${m.label}: ${PERMISSION_ACTION_LABELS[a]}${m.actionHints?.[a] ? ` (${m.actionHints[a]})` : ""}`}
+                    title={m.actionHints?.[a]}
+                  />
+                  {changed && (
+                    <span
+                      className="absolute -right-0.5 -top-1 h-2 w-2 rounded-full bg-amber-500"
+                      title="Rolün varsayılanından farklı"
+                    />
+                  )}
+                </span>
+              );
+            })}
+            {PERMISSION_ACTIONS.some((a) => m.actionHints?.[a]) && (
+              <ul className="col-span-full mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[12.5px] text-muted-foreground">
+                {PERMISSION_ACTIONS.filter((a) => m.actionHints?.[a]).map((a) => (
+                  <li key={a}>
+                    <span className="font-medium">{PERMISSION_ACTION_LABELS[a]}:</span>{" "}
+                    {m.actionHints?.[a]}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }

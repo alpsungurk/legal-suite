@@ -9,6 +9,7 @@ import {
   Clock,
   FileWarning,
   Gavel,
+  Hourglass,
   Info,
   MessageSquare,
   Wallet,
@@ -192,37 +193,95 @@ function Row({
 
 /* ───────────── Dikkat gerektirenler ───────────── */
 
-const alertIcon: Record<Alert["category"], LucideIcon> = {
+export const alertIcon: Record<Alert["category"], LucideIcon> = {
   Taksit: Wallet,
   "Ödeme sözü": Gavel,
   Ajanda: Clock,
+  Haciz: Hourglass,
 };
 
-const toneStyle: Record<Alert["tone"], string> = {
+export const toneStyle: Record<Alert["tone"], string> = {
   danger: "bg-rose-500/10 text-rose-600 dark:text-rose-400 dark:text-rose-400",
   warning: "bg-amber-500/12 text-amber-600 dark:text-amber-400 dark:text-amber-400",
   info: "bg-blue-500/10 text-blue-600 dark:text-blue-400 dark:text-blue-400",
   success: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 dark:text-emerald-400",
 };
 
-export function AlertsPanel({ limit = 7 }: { limit?: number }) {
+/** Giriş yapan kullanıcının canlı hesaplanan uyarıları */
+export function useAlerts() {
   const { state, currentUser, permissions } = useErp();
-  const navigate = useNavigate();
-  const alerts = useMemo(
+  return useMemo(
     () => computeAlerts(state, currentUser, permissions.can("fees"), permissions.can("reminders")),
     [state, currentUser, permissions],
   );
+}
+
+/** Uyarı satırları: hem panelde hem "Dikkat gerektirenler" sayfasında kullanılır */
+export function AlertRows({ alerts }: { alerts: Alert[] }) {
+  const navigate = useNavigate();
+  return (
+    <ul className="stagger">
+      {alerts.map((a) => {
+        const Icon = alertIcon[a.category] ?? Info;
+        return (
+          <li key={a.id}>
+            <button
+              type="button"
+              onClick={() => navigate({ to: a.link })}
+              className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-secondary/60"
+            >
+              <span
+                className={cn(
+                  "grid h-9 w-9 shrink-0 place-items-center rounded-lg",
+                  toneStyle[a.tone],
+                )}
+              >
+                <Icon className="h-4 w-4" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium">{a.title}</span>
+                <span className="block truncate text-xs text-muted-foreground">{a.detail}</span>
+              </span>
+              <span
+                className={cn(
+                  "shrink-0 text-[12.5px] font-medium",
+                  a.tone === "danger"
+                    ? "text-rose-600 dark:text-rose-400"
+                    : "text-muted-foreground",
+                )}
+              >
+                {relativeDue(a.date)}
+              </span>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** Kısa özet kutusu; "Tümü" tam listenin olduğu /uyarilar sayfasına gider */
+export function AlertsPanel({ limit = 7 }: { limit?: number }) {
+  const alerts = useAlerts();
   const urgent = alerts.filter((a) => a.tone === "danger").length;
   return (
     <Section
       title="Dikkat gerektirenler"
       description={alerts.length ? `${alerts.length} konu · ${urgent} acil` : "Her şey yolunda"}
       actions={
-        <Button variant="ghost" size="sm" asChild>
-          <Link to="/bildirimler">
-            Tümü <ArrowRight />
-          </Link>
-        </Button>
+        alerts.length > limit ? (
+          <Button variant="ghost" size="sm" asChild>
+            <Link to="/uyarilar">
+              Tümü ({alerts.length}) <ArrowRight />
+            </Link>
+          </Button>
+        ) : (
+          <Button variant="ghost" size="sm" asChild>
+            <Link to="/uyarilar">
+              Ayrıntı <ArrowRight />
+            </Link>
+          </Button>
+        )
       }
       className="h-full"
       bodyClassName="p-2"
@@ -235,43 +294,7 @@ export function AlertsPanel({ limit = 7 }: { limit?: number }) {
           compact
         />
       ) : (
-        <ul className="stagger">
-          {alerts.slice(0, limit).map((a) => {
-            const Icon = alertIcon[a.category] ?? Info;
-            return (
-              <li key={a.id}>
-                <button
-                  type="button"
-                  onClick={() => navigate({ to: a.link })}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-secondary/60"
-                >
-                  <span
-                    className={cn(
-                      "grid h-9 w-9 shrink-0 place-items-center rounded-lg",
-                      toneStyle[a.tone],
-                    )}
-                  >
-                    <Icon className="h-4 w-4" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">{a.title}</span>
-                    <span className="block truncate text-xs text-muted-foreground">{a.detail}</span>
-                  </span>
-                  <span
-                    className={cn(
-                      "shrink-0 text-[12.5px] font-medium",
-                      a.tone === "danger"
-                        ? "text-rose-600 dark:text-rose-400 dark:text-rose-400"
-                        : "text-muted-foreground",
-                    )}
-                  >
-                    {relativeDue(a.date)}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+        <AlertRows alerts={alerts.slice(0, limit)} />
       )}
     </Section>
   );

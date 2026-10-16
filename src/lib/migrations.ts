@@ -233,6 +233,7 @@ const COLLECTION_KEYS: CollectionKey[] = [
   "promises",
   "collections",
   "contacts",
+  "events",
   "documents",
   "notifications",
   "activities",
@@ -306,6 +307,11 @@ export function normalizeState(input: Partial<ErpState>): ErpState {
     LOCKED_ENFORCEMENT_STATUSES,
   );
   out.settings.feeKinds = ensure(out.settings.feeKinds, LOCKED_FEE_KINDS);
+  // Taraf alanı olmayan eski icra kayıtları "alacaklı olduğumuz" dosyadır
+  out.enforcements = out.enforcements.map((e) =>
+    e.side === "Alacaklı" || e.side === "Borçlu" ? e : { ...e, side: "Alacaklı" },
+  );
+  if (!Array.isArray(out.settings.companyLists)) out.settings.companyLists = [];
   if (!out.settings.paymentMethods.length) out.settings.paymentMethods = ["Nakit"];
   return out;
 }

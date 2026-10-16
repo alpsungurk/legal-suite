@@ -199,6 +199,27 @@ export function initials(name: string) {
     .toLocaleUpperCase("tr");
 }
 
+/**
+ * İcra / dosya numarasını büronun biçimine getirir: "2026/101 E."
+ * — "/" çevresinde ve sayılar arasında boşluk yok, sondaki harf eki büyük harf, önünde bir boşluk, sonunda nokta.
+ * Ctrl+F ile aranabilsin diye tek biçim kullanılır. Tanınmayan biçim olduğu gibi (kırpılarak) kalır.
+ */
+export function normalizeFileNo(input: string): string {
+  const s = String(input ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\s*\/\s*/g, "/");
+  const m = /^(.*\d)\s*([a-zçğıöşü])\.?$/i.exec(s);
+  if (!m) return s;
+  return `${m[1]} ${m[2].toLocaleUpperCase("tr")}.`;
+}
+
+/** Arama ve mükerrer kontrolü için ekten ve boşluktan bağımsız anahtar: "2026/101 E." → "2026/101" */
+export function fileNoKey(input: string): string {
+  const s = normalizeFileNo(input).toLocaleLowerCase("tr").replace(/\s+/g, "");
+  return s.replace(/(\d)[a-zçğıöşü]\.?$/, "$1");
+}
+
 export function normalize(s: string) {
   return s.toLocaleLowerCase("tr").normalize("NFKD");
 }

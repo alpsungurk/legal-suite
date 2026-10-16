@@ -55,6 +55,8 @@ const STATUS_TONES: Record<string, Tone> = {
   Belgeli: "green",
   Belgesiz: "amber",
   // icra
+  Durdurulmuş: "amber",
+  Kapandı: "slate",
   Haciz: "red",
   Satış: "violet",
   "Ödeme planı": "blue",

@@ -38,6 +38,32 @@ let again = null;
 try { await db.exec(sql); } catch (e) { again = e; }
 ok("migration ikinci kez de çalışıyor (tekrar edilebilir)", !again, again ? again.message : "");
 
+// İcra geri bildirim migration'ı (init'ten sonra, iki kez)
+const ICRA = fileURLToPath(new URL("../migrations/20261016000000_icra_geri_bildirim.sql", import.meta.url));
+const icraSql = readFileSync(ICRA, "utf8");
+let icraErr = null;
+try { await db.exec(icraSql); await db.exec(icraSql); } catch (e) { icraErr = e; }
+ok("icra migration'ı çalıştı (iki kez)", !icraErr, icraErr ? icraErr.message : "");
+if (icraErr) { console.log(R.join("\n")); process.exit(1); }
+const AYAR = fileURLToPath(new URL("../migrations/20261016130000_ayarlar_izinleri.sql", import.meta.url));
+const ayarSql = readFileSync(AYAR, "utf8");
+let ayarErr = null;
+try { await db.exec(ayarSql); await db.exec(ayarSql); } catch (e) { ayarErr = e; }
+ok("ayarlar izinleri migration'ı çalıştı (iki kez)", !ayarErr, ayarErr ? ayarErr.message : "");
+if (ayarErr) { console.log(R.join("\n")); process.exit(1); }
+const KULLANICI = fileURLToPath(new URL("../migrations/20261016140000_kullanici_yonetimi_devri.sql", import.meta.url));
+const kullaniciSql = readFileSync(KULLANICI, "utf8");
+let kullaniciErr = null;
+try { await db.exec(kullaniciSql); await db.exec(kullaniciSql); } catch (e) { kullaniciErr = e; }
+ok("kullanıcı yönetimi devri migration'ı çalıştı (iki kez)", !kullaniciErr, kullaniciErr ? kullaniciErr.message : "");
+if (kullaniciErr) { console.log(R.join(String.fromCharCode(10))); process.exit(1); }
+const KAPALI = fileURLToPath(new URL("../migrations/20261016120000_kapali_dosya_saklama.sql", import.meta.url));
+const kapaliSql = readFileSync(KAPALI, "utf8");
+let kapaliErr = null;
+try { await db.exec(kapaliSql); await db.exec(kapaliSql); } catch (e) { kapaliErr = e; }
+ok("kapalı dosya migration'ı çalıştı (iki kez)", !kapaliErr, kapaliErr ? kapaliErr.message : "");
+if (kapaliErr) { console.log(R.join("\n")); process.exit(1); }
+
 const q = async (text, params) => (await db.query(text, params)).rows;
 const one = async (text, params) => (await q(text, params))[0];
 const asUser = async (uid, fn) => {
@@ -310,6 +336,153 @@ ok("storage: künye görünür olunca büro içinde okunur (belge izni)", (await
 ok("storage: başka büro okuyamaz", (await asUser(B, () => q(`select name from storage.objects where name='${orgA}/ok1'`))).length === 0);
 ok("storage: başka büro klasörüne yükleme reddedilir", await fails(() => asUser(A, () => q(`insert into storage.objects (bucket_id,name) values ('attachments','${orgB}/hack')`)), /row-level security/));
 
+// ── İcra: taraf, yeni alanlar, işlem geçmişi, haciz hatırlatması
+const debtorA = await asUser(A, async () => (await one(`insert into public.debtors (name) values ('Borçlu Bir') returning id`)).id);
+const enfNew = (no, extra = "", vals = "") =>
+  asUser(A, async () => (await one(`insert into public.enforcements (no, office, client_id${extra}) values ('${no}','Ankara 1. İcra',$1${vals}) returning *`, [clientA])));
+const e1 = await enfNew("2026/1 E.");
+ok("icra: varsayılan taraf alacaklı, durum Açık", e1.side === "Alacaklı" && e1.status === "Açık", `${e1.side} ${e1.status}`);
+ok("icra: geçersiz taraf reddedilir", await fails(() => enfNew("2026/2 E.", ", side", ",'Hepsi'"), /check/i));
+const st = await asUser(A, () => one(`select enforcement_statuses s, seizure_valid_months m, seizure_reminder_days d, inquiry_types i, company_lists c from public.org_settings`));
+ok("ayarlar: yeni durumlar başta, süre 12 ay / 14 gün, 7 sorgu türü", st.s.slice(0, 3).join(",") === "Açık,Durdurulmuş,Kapalı" && st.m === 12 && st.d === 14 && st.i.length === 7 && Array.isArray(st.c), JSON.stringify(st.s));
+await db.exec(`update public.org_settings set enforcement_statuses='{Derdest,Kapandı}' where org_id='${orgB}'`);
+await db.exec(icraSql);
+ok("migration: eski büronun durum listesine ana durumlar eklenir, eskiler korunur",
+  (await one(`select enforcement_statuses s from public.org_settings where org_id='${orgB}'`)).s.join(",") === "Açık,Durdurulmuş,Kapalı,Derdest,Kapandı");
+ok("ayarlar: haciz süresi sınır dışı reddedilir", await fails(() => asUser(A, () => q(`update public.org_settings set seizure_valid_months = 0`)), /check/i));
+ok("işlem geçmişi: avukat ekleyebilir", (await asUser(U, () => q(`insert into public.enforcement_events (enforcement_id, debtor_id, date, type, inquiry_type, result) values ($1,$2,current_date,'Sorgu','Banka','Olumsuz') returning id`, [e1.id, debtorA]))).length === 1);
+ok("işlem geçmişi: başka büro göremez", (await asUser(B, () => q(`select * from public.enforcement_events`))).length === 0);
+ok("işlem geçmişi: denetim kaydına 'İcra işlemi' olarak girer", (await asUser(A, () => q(`select * from public.activities where entity='İcra işlemi'`))).length === 1);
+ok("işlem geçmişi: dosya silinince işlemler de silinir", await (async () => {
+  const tmp = await enfNew("2026/99 E.");
+  await asUser(A, () => q(`insert into public.enforcement_events (enforcement_id, type) values ($1,'Haciz')`, [tmp.id]));
+  await asUser(A, () => q(`delete from public.enforcements where id=$1`, [tmp.id]));
+  return (await q(`select 1 from public.enforcement_events where enforcement_id=$1`, [tmp.id])).length === 0;
+})());
+// Hatırlatma senaryoları: son haciz + 12 ay - 14 gün ≤ bugün olanlar
+const soon = `(current_date - interval '12 months' + interval '10 days')::date`;
+await enfNew("2026/10 E.", ", last_seizure_date, responsible_ids", `, ${soon}, array['${S}']::uuid[]`);
+await enfNew("2026/11 E.", ", last_seizure_date", `, ${soon}`);
+await enfNew("2026/12 E.", ", last_seizure_date, side, responsible_ids", `, ${soon}, 'Borçlu', array['${S}']::uuid[]`);
+await enfNew("2026/13 E.", ", last_seizure_date, status, responsible_ids", `, ${soon}, 'Kapalı', array['${S}']::uuid[]`);
+await enfNew("2026/14 E.", ", last_seizure_date, responsible_ids", `, current_date - 30, array['${S}']::uuid[]`);
+// Haczi bugün düşen dosya (son haciz tam 12 ay önce)
+await enfNew("2026/15 E.", ", last_seizure_date, responsible_ids", `, (current_date - interval '12 months')::date, array['${U}']::uuid[]`);
+const hz1 = (await one(`select app.cron_seizure_reminders() n`)).n;
+const hzS = await asUser(S, () => q(`select title, detail from public.notifications where type='Haciz'`));
+const hzA = await asUser(A, () => q(`select detail from public.notifications where type='Haciz'`));
+const hzU = await asUser(U, () => q(`select title, detail from public.notifications where type='Haciz'`));
+ok("haciz: sorumluya bildirim (yalnızca açık + alacaklı + süresi yaklaşan)", hzS.length === 1 && hzS[0].detail.startsWith("2026/10 E.") && /10 gün kaldı/.test(hzS[0].title), JSON.stringify(hzS));
+ok("haciz: sorumlusu olmayan dosya yöneticiye gider", hzA.length === 1 && hzA[0].detail.startsWith("2026/11 E."), JSON.stringify(hzA));
+ok("haciz: düşme günü ayrıca 'Haciz bugün düşüyor' bildirimi", hzU.length === 1 && hzU[0].title === "Haciz bugün düşüyor" && hzU[0].detail.startsWith("2026/15 E."), JSON.stringify(hzU));
+ok("haciz: ikinci çalıştırma yinelemez", (await one(`select app.cron_seizure_reminders() n`)).n === 0 && hz1 === 3, String(hz1));
+await db.exec(`delete from public.notifications where type='Haciz'`);
+ok("haciz: bildirimler saklama ile silinse de yeniden gönderilmez", (await one(`select app.cron_seizure_reminders() n`)).n === 0);
+await db.exec(`update public.enforcements set last_seizure_date = (current_date - interval '12 months' + interval '5 days')::date where no='2026/10 E.'`);
+ok("haciz: son haciz tarihi değişince yeni tarih için yeniden hatırlatır", (await one(`select app.cron_seizure_reminders() n`)).n === 1
+  && /5 gün kaldı/.test((await asUser(S, () => one(`select title from public.notifications where type='Haciz'`))).title));
+ok("haciz: gönderim kayıtları istemciye kapalı", await fails(() => asUser(A, () => q(`select * from public.seizure_notices`)), /permission denied/));
+ok("haciz: istemci cron fonksiyonunu çağıramaz", await fails(() => asUser(A, () => q(`select app.cron_seizure_reminders()`)), /permission denied/));
+
+// ── Kapalı dava dosyası: hemen silinmez, saklama süresi dolunca gece işi siler
+const kc = async (no) => (await asUser(A, async () => (await one(`insert into public.cases (no, title, client_id) values ('${no}','Kapanacak dosya',$1) returning id`, [client2])).id));
+const kOld = await kc("2025/900"), kNew = await kc("2025/901");
+await asUser(A, () => q(`insert into public.expenses (title,type,amount,case_id,charge_to,paid_by,account_id) values ('Harç','Harç',300,$1,'Müvekkil','Büro',$2)`, [kOld, kasa]));
+await asUser(A, () => q(`update public.cases set status='Kapalı' where id=$1`, [kNew]));
+ok("kapalı dosya: kapanış tarihi kendiliğinden bugün", (await one(`select closing_date = current_date as t from public.cases where id=$1`, [kNew])).t === true);
+ok("kapalı dosya: kapatınca silinmez", (await q(`select 1 from public.cases where id=$1`, [kNew])).length === 1);
+await asUser(A, () => q(`update public.cases set status='Açık' where id=$1`, [kNew]));
+ok("kapalı dosya: yeniden açılınca kapanış tarihi temizlenir", (await one(`select closing_date from public.cases where id=$1`, [kNew])).closing_date === null);
+await asUser(A, () => q(`update public.cases set status='Kapalı' where id=$1`, [kNew]));
+await asUser(A, () => q(`update public.cases set status='Kapalı', closing_date = current_date - interval '13 months' where id=$1`, [kOld]));
+const balBefore = Number((await asUser(A, () => one(`select balance from public.v_client_balances where client_id=$1`, [client2]))).balance);
+const kasaBefore = Number((await asUser(A, () => one(`select balance from public.v_account_balances where id=$1`, [kasa]))).balance);
+const purged = (await one(`select app.cron_purge_closed_cases() n`)).n;
+ok("gece işi: süresi (12 ay) dolan kapalı dosya silindi, yenisi kaldı", purged === 1 && (await q(`select 1 from public.cases where id=$1`, [kOld])).length === 0 && (await q(`select 1 from public.cases where id=$1`, [kNew])).length === 1, String(purged));
+ok("gece işi: dosyanın masrafı da silindi", (await q(`select 1 from public.expenses where case_id=$1`, [kOld])).length === 0);
+ok("gece işi: müvekkil cari bakiyesi ve kasa aynı kaldı (toplamlar korunur)",
+  Math.abs(Number((await asUser(A, () => one(`select balance from public.v_client_balances where client_id=$1`, [client2]))).balance) - balBefore) < 0.005
+  && Math.abs(Number((await asUser(A, () => one(`select balance from public.v_account_balances where id=$1`, [kasa]))).balance) - kasaBefore) < 0.005);
+ok("gece işi: müvekkilde kapanan dosya sayısı arttı", (await one(`select closed_case_count n from public.clients where id=$1`, [client2])).n >= 1);
+ok("gece işi: ikinci çalıştırma bir şey silmez", (await one(`select app.cron_purge_closed_cases() n`)).n === 0);
+ok("şimdi kalıcı sil (close_case) hâlâ çalışır, avukat yapamaz", await fails(() => asUser(U, () => q(`select public.close_case($1)`, [kNew])), /yetkiniz yok/)
+  && !!(await asUser(A, () => one(`select public.close_case($1) r`, [kNew]))).r);
+ok("ayar: saklama süresi varsayılan 12 ay, sınır dışı reddedilir", (await one(`select closed_case_retention_months m from public.org_settings where org_id=$1`, [orgA])).m === 12
+  && await fails(() => asUser(A, () => q(`update public.org_settings set closed_case_retention_months = 0`)), /check/i));
+ok("gece işi: istemci çağıramaz", await fails(() => asUser(A, () => q(`select app.cron_purge_closed_cases()`)), /permission denied/));
+
+// ── Ayarlar bölümlerini avukata verme (Görüntüle / Ekle / Düzenle / Sil ayrı ayrı)
+const setAs = (uid, perms) => db.exec(`update public.profiles set permissions='${JSON.stringify(perms)}'::jsonb where id='${uid}'`);
+const tryUpd = (uid, sql) => asUser(uid, () => q(sql));
+await asUser(A, () => q(`update public.org_settings set courts='{Ankara 1. Asliye,İzmir 2. Asliye}', company_lists='[{"id":"L1","name":"Bir","clientIds":[]}]'::jsonb`));
+await setAs(U, {});
+ok("ayarlar: izni olmayan avukat ayar değiştiremez", (await tryUpd(U, `update public.org_settings set courts = courts || '{x}' returning org_id`)).length === 0);
+// Kategoriler: yalnızca görüntüleme
+await setAs(U, { "settings_categories.view": true });
+ok("kategoriler: yalnızca görüntüleyen değişiklik yapamaz", (await tryUpd(U, `update public.org_settings set courts = courts || '{x}' returning org_id`)).length === 0);
+// Kategoriler: ekle
+await setAs(U, { "settings_categories.view": true, "settings_categories.create": true });
+ok("kategoriler: Ekle izniyle listeye değer ekler", (await tryUpd(U, `update public.org_settings set courts = courts || '{Bursa 1. Asliye}' returning org_id`)).length === 1);
+ok("kategoriler: Ekle izni değer silmeye yetmez", await fails(() => tryUpd(U, `update public.org_settings set courts = array_remove(courts, 'İzmir 2. Asliye')`), /silme yetkiniz yok/));
+ok("kategoriler: Ekle izni süre değiştirmeye yetmez", await fails(() => tryUpd(U, `update public.org_settings set seizure_valid_months = 10`), /yetkiniz yok/));
+// Kategoriler: sil
+await setAs(U, { "settings_categories.view": true, "settings_categories.delete": true });
+ok("kategoriler: Sil izniyle değer siler", (await tryUpd(U, `update public.org_settings set courts = array_remove(courts, 'İzmir 2. Asliye') returning org_id`)).length === 1);
+ok("kategoriler: Sil izni değer eklemeye yetmez", await fails(() => tryUpd(U, `update public.org_settings set courts = courts || '{y}'`), /ekleme yetkiniz yok/));
+// Kategoriler: düzenle
+await setAs(U, { "settings_categories.view": true, "settings_categories.edit": true });
+ok("kategoriler: Düzenle izniyle haciz / saklama süresini değiştirir", (await tryUpd(U, `update public.org_settings set seizure_valid_months = 10, closed_case_retention_months = 6 returning org_id`)).length === 1);
+ok("kategoriler: izni olan bile büro bilgisi, şirket listesi ve izinleri değiştiremez",
+  await fails(() => tryUpd(U, `update public.org_settings set firm = firm || '{"name":"Hack"}'::jsonb`), /yetkiniz yok/)
+  && await fails(() => tryUpd(U, `update public.org_settings set company_lists = '[]'::jsonb, seizure_valid_months = 11`), /yetkiniz yok/)
+  && await fails(() => tryUpd(U, `update public.org_settings set role_permissions = role_permissions || '{"fees.view": true}'::jsonb, seizure_valid_months = 9`), /yalnızca yönetici/));
+// Şirket listeleri
+await setAs(U, { "settings_companies.view": true, "settings_companies.create": true });
+ok("şirket listesi: Ekle izniyle liste açar", (await tryUpd(U, `update public.org_settings set company_lists = company_lists || '[{"id":"L2","name":"İki","clientIds":[]}]'::jsonb returning org_id`)).length === 1);
+ok("şirket listesi: Ekle izni düzenlemeye ve silmeye yetmez",
+  await fails(() => tryUpd(U, `update public.org_settings set company_lists = '[{"id":"L1","name":"Bir (yeni ad)","clientIds":[]},{"id":"L2","name":"İki","clientIds":[]}]'::jsonb`), /düzenleme yetkiniz yok/)
+  && await fails(() => tryUpd(U, `update public.org_settings set company_lists = '[{"id":"L2","name":"İki","clientIds":[]}]'::jsonb`), /silme yetkiniz yok/));
+await setAs(U, { "settings_companies.view": true, "settings_companies.edit": true, "settings_companies.delete": true });
+ok("şirket listesi: Düzenle ve Sil izniyle ad / ikon değiştirir ve siler",
+  (await tryUpd(U, `update public.org_settings set company_lists = '[{"id":"L1","name":"Bir","clientIds":[],"icon":"star"},{"id":"L2","name":"İki","clientIds":[]}]'::jsonb returning org_id`)).length === 1
+  && (await tryUpd(U, `update public.org_settings set company_lists = '[{"id":"L1","name":"Bir","clientIds":[],"icon":"star"}]'::jsonb returning org_id`)).length === 1);
+// Büro bilgileri
+await setAs(U, { "settings_firm.view": true });
+ok("büro bilgileri: yalnızca görüntüleyen değiştiremez", (await tryUpd(U, `update public.org_settings set firm = firm || '{"phone":"0212"}'::jsonb returning org_id`)).length === 0
+  && (await tryUpd(U, `update public.organizations set name='X' returning id`)).length === 0);
+await setAs(U, { "settings_firm.view": true, "settings_firm.edit": true });
+ok("büro bilgileri: Düzenle izniyle firm ve büro adını değiştirir", (await tryUpd(U, `update public.org_settings set firm = firm || '{"phone":"0212"}'::jsonb returning org_id`)).length === 1
+  && (await tryUpd(U, `update public.organizations set name='Yeni Ad Hukuk' returning id`)).length === 1);
+ok("büro bilgileri: büronun diğer alanlarını (aktiflik, saklama) değiştiremez", await fails(() => tryUpd(U, `update public.organizations set retention_months = 6`), /yönetici değiştirebilir/)
+  && await fails(() => tryUpd(U, `update public.organizations set active = false`), /yönetici değiştirebilir/));
+ok("ayarlar: izin kendi kendine verilemez (profil koruması)", await fails(() => tryUpd(U, `update public.profiles set permissions='{"settings_firm.view":true,"settings_categories.view":true}'::jsonb where id='${U}'`), /yalnızca yönetici/));
+await setAs(U, {});
+ok("ayarlar: izin geri alınınca değişiklik yapamaz", (await tryUpd(U, `update public.org_settings set courts = courts || '{q}' returning org_id`)).length === 0);
+ok("ayarlar: admin hepsini değiştirebilir", (await asUser(A, () => q(`update public.org_settings set courts='{Admin}', role_permissions = role_permissions returning org_id`))).length === 1);
+ok("ayarlar: my_permissions ayrıntılı anahtarları içerir", (await asUser(A, () => one(`select public.my_permissions() p`))).p["settings_companies.delete"] === true
+  && (await asUser(U, () => one(`select public.my_permissions() p`))).p["settings_firm.edit"] === false);
+
+// ── Kullanıcı yönetimini avukata verme (sınırlı: admin hesaplarına ve izinlere dokunamaz)
+const T = await newUser("tolga@a.com");
+await db.exec(`insert into public.profiles (id, org_id, name, username, email, role) values ('${T}', '${orgA}', 'Tolga', 'tolga', 'tolga@a.com', 'avukat')`);
+const upd = (uid, sql) => asUser(uid, () => q(sql));
+await setAs(U, { "settings_users.view": true, "settings_users.create": true });
+ok("kullanıcılar: Görüntüle + Ekle izni düzenlemeye yetmez", (await upd(U, `update public.profiles set active=false where id='${T}' returning id`)).length === 0);
+await setAs(U, { "settings_users.view": true, "settings_users.edit": true });
+ok("kullanıcılar: Düzenle izniyle başka avukatın bilgisini değiştirir", (await upd(U, `update public.profiles set name='Tolga Kaya', title='Stajyer Avukat' where id='${T}' returning id`)).length === 1);
+ok("kullanıcılar: Düzenle izniyle başka avukatı pasife alıp etkinleştirir", (await upd(U, `update public.profiles set active=false where id='${T}' returning id`)).length === 1
+  && (await upd(U, `update public.profiles set active=true where id='${T}' returning id`)).length === 1);
+ok("kullanıcılar: admin hesabına dokunamaz", (await upd(U, `update public.profiles set name='Hack' where id='${A}' returning id`)).length === 0);
+ok("kullanıcılar: kimseyi admin yapamaz", await fails(() => upd(U, `update public.profiles set role='admin' where id='${T}'`), /row-level security|yalnızca yönetici/));
+ok("kullanıcılar: kendini admin yapamaz", await fails(() => upd(U, `update public.profiles set role='admin' where id='${U}'`), /yalnızca yönetici|row-level security/));
+ok("kullanıcılar: izin (permissions) değiştiremez", await fails(() => upd(U, `update public.profiles set permissions='{"fees.view":true}'::jsonb where id='${T}'`), /yalnızca yönetici/));
+ok("kullanıcılar: e-posta değiştiremez", await fails(() => upd(U, `update public.profiles set email='x@x.com' where id='${T}'`), /yalnızca yönetici/));
+ok("kullanıcılar: kendini pasife alamaz", await fails(() => upd(U, `update public.profiles set active=false where id='${U}'`), /yalnızca yönetici/));
+ok("kullanıcılar: kullanıcı silemez", (await upd(U, `delete from public.profiles where id='${T}' returning id`)).length === 0);
+ok("kullanıcılar: my_permissions ekle / düzenle anahtarlarını verir", (await asUser(U, () => one(`select public.my_permissions() p`))).p["settings_users.edit"] === true
+  && (await asUser(U, () => one(`select public.my_permissions() p`))).p["settings_users.create"] === false);
+await setAs(U, {});
+
 // ── cron zamanlaması (pg_cron taklidiyle)
 await db.exec(`
   create schema cron;
@@ -322,6 +495,11 @@ try { await db.exec(sql); await db.exec(sql); } catch (e) { cronErr = e; }
 ok("cron: zamanlama bölümü çalıştı", !cronErr, cronErr?.message);
 const jobs = await q(`select jobname, schedule from cron.job order by jobname`);
 ok("cron: 4 iş, tekrarlanmadı", jobs.length === 4, JSON.stringify(jobs));
+await db.exec(icraSql); await db.exec(icraSql); await db.exec(kapaliSql); await db.exec(kapaliSql); await db.exec(ayarSql); await db.exec(kullaniciSql);
+const jobs2 = await q(`select jobname, schedule from cron.job order by jobname`);
+ok("cron: kapalı dosya işi her ayın 1'i 03:45 (TR), tekrarlanmadı", jobs2.filter((j) => j.jobname === "lexkasa-kapali-dosya").length === 1 && jobs2.some((j) => j.jobname === "lexkasa-kapali-dosya" && j.schedule === "45 0 1 * *"), JSON.stringify(jobs2));
+ok("cron: haciz işi her gün 08:00 (TR), tekrarlanmadı", jobs2.length === 6 && jobs2.some((j) => j.jobname === "lexkasa-haciz" && j.schedule === "0 5 * * *"), JSON.stringify(jobs2));
+ok("cron: Zamanlama ekranı haciz işini listeler", (await asUser(A, () => q(`select * from public.list_cron_jobs()`))).some((j) => j.jobname === "lexkasa-haciz"));
 
 console.log(R.join("\n"));
 console.log(`\nPASS: ${R.filter((x) => x.startsWith("PASS")).length}  FAIL: ${R.filter((x) => x.startsWith("FAIL")).length}`);

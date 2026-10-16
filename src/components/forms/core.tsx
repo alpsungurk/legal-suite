@@ -4,7 +4,7 @@ import { useErp } from "@/lib/erp-store";
 import { useOptions } from "@/lib/options";
 import { USER_ROLES, type CaseFile, type Client, type User } from "@/lib/erp-types";
 import { today } from "@/lib/format";
-import { useCloseCase } from "@/components/forms/close-case";
+import { useCloseConfirm } from "@/components/forms/close-case";
 import { passwordProblem } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 
@@ -105,7 +105,7 @@ function nextCaseNo(cases: CaseFile[]) {
 
 export function CaseForm({ open, onOpenChange, record, preset, onSaved }: FormProps<CaseFile>) {
   const { save, state, currentUser, permissions, rememberOption } = useErp();
-  const closeCase = useCloseCase();
+  const confirmClose = useCloseConfirm();
   const o = useOptions();
   const fields: FormField[] = [
     { name: "no", label: "Büro dosya no", required: true },
@@ -183,14 +183,15 @@ export function CaseForm({ open, onOpenChange, record, preset, onSaved }: FormPr
           : undefined
       }
       onSubmit={async (v) => {
-        // Mevcut dosya "Kapalı" yapılırsa dosya silinir, müvekkilde yalnızca toplamlar kalır
+        // Mevcut dosya "Kapalı" yapılırsa onay sorulur: dosya hemen silinmez, ayardaki süre
+        // (varsayılan 12 ay) kapalı olarak saklanır, sonra ay başındaki iş siler
         if (
-          permissions.can("cases", "delete") &&
           record &&
           v.status === "Kapalı" &&
-          record.status !== "Kapalı"
+          record.status !== "Kapalı" &&
+          !(await confirmClose(record.id))
         ) {
-          return closeCase(record.id);
+          return false;
         }
         rememberOption("courts", v.court);
         const prevResp = new Set(record?.responsibleIds ?? []);
@@ -233,10 +234,17 @@ export function CaseForm({ open, onOpenChange, record, preset, onSaved }: FormPr
 /* ───────────── Kullanıcı ───────────── */
 
 export function UserForm({ open, onOpenChange, record, preset, onSaved }: FormProps<User>) {
-  const { save, isUsernameAvailable, reloadFromServer } = useErp();
+  const { save, isUsernameAvailable, reloadFromServer, permissions } = useErp();
   const fields: FormField[] = [
     { name: "name", label: "Ad soyad", required: true, span: 2, autoFocus: !record },
-    { name: "role", label: "Rol", type: "select", options: [...USER_ROLES], required: true },
+    {
+      name: "role",
+      label: "Rol",
+      type: "select",
+      // Yalnızca Admin, Admin rolü verebilir
+      options: permissions.manageUsers ? [...USER_ROLES] : ["Avukat"],
+      required: true,
+    },
     {
       name: "title",
       label: "Ünvan",

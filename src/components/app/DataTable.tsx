@@ -46,6 +46,14 @@ export type Column<T> = {
   hideBelow?: "md" | "lg" | "xl";
 };
 
+/** Ekranda görünmeyen, yalnızca Excel'e yazılan sütun (büronun kendi liste düzeni için) */
+export type ExportColumn<T> = {
+  header: string;
+  get: (row: T) => ExcelCell;
+  money?: boolean;
+  width?: number;
+};
+
 export type TableFilter<T> = {
   id: string;
   label: string;
@@ -67,6 +75,8 @@ type Props<T> = {
   bulkActions?: (selected: T[], clear: () => void) => ReactNode;
   toolbar?: ReactNode;
   exportName?: string;
+  /** Verilirse Excel bu sütunlarla, bu sırayla yazılır (tablo sütunları yerine) */
+  exportColumns?: ExportColumn<T>[];
   empty?: ReactNode;
   pageSize?: number;
   initialSort?: { id: string; desc?: boolean };
@@ -97,6 +107,7 @@ export function DataTable<T>({
   bulkActions,
   toolbar,
   exportName,
+  exportColumns,
   empty,
   pageSize = 25,
   initialSort,
@@ -172,6 +183,14 @@ export function DataTable<T>({
   };
 
   const doExport = () => {
+    if (exportColumns?.length) {
+      downloadExcel(
+        exportName ?? "Liste",
+        exportColumns.map((c) => ({ header: c.header, money: c.money, width: c.width })),
+        visible.map((r) => exportColumns.map((c) => c.get(r))),
+      );
+      return;
+    }
     const cols = columns.filter((c) => c.export);
     downloadExcel(
       exportName ?? "Liste",

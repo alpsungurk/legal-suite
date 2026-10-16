@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   PiggyBank,
   Receipt,
+  Scale,
   Settings,
   Users,
   UserX,
@@ -41,12 +42,24 @@ export const NAV_PAGES: NavPage[] = [
   { title: "Tahsilatlar", url: "/tahsilatlar", icon: Wallet, allow: (p) => p.can("fees") },
   { title: "Cari hesap", url: "/cari-hesap", icon: BookOpenCheck, allow: (p) => p.can("ledger") },
   { title: "Banka & Kasa", url: "/banka-kasa", icon: Landmark, allow: (p) => p.can("accounts") },
-  { title: "İcra dosyaları", url: "/icra", icon: Gavel, allow: (p) => p.can("enforcements") },
+  {
+    title: "Alacaklı olduğumuz dosyalar",
+    url: "/icra",
+    icon: Gavel,
+    allow: (p) => p.can("enforcements"),
+  },
+  {
+    title: "Borçlu olduğumuz dosyalar",
+    url: "/icra/borclu",
+    icon: Scale,
+    allow: (p) => p.can("enforcements"),
+  },
   { title: "Borçlular", url: "/borclular", icon: UserX, allow: (p) => p.can("enforcements") },
   { title: "Bildirimler", url: "/bildirimler", icon: Bell },
+  { title: "Dikkat gerektirenler", url: "/uyarilar", icon: Bell },
   { title: "Raporlar", url: "/raporlar", icon: BarChart3, allow: (p) => p.can("reports") },
   { title: "Aktivite geçmişi", url: "/aktivite", icon: History, allow: (p) => p.can("activity") },
-  { title: "Ayarlar", url: "/ayarlar", icon: Settings, allow: (p) => p.manageSettings },
+  { title: "Ayarlar", url: "/ayarlar", icon: Settings, allow: (p) => p.canOpenSettings },
 ];
 
 export function pageTitle(pathname: string) {

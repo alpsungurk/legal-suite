@@ -12,6 +12,8 @@ const FALLBACK: Row[] = [
   { jobname: "lexkasa-bildirimler", schedule: "0 5 * * 1", command: "" },
   { jobname: "lexkasa-saklama", schedule: "30 0 * * 1", command: "" },
   { jobname: "lexkasa-keepalive", schedule: "0 6 */5 * *", command: "" },
+  { jobname: "lexkasa-haciz", schedule: "0 5 * * *", command: "" },
+  { jobname: "lexkasa-kapali-dosya", schedule: "45 0 1 * *", command: "" },
 ];
 
 export function CronTab() {

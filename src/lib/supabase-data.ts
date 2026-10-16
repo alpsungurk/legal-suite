@@ -28,6 +28,8 @@ import {
   documentToRow,
   enforcementFromRow,
   enforcementToRow,
+  eventFromRow,
+  eventToRow,
   expenseFromRow,
   expenseToRow,
   installmentFromRow,
@@ -104,6 +106,7 @@ export async function loadFullState(): Promise<LoadResult | null> {
     actsRes,
     yearsRes,
     archiveRes,
+    eventsRes,
   ] = await Promise.all([
     supabase.from("organizations").select("*").eq("id", orgId).single(),
     supabase.from("org_settings").select("*").eq("org_id", orgId).maybeSingle(),
@@ -129,7 +132,10 @@ export async function loadFullState(): Promise<LoadResult | null> {
     supabase.from("activities").select("*").eq("org_id", orgId).order("created_at", { ascending: false }).limit(1000),
     supabase.from("yearly_stats").select("*").eq("org_id", orgId),
     supabase.from("org_archive").select("*").eq("org_id", orgId).maybeSingle(),
+    // 20261016 migration'ı çalıştırılmadıysa tablo yoktur: hata yükü durdurmaz, liste boş gelir
+    supabase.from("enforcement_events").select("*").eq("org_id", orgId).order("date", { ascending: false }),
   ]);
+  if (eventsRes.error) console.warn("İcra işlem geçmişi yüklenemedi:", eventsRes.error.message);
 
   const firstErr = [
     orgRes,
@@ -229,6 +235,9 @@ export async function loadFullState(): Promise<LoadResult | null> {
     promises: (promisesRes.data ?? []).map((r) => promiseFromRow(r as Record<string, unknown>)),
     collections: (colsRes.data ?? []).map((r) => collectionFromRow(r as Record<string, unknown>)),
     contacts: (contactsRes.data ?? []).map((r) => contactFromRow(r as Record<string, unknown>)),
+    events: eventsRes.error
+      ? []
+      : (eventsRes.data ?? []).map((r) => eventFromRow(r as Record<string, unknown>)),
     expenses: (expensesRes.data ?? []).map((r) => {
       const row = r as Record<string, unknown>;
       return expenseFromRow(row, expenseReceipts.get(String(row.id)) ?? []);
@@ -279,6 +288,7 @@ const TABLE: Partial<Record<CollectionKey, string>> = {
   promises: "payment_promises",
   collections: "collections",
   contacts: "contact_logs",
+  events: "enforcement_events",
   expenses: "expenses",
   reminders: "reminders",
   documents: "documents",
@@ -298,6 +308,7 @@ const TO_ROW: Partial<Record<CollectionKey, ToRowFn>> = {
   promises: (p) => promiseToRow(p as never),
   collections: (c) => collectionToRow(c as never),
   contacts: (c) => contactToRow(c as never),
+  events: (e) => eventToRow(e as never),
   expenses: (e) => expenseToRow(e as never),
   reminders: (r) => reminderToRow(r as never),
   documents: (d) => documentToRow(d as never),
@@ -409,6 +420,15 @@ export async function persistSave<K extends CollectionKey>(
   if (!table || !toRow) throw new Error(`Desteklenmeyen koleksiyon: ${key}`);
 
   const row = { id: item.id, ...toRow(item as unknown as Record<string, unknown>) };
+  if (key === "users") {
+    // Kullanıcı profilleri istemciden eklenmez (Edge Function ekler); yalnızca güncellenir.
+    // upsert burada kullanılamaz: profiles tablosuna istemci için INSERT yetkisi yoktur.
+    const { id, ...changes } = row;
+    const { data, error } = await supabase.from("profiles").update(changes).eq("id", id).select("id");
+    if (error) throw new Error(errMsg(error));
+    if (!data?.length) throw new Error("Kullanıcı güncellenemedi: yetkiniz yok ya da kayıt bulunamadı");
+    return;
+  }
   const { error } = await supabase.from(table).upsert(row);
   if (error) throw new Error(errMsg(error));
 

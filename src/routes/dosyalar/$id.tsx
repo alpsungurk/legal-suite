@@ -12,11 +12,14 @@ import {
   Receipt,
   Wallet,
   Archive,
+  ArchiveRestore,
+  Trash2,
   Clock,
   CircleDot,
 } from "lucide-react";
 import { useErp } from "@/lib/erp-store";
 import { caseFinance, enforcementSummary } from "@/lib/finance";
+import { toast } from "sonner";
 import { formatDate, formatDateLong, formatMoney, relativeDue, today } from "@/lib/format";
 import { PageHeader } from "@/components/app/PageHeader";
 import {
@@ -39,7 +42,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useQuick } from "@/components/forms/quick";
-import { useCloseCase } from "@/components/forms/close-case";
+import { casePurgeDate, useCloseCase, usePurgeCase } from "@/components/forms/close-case";
 import { DocumentTable, ExpenseTable, PlanTable, ReminderTable } from "@/components/lists/tables";
 import { PlanSheet } from "@/components/lists/PlanSheet";
 import { EmptyState } from "@/components/EmptyState";
@@ -58,9 +61,10 @@ function Page() {
   const { id } = Route.useParams();
   const { sekme = "ozet" } = Route.useSearch();
   const navigate = useNavigate();
-  const { state, permissions, currentUser } = useErp();
+  const { state, permissions, currentUser, patch } = useErp();
   const quick = useQuick();
   const closeCase = useCloseCase();
+  const purgeCase = usePurgeCase();
   const [planId, setPlanId] = useState<string | null>(null);
 
   const c = state.cases.find((x) => x.id === id);
@@ -170,6 +174,12 @@ function Page() {
           <>
             <StatusBadge status={c.status} />
             <StatusBadge status={c.type} tone="slate" dot={false} />
+            {c.status === "Kapalı" && (
+              <span className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                {formatDate(casePurgeDate(c, state.settings.closedCaseRetentionMonths))} tarihinde
+                kayıtları silinecek (müvekkilde toplamlar kalır)
+              </span>
+            )}
             {client && (
               <Link
                 to="/muvekkiller/$id"
@@ -183,7 +193,7 @@ function Page() {
         }
         actions={
           <>
-            {permissions.can("expenses") && (
+            {permissions.can("expenses") && permissions.can("statements") && (
               <Button variant="outline" asChild>
                 <Link to="/yazdir/dosya/$id" params={{ id: c.id }} target="_blank">
                   <Printer /> Masraf dökümü
@@ -195,9 +205,29 @@ function Page() {
                 <Pencil /> Düzenle
               </Button>
             )}
-            {permissions.can("cases", "delete") && (
+            {permissions.can("cases", "edit") && c.status !== "Kapalı" && (
               <Button variant="outline" onClick={() => void closeCase(c.id)}>
                 <Archive /> Dosyayı kapat
+              </Button>
+            )}
+            {permissions.can("cases", "edit") && c.status === "Kapalı" && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  patch("cases", c.id, { status: "Açık", closingDate: "" });
+                  toast.success("Dosya yeniden açıldı; silinme iptal edildi");
+                }}
+              >
+                <ArchiveRestore /> Yeniden aç
+              </Button>
+            )}
+            {permissions.can("cases", "delete") && c.status === "Kapalı" && (
+              <Button
+                variant="outline"
+                className="text-destructive hover:text-destructive"
+                onClick={() => void purgeCase(c.id)}
+              >
+                <Trash2 /> Şimdi kalıcı sil
               </Button>
             )}
             {(permissions.can("expenses", "create") ||

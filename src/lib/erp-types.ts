@@ -219,6 +219,9 @@ export type Debtor = BaseEntity & {
 };
 
 export const ENFORCEMENT_STATUSES = [
+  "Açık",
+  "Durdurulmuş",
+  "Kapalı",
   "Derdest",
   "Haciz",
   "Satış",
@@ -226,9 +229,49 @@ export const ENFORCEMENT_STATUSES = [
   "Tahsil edildi",
   "Kapandı",
 ];
-/** Varsayılan, otomatik "tahsil edildi" ve kapanış durumları: silinemez */
-export const LOCKED_ENFORCEMENT_STATUSES = ["Derdest", "Tahsil edildi", "Kapandı"];
+/** Büronun ana durumları ve otomatik "tahsil edildi" durumu: silinemez */
+export const LOCKED_ENFORCEMENT_STATUSES = ["Açık", "Durdurulmuş", "Kapalı", "Tahsil edildi"];
+/** Bu durumlardaki dosya kapanmış sayılır ("Kapandı" eski kayıtlar için) */
+export const CLOSED_ENFORCEMENT_STATUSES = ["Kapalı", "Kapandı", "Tahsil edildi"];
+export const DEFAULT_ENFORCEMENT_STATUS = "Açık";
+export const STOPPED_ENFORCEMENT_STATUS = "Durdurulmuş";
+export const isEnforcementClosed = (status: string) =>
+  CLOSED_ENFORCEMENT_STATUSES.includes(status);
 export type EnforcementStatus = string;
+
+/** Alacaklı olduğumuz (müvekkil alacaklı) / borçlu olduğumuz (müvekkil borçlu) takip */
+export type EnforcementSide = "Alacaklı" | "Borçlu";
+export const ENFORCEMENT_SIDES: EnforcementSide[] = ["Alacaklı", "Borçlu"];
+
+export const DEFAULT_STOP_REASONS = ["Borçlu itirazı", "Şikâyet", "Tedbir kararı", "Diğer"];
+export const DEFAULT_INQUIRY_TYPES = [
+  "Araç",
+  "Taşınmaz",
+  "Alacaklı olduğu icra dosyası",
+  "Banka",
+  "SGK (maaş)",
+  "SGK Mosip (şirketler için)",
+  "Firma sorgu",
+];
+export const DEFAULT_SEIZURE_TYPES = ["Araç", "Taşınmaz", "Maaş", "Banka"];
+export const DEFAULT_RESULT_TYPES = ["Olumlu", "Olumsuz", "Düşük miktar", "Cevap bekleniyor"];
+export const DEFAULT_ENFORCEMENT_EVENT_TYPES = [
+  "Ödeme emri tebliği",
+  "Ödeme emri iadesi",
+  "İtiraz",
+  "Kesinleştirme talebi",
+  "Sorgu",
+  "Haciz",
+  "Banka cevabı",
+  "Borçlu ekleme talebi",
+  "Diğer",
+];
+/** İşlem türü bu ise sorgu türü / haciz türü alanı açılır */
+export const EVENT_TYPE_INQUIRY = "Sorgu";
+export const EVENT_TYPE_SEIZURE = "Haciz";
+export const DEFAULT_SEIZURE_VALID_MONTHS = 12;
+export const DEFAULT_SEIZURE_REMINDER_DAYS = 14;
+export const DEFAULT_CLOSED_CASE_RETENTION_MONTHS = 12;
 
 export const ENFORCEMENT_TYPES = ["İlamsız", "İlamlı", "Kambiyo", "Rehin", "Kira", "Diğer"];
 
@@ -236,16 +279,48 @@ export type EnforcementFile = BaseEntity & {
   no: string;
   office: string;
   type: string;
+  /** Alacaklı: müvekkil alacaklı, borçlular karşı taraf. Borçlu: müvekkil borçlu, "borçlular" alanı karşı taraf (alacaklılar). */
+  side: EnforcementSide;
   clientId: string;
   debtorIds: string[];
+  /** Takip çıkış rakamı (asıl + faiz + masraf toplamı tek tutar olarak girilir) */
   principal: number;
   interest: number;
   costs: number;
   status: EnforcementStatus;
+  /** Durum "Durdurulmuş" ise sebebi */
+  stopReason?: string;
   openingDate: ISODate;
   responsibleIds: string[];
   caseId?: string;
+  /** Takip bilgileri: dosyaya özgü serbest metin (alacağın niteliği, örnek alınacak bilgiler, ilgili dosya) */
+  details?: string;
+  /** Son haciz tarihi; haczin düşeceği tarih ayarlardaki süreye göre hesaplanır */
+  lastSeizureDate?: ISODate;
+  /** Açıklamalar */
   note?: string;
+};
+
+/** İcra işlem geçmişi: tebliğ, itiraz, sorgu, haciz, banka cevabı... */
+export type EnforcementEvent = BaseEntity & {
+  enforcementId: string;
+  debtorId?: string;
+  date: ISODate;
+  type: string;
+  inquiryType?: string;
+  seizureType?: string;
+  result?: string;
+  amount?: number;
+  note?: string;
+};
+
+/** Ayarlar → Şirket listeleri: belirli müvekkillerin icra dosyaları için ayrı liste */
+export type CompanyList = {
+  id: string;
+  name: string;
+  clientIds: string[];
+  /** Menüde liste adının yanında görünen ikon (src/lib/list-icons.ts anahtarı) */
+  icon?: string;
 };
 
 export type PaymentPromise = BaseEntity & {
@@ -350,7 +425,24 @@ export type Settings = {
   courts: string[];
   /** Seçilebilir icra daireleri */
   enforcementOffices: string[];
+  enforcementStopReasons: string[];
+  enforcementEventTypes: string[];
+  inquiryTypes: string[];
+  seizureTypes: string[];
+  resultTypes: string[];
+  /** Haczin geçerli olduğu süre (ay); son haciz tarihine eklenir */
+  seizureValidMonths: number;
+  /** Haczin düşeceği tarihten kaç gün önce hatırlatılır */
+  seizureReminderDays: number;
+  companyLists: CompanyList[];
+  /** Kapalı dava dosyası kapanıştan kaç ay sonra silinir (müvekkilde toplamlar kalır) */
+  closedCaseRetentionMonths: number;
 };
+
+/** Kategoriler ekranında düzenlenen liste anahtarları (sayısal ayarlar ve şirket listeleri hariç) */
+export type CategoryKey = {
+  [K in keyof Settings]: Settings[K] extends string[] ? K : never;
+}[keyof Settings];
 
 export type Collections = {
   users: User;
@@ -366,6 +458,7 @@ export type Collections = {
   promises: PaymentPromise;
   collections: Collection;
   contacts: ContactLog;
+  events: EnforcementEvent;
   documents: DocumentFile;
   notifications: AppNotification;
   activities: ActivityLog;
@@ -459,7 +552,13 @@ export type PermissionModuleKey =
   | "ledger"
   | "accounts"
   | "reports"
-  | "activity";
+  | "activity"
+  | "statements"
+  | "settings_firm"
+  | "settings_categories"
+  | "settings_companies"
+  | "settings_users"
+  | "settings_backup";
 
 export type PermissionModule = {
   key: PermissionModuleKey;
@@ -473,6 +572,8 @@ export type PermissionModule = {
   coupled: boolean;
   /** Yan menüde bu modüle ait sayfa */
   menu?: string;
+  /** "settings": Ayarlar sayfasındaki bir bölüm; izin tablosunda ayrı bir kutuda, tek anahtarla gösterilir */
+  group?: "settings";
 };
 
 export const PERMISSION_MODULES: PermissionModule[] = [
@@ -575,7 +676,82 @@ export const PERMISSION_MODULES: PermissionModule[] = [
     coupled: true,
     menu: "Aktivite geçmişi",
   },
+  {
+    key: "statements",
+    label: "Ekstre ve döküm yazdırma",
+    hint: "Müvekkil ekstresi ve dosya masraf dökümünü yazdırır / PDF alır (ekstre için Cari hesap, döküm için Masraflar görme izni de gerekir)",
+    actions: ["view"],
+    actionHints: { view: "Yazdır / PDF düğmeleri görünür" },
+    coupled: true,
+  },
+  // ── Ayarlar sayfasındaki bölümler: her biri izin tablosunda kendi eylemleriyle (Görüntüle / Ekle / Düzenle / Sil) ──
+  {
+    key: "settings_firm",
+    label: "Büro bilgileri",
+    hint: "Ayarlar → Büro: büro adı, adres, vergi bilgileri, IBAN, logo, ekstre notu",
+    actions: ["view", "edit"],
+    actionHints: {
+      view: "Büro bilgilerini görür",
+      edit: "Büro bilgilerini değiştirir",
+    },
+    coupled: true,
+    group: "settings",
+  },
+  {
+    key: "settings_categories",
+    label: "Kategoriler",
+    hint: "Ayarlar → Kategoriler: açılır listeler (dosya, masraf, icra türleri…), haciz süresi, kapalı dosya saklama süresi",
+    actions: ["view", "create", "edit", "delete"],
+    actionHints: {
+      view: "Listeleri görür",
+      create: "Listelere yeni değer ekler",
+      edit: "Haciz süresi ve kapalı dosya saklama süresini değiştirir",
+      delete: "Liste değerlerini siler",
+    },
+    coupled: true,
+    group: "settings",
+  },
+  {
+    key: "settings_companies",
+    label: "Şirket listeleri",
+    hint: "Ayarlar → Şirket listeleri: icra için şirket listeleri",
+    actions: ["view", "create", "edit", "delete"],
+    actionHints: {
+      view: "Listeleri görür",
+      create: "Yeni şirket listesi açar",
+      edit: "Listenin adını, müvekkillerini ve ikonunu değiştirir",
+      delete: "Listeyi siler (dosyalar silinmez)",
+    },
+    coupled: true,
+    group: "settings",
+  },
+  {
+    key: "settings_users",
+    label: "Kullanıcılar",
+    hint: "Ayarlar → Kullanıcılar. Admin hesaplarına dokunamaz, kimseyi Admin yapamaz, izin veremez; silme yok",
+    actions: ["view", "create", "edit"],
+    actionHints: {
+      view: "Kullanıcı listesini görür",
+      create: "Avukat rolünde yeni kullanıcı ekler",
+      edit: "Avukatların bilgilerini düzenler, pasife alır, geçici şifre verir",
+    },
+    coupled: true,
+    group: "settings",
+  },
+  {
+    key: "settings_backup",
+    label: "Yedekleme",
+    hint: "Ayarlar → Yedekleme: veri durumunu görür ve yedeği indirir (eski yılları arşivleme yalnızca Admin'dedir)",
+    actions: ["view"],
+    coupled: true,
+    group: "settings",
+  },
 ];
+
+/** Ayarlar bölümü izinleri; "Tam yetki" gibi hazır ayarlarda ayrıca ele alınır */
+export const SETTINGS_PERMISSION_KEYS = PERMISSION_MODULES.filter((m) => m.group === "settings").map(
+  (m) => m.key,
+);
 
 export type PermissionKey = `${PermissionModuleKey}.${PermissionAction}`;
 
@@ -616,12 +792,37 @@ export function permissionsFor(
     const key = permissionKey(module, action);
     return userGrants[key] ?? roleGrants[key] ?? false;
   };
+  const sectionAccess = (m: PermissionModuleKey) => ({
+    view: can(m, "view"),
+    create: can(m, "create"),
+    edit: can(m, "edit"),
+    delete: can(m, "delete"),
+  });
   return {
     isAdmin: admin,
     isStaff: admin || role === "Avukat",
-    /** Kullanıcı yönetimi, ayarlar, yedek ve arşiv yalnızca Admin'dedir */
+    /** Kullanıcı yönetimi, izinler, zamanlama ve arşiv yalnızca Admin'dedir */
     manageUsers: admin,
     manageSettings: admin,
+    /**
+     * Ayarlar sayfasının bölümleri: Admin hepsine, avukat yalnızca kendisine verilenlere girer.
+     * Her bölümde görüntüle / ekle / düzenle / sil ayrı ayrıdır (veritabanı da aynısını zorunlu kılar).
+     */
+    settingsAccess: {
+      firm: sectionAccess("settings_firm"),
+      categories: sectionAccess("settings_categories"),
+      companies: sectionAccess("settings_companies"),
+      users: sectionAccess("settings_users"),
+      backup: sectionAccess("settings_backup"),
+    },
+    /** Ayarlar menüsü: en az bir bölümü görebiliyorsa */
+    canOpenSettings:
+      admin ||
+      can("settings_firm") ||
+      can("settings_categories") ||
+      can("settings_companies") ||
+      can("settings_users") ||
+      can("settings_backup"),
     can,
   };
 }

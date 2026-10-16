@@ -38,8 +38,14 @@ Deno.serve(async (req) => {
       .select("id, org_id, role")
       .eq("id", user.id)
       .single();
-    if (cErr || !caller || caller.role !== "admin") {
-      return json({ error: "Yalnızca yönetici bu işlemi yapabilir" }, 403);
+    if (cErr || !caller) return json({ error: "Yetkisiz" }, 403);
+    const isAdmin = caller.role === "admin";
+    let callerPerms: Record<string, boolean> = {};
+    if (!isAdmin) {
+      // Yönetici değilse: kullanıcı eklemek için "Kullanıcılar → Ekle", şifre vermek için "Düzenle" izni gerekir
+      // (veritabanındaki izin sistemiyle doğrulanır)
+      const { data: perms } = await userClient.rpc("my_permissions");
+      callerPerms = (perms ?? {}) as Record<string, boolean>;
     }
 
     const body = await req.json();
@@ -53,11 +59,18 @@ Deno.serve(async (req) => {
       }
       const { data: target } = await admin
         .from("profiles")
-        .select("id, org_id")
+        .select("id, org_id, role")
         .eq("id", userId)
         .single();
       if (!target || target.org_id !== caller.org_id) {
         return json({ error: "Kullanıcı bulunamadı" }, 404);
+      }
+      // Yönetici olmayan: yalnızca başka avukatların şifresini sıfırlayabilir (admin hesaplarını ve kendisini değil)
+      if (!isAdmin && callerPerms["settings_users.edit"] !== true) {
+        return json({ error: "Şifre sıfırlama yetkiniz yok" }, 403);
+      }
+      if (!isAdmin && (target.role === "admin" || target.id === user.id)) {
+        return json({ error: "Bu kullanıcının şifresini yalnızca yönetici sıfırlayabilir" }, 403);
       }
       // Yönetici başkasına şifre verdiyse kullanıcı bir sonraki girişte kendisi yenisini belirler
       const { error } = await admin.auth.admin.updateUserById(userId, {
@@ -76,7 +89,11 @@ Deno.serve(async (req) => {
     const email = String(body.email ?? "").trim();
     const phone = body.phone ? String(body.phone) : null;
     const title = body.title ? String(body.title) : null;
-    const role = body.role === "admin" ? "admin" : "avukat";
+    if (!isAdmin && callerPerms["settings_users.create"] !== true) {
+      return json({ error: "Kullanıcı ekleme yetkiniz yok" }, 403);
+    }
+    // Yönetici olmayan yalnızca avukat ekleyebilir; admin oluşturamaz
+    const role = isAdmin && body.role === "admin" ? "admin" : "avukat";
     const password = body.password ? String(body.password) : null;
 
     if (!name || !username || !email) return json({ error: "Eksik alan" }, 400);

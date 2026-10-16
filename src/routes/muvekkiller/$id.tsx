@@ -17,6 +17,7 @@ import {
   FileQuestion,
 } from "lucide-react";
 import { useErp } from "@/lib/erp-store";
+import { cn } from "@/lib/utils";
 import { clientFinance } from "@/lib/finance";
 import { formatDate, formatMoney, formatPeriod } from "@/lib/format";
 import { PageHeader } from "@/components/app/PageHeader";
@@ -125,7 +126,7 @@ function Page() {
         }
         actions={
           <>
-            {permissions.can("ledger") && (
+            {permissions.can("ledger") && permissions.can("statements") && (
               <Button variant="outline" asChild>
                 <Link to="/yazdir/ekstre/$id" params={{ id: client.id }} target="_blank">
                   <Printer /> Ekstre PDF
@@ -392,7 +393,12 @@ function Page() {
               className="h-9 w-auto"
               aria-label="Bitiş"
             />
-            <Button variant="outline" size="sm" className="ml-auto h-9" asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className={cn("ml-auto h-9", !permissions.can("statements") && "hidden")}
+              asChild
+            >
               <Link
                 to="/yazdir/ekstre/$id"
                 params={{ id: client.id }}

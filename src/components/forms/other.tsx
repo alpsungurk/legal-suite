@@ -4,17 +4,37 @@ import { AttachmentList } from "@/components/app/files";
 import { useErp } from "@/lib/erp-store";
 import { useOptions } from "@/lib/options";
 import {
+  DEFAULT_ENFORCEMENT_STATUS,
+  EVENT_TYPE_INQUIRY,
+  EVENT_TYPE_SEIZURE,
+  STOPPED_ENFORCEMENT_STATUS,
+  isEnforcementClosed,
   type Collection,
   type ContactLog,
   type Debtor,
   type DocumentFile,
+  type EnforcementEvent,
   type EnforcementFile,
   type PaymentPromise,
   type Reminder,
   type AttachmentRef,
 } from "@/lib/erp-types";
-import { addDays, formatMoney, round2, splitAmount, sum, today } from "@/lib/format";
-import { caseClientId, defaultIncomeAccountId, enforcementSummary } from "@/lib/finance";
+import {
+  addDays,
+  formatDate,
+  formatMoney,
+  normalizeFileNo,
+  round2,
+  splitAmount,
+  sum,
+  today,
+} from "@/lib/format";
+import {
+  caseClientId,
+  defaultIncomeAccountId,
+  enforcementSummary,
+  seizureDueDate,
+} from "@/lib/finance";
 import { PERIODS, stepDate } from "@/components/forms/finance";
 import { MoneyInput } from "@/components/app/fields";
 import { Input } from "@/components/ui/input";
@@ -173,8 +193,10 @@ export function EnforcementForm({
   preset,
   onSaved,
 }: FormProps<EnforcementFile>) {
-  const { save, currentUser, rememberOption } = useErp();
+  const { save, state, currentUser, rememberOption } = useErp();
   const o = useOptions();
+  const owed = (v: FormValues) => v.side === "Borçlu";
+  const months = state.settings.seizureValidMonths;
   return (
     <FormDialog
       open={open}
@@ -183,15 +205,25 @@ export function EnforcementForm({
       wide
       fields={[
         {
+          name: "side",
+          label: "Taraf",
+          type: "segmented",
+          options: [
+            { value: "Alacaklı", label: "Alacaklı olduğumuz" },
+            { value: "Borçlu", label: "Borçlu olduğumuz" },
+          ],
+        },
+        {
           name: "no",
-          label: "Esas no",
+          label: "Dosya no",
           required: true,
           autoFocus: !record,
-          placeholder: "Örn. 2026/4521 E.",
+          placeholder: "Örn. 2026/101 E.",
+          hint: "Kaydederken 2026/101 E. biçimine getirilir",
         },
         {
           name: "office",
-          label: "İcra dairesi",
+          label: "Birim (icra dairesi)",
           required: true,
           type: "combobox",
           options: o.enforcementOffices,
@@ -199,32 +231,56 @@ export function EnforcementForm({
           placeholder: "Listeden seçin veya yazın",
         },
         { name: "type", label: "Takip türü", type: "select", options: o.enforcementTypes },
-        { name: "status", label: "Durum", type: "select", options: o.enforcementStatuses },
+        {
+          name: "status",
+          label: "Dosya durumu",
+          type: "select",
+          options: o.enforcementStatuses,
+          onChange: (val) => (val === STOPPED_ENFORCEMENT_STATUS ? {} : { stopReason: "" }),
+        },
+        {
+          name: "stopReason",
+          label: "Durdurulma sebebi",
+          type: "combobox",
+          options: o.enforcementStopReasons,
+          creatable: true,
+          required: true,
+          visible: (v) => v.status === STOPPED_ENFORCEMENT_STATUS,
+          placeholder: "Listeden seçin veya yazın",
+        },
         {
           name: "clientId",
-          label: "Alacaklı müvekkil",
+          label: (v) => (owed(v) ? "Borçlu (müvekkilimiz)" : "Alacaklı (müvekkilimiz)"),
           type: "combobox",
           options: o.allClients,
           required: true,
         },
         {
           name: "debtorIds",
-          label: "Borçlular",
+          label: (v) => (owed(v) ? "Alacaklı (karşı taraf)" : "Borçlular"),
           type: "multiselect",
           options: o.debtors,
           required: true,
-          hint: "Önce borçlu kartı oluşturun",
+          hint: "Kartı yoksa önce Borçlular sayfasından ekleyin",
         },
         {
           name: "principal",
-          label: "Asıl alacak",
+          label: "Takip çıkış rakamı",
           type: "money",
           required: true,
-          section: "Alacak kalemleri",
+          hint: "Asıl alacak + takip tarihine kadar işleyen faiz + masraflar toplamı",
         },
-        { name: "interest", label: "İşlemiş faiz", type: "money" },
-        { name: "costs", label: "Takip masrafları", type: "money" },
         { name: "openingDate", label: "Takip tarihi", type: "date", required: true },
+        {
+          name: "lastSeizureDate",
+          label: "Son haciz tarihi",
+          type: "date",
+          visible: (v) => !owed(v),
+          hint: (v) =>
+            v.lastSeizureDate
+              ? `Haczin düşeceği tarih: ${formatDate(seizureDueDate(v, months))} (${months} ay)`
+              : `Haczin düşmesinden ${state.settings.seizureReminderDays} gün önce hatırlatılır`,
+        },
         {
           name: "responsibleIds",
           label: "Sorumlu avukat",
@@ -238,38 +294,146 @@ export function EnforcementForm({
           options: o.cases,
           allowClear: true,
         },
-        { name: "note", label: "Not", type: "textarea" },
+        {
+          name: "details",
+          label: "Takip bilgileri",
+          type: "textarea",
+          placeholder:
+            "Dosyaya özgü bilgiler: alacağın niteliği (çek, bono…), örnek alınacak ayrıntılar, ilgili dosya…",
+        },
+        { name: "note", label: "Açıklamalar", type: "textarea" },
       ]}
       initial={{
+        side: "Alacaklı",
         type: o.enforcementTypes.includes("İlamsız") ? "İlamsız" : o.enforcementTypes[0],
-        status: "Derdest",
+        status: o.enforcementStatuses.includes(DEFAULT_ENFORCEMENT_STATUS)
+          ? DEFAULT_ENFORCEMENT_STATUS
+          : o.enforcementStatuses[0],
         openingDate: today(),
         debtorIds: [],
-        interest: 0,
-        costs: 0,
         responsibleIds: currentUser.role === "Avukat" ? [currentUser.id] : [],
         ...preset,
         ...record,
+        // Asıl / faiz / masraf ayrımı kaldırıldı: eski kayıtta toplamı tek tutar olarak gösterilir
+        principal: record
+          ? round2(record.principal + record.interest + record.costs)
+          : preset?.principal,
       }}
       onSubmit={(v) => {
         rememberOption("enforcementOffices", v.office);
+        const stopped = v.status === STOPPED_ENFORCEMENT_STATUS;
+        if (stopped) rememberOption("enforcementStopReasons", v.stopReason);
         const item = save("enforcements", {
           id: record?.id,
-          no: v.no.trim(),
+          side: owed(v) ? "Borçlu" : "Alacaklı",
+          no: normalizeFileNo(v.no),
           office: v.office.trim(),
           type: v.type,
           status: v.status,
+          stopReason: stopped ? String(v.stopReason ?? "").trim() : "",
           clientId: v.clientId,
           debtorIds: v.debtorIds,
-          principal: Number(v.principal) || 0,
-          interest: Number(v.interest) || 0,
-          costs: Number(v.costs) || 0,
+          principal: round2(Number(v.principal) || 0),
+          interest: 0,
+          costs: 0,
           openingDate: v.openingDate,
+          lastSeizureDate: owed(v) ? "" : v.lastSeizureDate || "",
           responsibleIds: v.responsibleIds ?? [],
           caseId: v.caseId || undefined,
-          note: v.note || undefined,
+          details: v.details?.trim() || "",
+          note: v.note?.trim() || "",
         });
         toast.success(record ? "İcra dosyası güncellendi" : "İcra dosyası açıldı");
+        onSaved?.(item);
+      }}
+    />
+  );
+}
+
+/** İcra işlem geçmişi kaydı: tebliğ, itiraz, sorgu, haciz, banka cevabı... */
+export function EnforcementEventForm({
+  open,
+  onOpenChange,
+  record,
+  preset,
+  onSaved,
+}: FormProps<EnforcementEvent>) {
+  const { save, patch, state } = useErp();
+  const o = useOptions();
+  const enfId = record?.enforcementId ?? preset?.enforcementId;
+  const ef = state.enforcements.find((e) => e.id === enfId);
+  const parties = state.debtors
+    .filter((d) => ef?.debtorIds.includes(d.id))
+    .map((d) => ({ value: d.id, label: d.name }));
+  return (
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={record ? "İşlemi düzenle" : "İşlem ekle"}
+      description={ef ? `${ef.no} · ${ef.office}` : undefined}
+      fields={[
+        { name: "date", label: "Tarih", type: "date", required: true },
+        {
+          name: "type",
+          label: "İşlem türü",
+          type: "combobox",
+          options: o.enforcementEventTypes,
+          creatable: true,
+          required: true,
+        },
+        {
+          name: "inquiryType",
+          label: "Sorgu türü",
+          type: "select",
+          options: o.inquiryTypes,
+          visible: (v) => v.type === EVENT_TYPE_INQUIRY,
+        },
+        {
+          name: "seizureType",
+          label: "Haciz türü",
+          type: "select",
+          options: o.seizureTypes,
+          visible: (v) => v.type === EVENT_TYPE_SEIZURE,
+        },
+        {
+          name: "debtorId",
+          label: ef?.side === "Borçlu" ? "Karşı taraf" : "Borçlu",
+          type: "combobox",
+          options: parties,
+          allowClear: true,
+          placeholder: "Tümü",
+        },
+        { name: "result", label: "Sonuç", type: "select", options: o.resultTypes },
+        { name: "amount", label: "Tutar (varsa)", type: "money" },
+        { name: "note", label: "Not", type: "textarea" },
+      ]}
+      initial={{ date: today(), ...preset, ...record }}
+      onSubmit={(v) => {
+        if (!enfId) return false;
+        const type = String(v.type).trim();
+        const item = save("events", {
+          id: record?.id,
+          enforcementId: enfId,
+          date: v.date,
+          type,
+          debtorId: v.debtorId || "",
+          inquiryType: type === EVENT_TYPE_INQUIRY ? v.inquiryType || "" : "",
+          seizureType: type === EVENT_TYPE_SEIZURE ? v.seizureType || "" : "",
+          result: v.result || "",
+          amount: Number(v.amount) > 0 ? round2(Number(v.amount)) : undefined,
+          note: v.note?.trim() || "",
+        });
+        // Haciz kaydı dosyanın son haciz tarihini ileri taşır (geri almaz)
+        if (
+          ef &&
+          type === EVENT_TYPE_SEIZURE &&
+          ef.side !== "Borçlu" &&
+          (!ef.lastSeizureDate || v.date > ef.lastSeizureDate)
+        ) {
+          patch("enforcements", ef.id, { lastSeizureDate: v.date });
+          toast.info(`Son haciz tarihi ${formatDate(v.date)} olarak güncellendi`);
+        }
+        toast.success(record ? "İşlem güncellendi" : "İşlem eklendi");
         onSaved?.(item);
       }}
     />
@@ -284,7 +448,10 @@ export function PromiseForm({ open, onOpenChange, record, preset }: FormProps<Pa
       .filter((d) => ef?.debtorIds.includes(d.id))
       .map((d) => ({ value: d.id, label: d.name }));
   };
-  const enfOpts = state.enforcements.map((e) => ({ value: e.id, label: e.no }));
+  // Borçlu olduğumuz dosyalarda tahsilat, söz ve plan yok
+  const enfOpts = state.enforcements
+    .filter((e) => e.side !== "Borçlu" || e.id === (record?.enforcementId ?? preset?.enforcementId))
+    .map((e) => ({ value: e.id, label: e.no }));
   return (
     <FormDialog
       open={open}
@@ -368,7 +535,10 @@ export function DebtorPlanForm({
   preset?: { enforcementId?: string; debtorId?: string; total?: number };
 }) {
   const { createDebtorPlan, state } = useErp();
-  const enfOpts = state.enforcements.map((e) => ({ value: e.id, label: e.no }));
+  // Borçlu olduğumuz dosyalarda tahsilat, söz ve plan yok
+  const enfOpts = state.enforcements
+    .filter((e) => e.side !== "Borçlu" || e.id === preset?.enforcementId)
+    .map((e) => ({ value: e.id, label: e.no }));
   const debtorsOf = (enfId?: string) => {
     const ef = state.enforcements.find((e) => e.id === enfId);
     return state.debtors
@@ -575,7 +745,10 @@ export function DebtorPlanForm({
 export function CollectionForm({ open, onOpenChange, record, preset }: FormProps<Collection>) {
   const { save, patch, state } = useErp();
   const o = useOptions();
-  const enfOpts = state.enforcements.map((e) => ({ value: e.id, label: e.no }));
+  // Borçlu olduğumuz dosyalarda tahsilat, söz ve plan yok
+  const enfOpts = state.enforcements
+    .filter((e) => e.side !== "Borçlu" || e.id === (record?.enforcementId ?? preset?.enforcementId))
+    .map((e) => ({ value: e.id, label: e.no }));
   const openPromises = state.promises
     .filter((p) => p.status === "Bekliyor")
     .map((p) => ({
@@ -661,7 +834,7 @@ export function CollectionForm({ open, onOpenChange, record, preset }: FormProps
           ef &&
           claim > 0 &&
           others + Number(v.amount) >= claim - 0.005 &&
-          !["Tahsil edildi", "Kapandı"].includes(ef.status)
+          !isEnforcementClosed(ef.status)
         ) {
           patch("enforcements", ef.id, { status: "Tahsil edildi" });
           toast.success("Tahsilat kaydedildi", {

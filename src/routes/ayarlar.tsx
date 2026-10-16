@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
   Archive,
+  Building,
   Building2,
   Clock,
   DatabaseBackup,
@@ -39,6 +40,7 @@ import {
   LOCKED_CASE_STATUSES,
   LOCKED_ENFORCEMENT_STATUSES,
   LOCKED_FEE_KINDS,
+  type CategoryKey,
   type FirmProfile,
   type Settings as SettingsT,
   type User,
@@ -48,7 +50,9 @@ import { displayEmail, formatIban } from "@/lib/format";
 import { sendSentryTest, sentryEnabled } from "@/lib/sentry";
 import { PermissionsTab } from "@/components/settings/PermissionsTab";
 import { CronTab } from "@/components/settings/CronTab";
+import { CompanyListsTab } from "@/components/settings/CompanyListsTab";
 import { formatDate, today } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { archiveCandidates } from "@/lib/finance";
 import {
   Select,
@@ -73,12 +77,20 @@ function Page() {
   const navigate = useNavigate();
   const { sekme } = Route.useSearch();
   // Yetkisi olmayan sekmeler adresle de açılamaz
-  const allowed = new Set(
-    permissions.manageSettings
-      ? ["buro", "kullanicilar", "izinler", "kategoriler", "hesabim", "yedek", "zamanlama"]
-      : ["hesabim"],
-  );
-  const tab = sekme && allowed.has(sekme) ? sekme : permissions.manageSettings ? "buro" : "hesabim";
+  // Admin hepsini görür; avukat yalnızca İzinler'de kendisine açılan bölümleri görür
+  const sa = permissions.settingsAccess;
+  const visibleTabs = [
+    sa.firm.view && "buro",
+    (permissions.manageUsers || sa.users.view) && "kullanicilar",
+    permissions.manageUsers && "izinler",
+    sa.categories.view && "kategoriler",
+    sa.companies.view && "sirketler",
+    "hesabim",
+    sa.backup.view && "yedek",
+    permissions.manageSettings && "zamanlama",
+  ].filter(Boolean) as string[];
+  const allowed = new Set(visibleTabs);
+  const tab = sekme && allowed.has(sekme) ? sekme : visibleTabs[0];
   const setTab = (t: string) => navigate({ to: "/ayarlar", search: { sekme: t }, replace: true });
 
   return (
@@ -91,12 +103,12 @@ function Page() {
       <Tabs value={tab} onValueChange={setTab}>
         <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
           <TabsList className="h-10 w-max">
-            {permissions.manageSettings && (
+            {sa.firm.view && (
               <TabsTrigger value="buro">
                 <Building2 className="mr-1.5 h-4 w-4" /> Büro
               </TabsTrigger>
             )}
-            {permissions.manageUsers && (
+            {(permissions.manageUsers || sa.users.view) && (
               <TabsTrigger value="kullanicilar">
                 <Users className="mr-1.5 h-4 w-4" /> Kullanıcılar
               </TabsTrigger>
@@ -106,15 +118,20 @@ function Page() {
                 <ShieldCheck className="mr-1.5 h-4 w-4" /> İzinler
               </TabsTrigger>
             )}
-            {permissions.manageSettings && (
+            {sa.categories.view && (
               <TabsTrigger value="kategoriler">
                 <Tags className="mr-1.5 h-4 w-4" /> Kategoriler
+              </TabsTrigger>
+            )}
+            {sa.companies.view && (
+              <TabsTrigger value="sirketler">
+                <Building className="mr-1.5 h-4 w-4" /> Şirket listeleri
               </TabsTrigger>
             )}
             <TabsTrigger value="hesabim">
               <UserCog className="mr-1.5 h-4 w-4" /> Hesabım
             </TabsTrigger>
-            {permissions.manageSettings && (
+            {sa.backup.view && (
               <TabsTrigger value="yedek">
                 <DatabaseBackup className="mr-1.5 h-4 w-4" /> Yedekleme
               </TabsTrigger>
@@ -127,16 +144,19 @@ function Page() {
           </TabsList>
         </div>
         <TabsContent value="buro" className="mt-4">
-          <FirmTab />
+          <FirmTab canEdit={sa.firm.edit} />
         </TabsContent>
         <TabsContent value="kullanicilar" className="mt-4">
-          <UsersTab />
+          <UsersTab canCreate={sa.users.create} canEdit={sa.users.edit} />
         </TabsContent>
         <TabsContent value="izinler" className="mt-4">
           <PermissionsTab />
         </TabsContent>
         <TabsContent value="kategoriler" className="mt-4">
-          <CategoriesTab />
+          <CategoriesTab access={sa.categories} />
+        </TabsContent>
+        <TabsContent value="sirketler" className="mt-4">
+          <CompanyListsTab access={sa.companies} />
         </TabsContent>
         <TabsContent value="hesabim" className="mt-4">
           <AccountTab />
@@ -154,7 +174,7 @@ function Page() {
 
 /* ───────────── Büro ───────────── */
 
-function FirmTab() {
+function FirmTab({ canEdit }: { canEdit: boolean }) {
   const { state, updateSettings, organization } = useErp();
   const [firm, setFirm] = useState<FirmProfile>(state.settings.firm);
   useEffect(() => setFirm(state.settings.firm), [state.settings.firm]);
@@ -169,6 +189,7 @@ function FirmTab() {
       <Input
         value={(firm[key] as string) ?? ""}
         placeholder={opts?.placeholder}
+        disabled={!canEdit}
         onChange={(e) => setFirm((f) => ({ ...f, [key]: e.target.value }))}
       />
     </label>
@@ -218,6 +239,7 @@ function FirmTab() {
             <span className="text-[14px] font-medium">Ekstre alt notu</span>
             <Textarea
               value={firm.statementNote}
+              disabled={!canEdit}
               onChange={(e) => setFirm((f) => ({ ...f, statementNote: e.target.value }))}
               rows={2}
             />
@@ -228,8 +250,10 @@ function FirmTab() {
         {firm.logo ? (
           <AttachmentChip
             file={firm.logo}
-            onRemove={() => setFirm((f) => ({ ...f, logo: undefined }))}
+            onRemove={canEdit ? () => setFirm((f) => ({ ...f, logo: undefined })) : undefined}
           />
+        ) : !canEdit ? (
+          <p className="text-sm text-muted-foreground">Logo yüklenmemiş.</p>
         ) : (
           <FileDrop
             accept="image/*"
@@ -240,7 +264,7 @@ function FirmTab() {
           />
         )}
       </Section>
-      <div className="sticky bottom-4 z-10 flex justify-end">
+      <div className={canEdit ? "sticky bottom-4 z-10 flex justify-end" : "hidden"}>
         <div
           className={
             dirty
@@ -272,8 +296,12 @@ function FirmTab() {
 
 /* ───────────── Kullanıcılar ───────────── */
 
-function UsersTab() {
-  const { state, currentUser, remove, patch, setUserPassword } = useErp();
+function UsersTab({ canCreate, canEdit }: { canCreate: boolean; canEdit: boolean }) {
+  const readOnly = !canCreate && !canEdit;
+  const { state, currentUser, remove, patch, setUserPassword, permissions } = useErp();
+  // Admin olmayan "kullanıcı yönetimi" yetkilisi Admin hesaplarına dokunamaz (veritabanı da engeller)
+  const lockedRow = (u: User) =>
+    !permissions.manageUsers && u.role === "Admin" && u.id !== currentUser.id;
   const [resetFor, setResetFor] = useState<(typeof state.users)[number] | null>(null);
   const quick = useQuick();
   const confirm = useConfirm();
@@ -331,11 +359,19 @@ function UsersTab() {
   return (
     <Section
       title="Kullanıcılar"
-      description="Büro kullanıcıları (admin ve avukat)"
+      description={
+        readOnly
+          ? "Büro kullanıcıları (yalnızca görüntüleme; ekleme ve düzenleme için yetki gerekir)"
+          : permissions.manageUsers
+            ? "Büro kullanıcıları (admin ve avukat)"
+            : "Büro kullanıcıları. Yalnızca avukat hesapları yönetilir; Admin hesaplarına dokunamazsınız"
+      }
       actions={
-        <Button size="sm" onClick={() => quick.open("user")}>
-          <Plus /> Kullanıcı ekle
-        </Button>
+        !canCreate ? undefined : (
+          <Button size="sm" onClick={() => quick.open("user")}>
+            <Plus /> Kullanıcı ekle
+          </Button>
+        )
       }
       bodyClassName="p-0"
     >
@@ -387,8 +423,12 @@ function UsersTab() {
           },
         ]}
         exportName="Kullanıcılar"
-        onRowClick={edit}
-        rowActions={(u) => (
+        onRowClick={!canEdit ? undefined : (u) => !lockedRow(u) && edit(u)}
+        rowActions={
+          !canEdit
+            ? undefined
+            : (u) =>
+                lockedRow(u) ? null : (
           <>
             <DropdownMenuItem onClick={() => edit(u)}>
               <Pencil /> {u.id === currentUser.id ? "Profil ayarları" : "Düzenle"}
@@ -426,7 +466,7 @@ function UsersTab() {
 
 /* ───────────── Kategoriler ───────────── */
 
-type CatKey = keyof Omit<SettingsT, "firm" | "rolePermissions">;
+type CatKey = CategoryKey;
 
 const CAT_GROUPS: Array<{
   title: string;
@@ -475,8 +515,13 @@ const CAT_GROUPS: Array<{
       {
         key: "enforcementStatuses",
         title: "İcra durumları",
-        desc: "Haciz, satış, ödeme planı... (kilitliler otomatik kullanılır)",
+        desc: "Açık, durdurulmuş, kapalı... (kilitliler otomatik kullanılır)",
         locked: LOCKED_ENFORCEMENT_STATUSES,
+      },
+      {
+        key: "enforcementStopReasons",
+        title: "Durdurulma sebepleri",
+        desc: "Durum \"Durdurulmuş\" seçilince sorulur",
       },
       { key: "enforcementTypes", title: "Takip türleri", desc: "İlamsız, ilamlı, kambiyo..." },
       {
@@ -492,9 +537,141 @@ const CAT_GROUPS: Array<{
       },
     ],
   },
+  {
+    title: "İcra işlem geçmişi",
+    items: [
+      {
+        key: "enforcementEventTypes",
+        title: "İşlem türleri",
+        desc: "Tebliğ, itiraz, kesinleştirme, sorgu, haciz... (Sorgu ve Haciz ek alan açar)",
+        locked: ["Sorgu", "Haciz"],
+      },
+      {
+        key: "inquiryTypes",
+        title: "Sorgu türleri",
+        desc: "Araç, taşınmaz, banka, SGK, firma...",
+      },
+      { key: "seizureTypes", title: "Haciz türleri", desc: "Araç, taşınmaz, maaş, banka..." },
+      {
+        key: "resultTypes",
+        title: "Sorgu / haciz sonuçları",
+        desc: "Olumlu, olumsuz, düşük miktar...",
+      },
+    ],
+  },
 ];
 
-function CategoriesTab() {
+/** Kapalı dava dosyalarının saklanma süresi */
+function ClosedCaseSettings({ canEdit }: { canEdit: boolean }) {
+  const { state, updateSettings } = useErp();
+  const current = state.settings.closedCaseRetentionMonths;
+  const [months, setMonths] = useState(String(current));
+  useEffect(() => setMonths(String(current)), [current]);
+  const m = Number(months);
+  const valid = Number.isInteger(m) && m >= 1 && m <= 120;
+  const closed = state.cases.filter((c) => c.status === "Kapalı").length;
+  return (
+    <Section
+      title="Kapalı dosyaların saklanma süresi"
+      description={`Kapatılan dava dosyası bu süre boyunca kayıtlarıyla birlikte saklanır; süre dolunca bir sonraki ay başında (her ayın 1'i) otomatik silinir; müvekkilde yalnızca toplam alacak / verecek ve ücret toplamları kalır. Şu an ${closed} kapalı dosya var.`}
+    >
+      <form
+        inert={!canEdit}
+        className={cn("flex flex-wrap items-end gap-3", !canEdit && "opacity-60")}
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!valid) {
+            toast.error("Süre 1–120 ay olmalı");
+            return;
+          }
+          updateSettings({ closedCaseRetentionMonths: m });
+          toast.success("Saklama süresi kaydedildi");
+        }}
+      >
+        <label className="space-y-1.5">
+          <span className="text-[14px] font-medium">Kapanıştan sonra kaç ay saklansın</span>
+          <Input
+            type="number"
+            min={1}
+            max={120}
+            value={months}
+            onChange={(e) => setMonths(e.target.value)}
+            className="w-40"
+          />
+        </label>
+        <Button type="submit" disabled={m === current}>
+          Kaydet
+        </Button>
+      </form>
+    </Section>
+  );
+}
+
+/** Haczin geçerlilik süresi ve hatırlatma zamanı */
+function SeizureSettings({ canEdit }: { canEdit: boolean }) {
+  const { state, updateSettings } = useErp();
+  const [months, setMonths] = useState(String(state.settings.seizureValidMonths));
+  const [days, setDays] = useState(String(state.settings.seizureReminderDays));
+  useEffect(() => {
+    setMonths(String(state.settings.seizureValidMonths));
+    setDays(String(state.settings.seizureReminderDays));
+  }, [state.settings.seizureValidMonths, state.settings.seizureReminderDays]);
+  const m = Number(months);
+  const d = Number(days);
+  const valid = Number.isInteger(m) && m >= 1 && m <= 60 && Number.isInteger(d) && d >= 1 && d <= 120;
+  const dirty =
+    m !== state.settings.seizureValidMonths || d !== state.settings.seizureReminderDays;
+  return (
+    <Section
+      title="Haciz süresi ve hatırlatma"
+      description="Haczin düşeceği tarih = son haciz tarihi + süre. Bu tarihten belirtilen gün kadar önce dosya sorumlularına bildirim gider (her gün 08:00)."
+    >
+      <form
+        inert={!canEdit}
+        className={cn("flex flex-wrap items-end gap-3", !canEdit && "opacity-60")}
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!valid) {
+            toast.error("Süre 1–60 ay, hatırlatma 1–120 gün olmalı");
+            return;
+          }
+          updateSettings({ seizureValidMonths: m, seizureReminderDays: d });
+          toast.success("Haciz süresi kaydedildi");
+        }}
+      >
+        <label className="space-y-1.5">
+          <span className="text-[14px] font-medium">Haciz geçerlilik süresi (ay)</span>
+          <Input
+            type="number"
+            min={1}
+            max={60}
+            value={months}
+            onChange={(e) => setMonths(e.target.value)}
+            className="w-40"
+          />
+        </label>
+        <label className="space-y-1.5">
+          <span className="text-[14px] font-medium">Kaç gün önce hatırlatılsın</span>
+          <Input
+            type="number"
+            min={1}
+            max={120}
+            value={days}
+            onChange={(e) => setDays(e.target.value)}
+            className="w-40"
+          />
+        </label>
+        <Button type="submit" disabled={!dirty}>
+          Kaydet
+        </Button>
+      </form>
+    </Section>
+  );
+}
+
+type SectionAccess = { view: boolean; create: boolean; edit: boolean; delete: boolean };
+
+function CategoriesTab({ access }: { access: SectionAccess }) {
   const { state, updateSettings } = useErp();
   return (
     <div className="space-y-6">
@@ -515,10 +692,14 @@ function CategoriesTab() {
                 items={state.settings[c.key]}
                 locked={c.locked}
                 canEmpty={c.canEmpty}
+                canAdd={access.create}
+                canRemove={access.delete}
                 onChange={(items) => updateSettings({ [c.key]: items } as Partial<SettingsT>)}
               />
             ))}
           </div>
+          {g.title === "Dosyalar" && <ClosedCaseSettings canEdit={access.edit} />}
+          {g.title === "İcra" && <SeizureSettings canEdit={access.edit} />}
         </div>
       ))}
     </div>
@@ -531,6 +712,8 @@ function CategoryEditor({
   items,
   locked = [],
   canEmpty,
+  canAdd = true,
+  canRemove = true,
   onChange,
 }: {
   title: string;
@@ -538,6 +721,8 @@ function CategoryEditor({
   items: string[];
   locked?: string[];
   canEmpty?: boolean;
+  canAdd?: boolean;
+  canRemove?: boolean;
   onChange: (v: string[]) => void;
 }) {
   const [value, setValue] = useState("");
@@ -575,6 +760,8 @@ function CategoryEditor({
               {i}
               {isLocked ? (
                 <Lock className="mx-0.5 h-3 w-3 text-muted-foreground" />
+              ) : !canRemove ? (
+                <span className="w-1.5" />
               ) : (
                 <button
                   type="button"
@@ -589,6 +776,7 @@ function CategoryEditor({
           );
         })}
       </div>
+      {canAdd && (
       <form
         className="mt-3 flex gap-2"
         onSubmit={(e) => {
@@ -606,6 +794,7 @@ function CategoryEditor({
           <Plus /> Ekle
         </Button>
       </form>
+      )}
     </Section>
   );
 }
@@ -841,7 +1030,7 @@ function ErrorTrackingSection() {
 }
 
 function BackupTab() {
-  const { state, replaceState } = useErp();
+  const { state, replaceState, permissions } = useErp();
   const confirm = useConfirm();
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -890,9 +1079,11 @@ function BackupTab() {
           >
             <Download /> Yedeği indir (.zip)
           </Button>
-          <Button variant="outline" onClick={() => input.current?.click()}>
-            <Upload /> Yedekten geri yükle
-          </Button>
+          {permissions.manageSettings && (
+            <Button variant="outline" onClick={() => input.current?.click()}>
+              <Upload /> Yedekten geri yükle
+            </Button>
+          )}
           <input
             ref={input}
             type="file"
@@ -920,8 +1111,8 @@ function BackupTab() {
           />
         </div>
       </Section>
-      <ArchiveSection />
-      <ErrorTrackingSection />
+      {permissions.manageSettings && <ArchiveSection />}
+      {permissions.manageSettings && <ErrorTrackingSection />}
     </div>
   );
 }

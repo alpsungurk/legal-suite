@@ -44,7 +44,16 @@ const FIELD_LABELS: Record<string, string> = {
   role: "Rol",
   active: "Aktif",
   dueDate: "Vade",
-  principal: "Asıl alacak",
+  principal: "Takip çıkış rakamı",
+  side: "Taraf",
+  details: "Takip bilgileri",
+  last_seizure_date: "Son haciz tarihi",
+  lastSeizureDate: "Son haciz tarihi",
+  stop_reason: "Durdurulma sebebi",
+  stopReason: "Durdurulma sebebi",
+  inquiry_type: "Sorgu türü",
+  seizure_type: "Haciz türü",
+  result: "Sonuç",
 };
 
 function Page() {

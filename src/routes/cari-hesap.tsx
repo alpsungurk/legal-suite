@@ -1,5 +1,23 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { BookOpenCheck, Printer, Scale, TrendingDown, TrendingUp } from "lucide-react";
+import { useState } from "react";
+import {
+  ArrowRight,
+  BookOpenCheck,
+  ListOrdered,
+  Printer,
+  Scale,
+  TrendingDown,
+  TrendingUp,
+} from "lucide-react";
+import { LedgerTable } from "@/components/lists/tables";
+import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { useErp } from "@/lib/erp-store";
 import { clientFinance, clientLedger } from "@/lib/finance";
 import { formatMoney, sumBy } from "@/lib/format";
@@ -18,7 +36,11 @@ export const Route = createFileRoute("/cari-hesap")({
 function Page() {
   const { state, permissions } = useErp();
   const navigate = useNavigate();
+  // Satıra tıklayınca müvekkilin hareketleri yan panelde açılır; hareketler oradan silinebilir
+  const [openId, setOpenId] = useState<string | null>(null);
   if (!permissions.can("ledger")) return <NoAccess />;
+  const openClient = state.clients.find((c) => c.id === openId);
+  const openFin = openClient ? clientFinance(state, openClient.id) : null;
 
   const rows = state.clients.map((c) => {
     const { entries } = clientLedger(state, c.id);
@@ -166,19 +188,31 @@ function Page() {
         ]}
         initialSort={{ id: "balance", desc: true }}
         exportName="Cari hesaplar"
-        onRowClick={(r) =>
-          navigate({
-            to: "/muvekkiller/$id",
-            params: { id: r.client.id },
-            search: { sekme: "ekstre" },
-          })
-        }
+        onRowClick={(r) => setOpenId(r.client.id)}
         rowActions={(r) => (
-          <DropdownMenuItem asChild>
-            <Link to="/yazdir/ekstre/$id" params={{ id: r.client.id }} target="_blank">
-              <Printer /> Ekstre yazdır
-            </Link>
-          </DropdownMenuItem>
+          <>
+            <DropdownMenuItem onClick={() => setOpenId(r.client.id)}>
+              <ListOrdered /> Hareketler (düzenle / sil)
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() =>
+                navigate({
+                  to: "/muvekkiller/$id",
+                  params: { id: r.client.id },
+                  search: { sekme: "ekstre" },
+                })
+              }
+            >
+              <ArrowRight /> Müvekkil sayfasına git
+            </DropdownMenuItem>
+            {permissions.can("statements") && (
+              <DropdownMenuItem asChild>
+                <Link to="/yazdir/ekstre/$id" params={{ id: r.client.id }} target="_blank">
+                  <Printer /> Ekstre yazdır
+                </Link>
+              </DropdownMenuItem>
+            )}
+          </>
         )}
         footer={(v) => (
           <tr>
@@ -213,6 +247,47 @@ function Page() {
         ve müvekkil adına yapılan icra tahsilatları. Bakiye pozitifse müvekkil borçlu, negatifse
         alacaklıdır.
       </p>
+      <Sheet open={!!openClient} onOpenChange={(o) => !o && setOpenId(null)}>
+        <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-4xl">
+          {openClient && openFin && (
+            <>
+              <SheetHeader className="text-left">
+                <SheetTitle>{openClient.name} · cari hareketler</SheetTitle>
+                <SheetDescription>
+                  Bakiye {formatMoney(Math.abs(openFin.balance))} ({openFin.status}). Bir hareketi
+                  silmek için satırın sağındaki menüyü kullanın; silinen hareket asıl kaydından
+                  (masraf, plan, tahsilat, aktarım) silinir.
+                </SheetDescription>
+              </SheetHeader>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    navigate({
+                      to: "/muvekkiller/$id",
+                      params: { id: openClient.id },
+                      search: { sekme: "ekstre" },
+                    })
+                  }
+                >
+                  <ArrowRight /> Müvekkil sayfası
+                </Button>
+                {permissions.can("statements") && (
+                  <Button variant="outline" size="sm" asChild>
+                    <Link to="/yazdir/ekstre/$id" params={{ id: openClient.id }} target="_blank">
+                      <Printer /> Ekstre yazdır
+                    </Link>
+                  </Button>
+                )}
+              </div>
+              <div className="mt-4">
+                <LedgerTable clientId={openClient.id} />
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </PageShell>
   );
 }

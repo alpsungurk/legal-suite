@@ -12,6 +12,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { useErp } from "@/lib/erp-store";
+import { isEnforcementClosed } from "@/lib/erp-types";
 import { accountBalances, allInstallments, clientFinance, feeIncomeInRange } from "@/lib/finance";
 import { addDays, formatDateLong, formatMoney, sumBy, today } from "@/lib/format";
 import { StatGrid, StatTile } from "@/components/app/StatTile";
@@ -238,7 +239,7 @@ function LawyerDashboard() {
   ).length;
   const late = myEvents.filter((r) => r.date < t).length;
   const myEnf = state.enforcements.filter(
-    (e) => e.responsibleIds.includes(currentUser.id) && e.status !== "Kapandı",
+    (e) => e.responsibleIds.includes(currentUser.id) && !isEnforcementClosed(e.status),
   );
   const monthStart = `${t.slice(0, 7)}-01`;
   const myExpenses = state.expenses.filter(

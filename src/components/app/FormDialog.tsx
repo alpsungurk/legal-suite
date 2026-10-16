@@ -47,11 +47,12 @@ export type FieldType =
 
 export type FormField = {
   name: string;
-  label: string;
+  /** Sabit metin ya da o anki değerlere göre değişen etiket */
+  label: string | ((v: FormValues) => string);
   type?: FieldType;
   required?: boolean;
   placeholder?: string;
-  hint?: ReactNode;
+  hint?: ReactNode | ((v: FormValues) => ReactNode);
   options?: Array<string | Option>;
   /** 2: tam genişlik */
   span?: 1 | 2;
@@ -67,6 +68,14 @@ export type FormField = {
 };
 
 export type FormErrors = Record<string, string>;
+
+type ResolvedField = Omit<FormField, "label" | "hint"> & { label: string; hint?: ReactNode };
+
+const resolveField = (f: FormField, v: FormValues): ResolvedField => ({
+  ...f,
+  label: typeof f.label === "function" ? f.label(v) : f.label,
+  hint: typeof f.hint === "function" ? f.hint(v) : f.hint,
+});
 
 export function FormDialog({
   open,
@@ -172,7 +181,7 @@ export function FormDialog({
             {visibleFields.map((f) => (
               <FieldBlock
                 key={f.name}
-                field={f}
+                field={resolveField(f, values)}
                 value={values[f.name]}
                 error={errors[f.name]}
                 onChange={(v) => setField(f, v)}
@@ -205,7 +214,7 @@ function FieldBlock({
   error,
   onChange,
 }: {
-  field: FormField;
+  field: ResolvedField;
   value: unknown;
   error?: string;
   onChange: (v: unknown) => void;

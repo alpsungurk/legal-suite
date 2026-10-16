@@ -3,7 +3,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { CalendarDays, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { useErp } from "@/lib/erp-store";
-import { allInstallments } from "@/lib/finance";
+import { allInstallments, seizureDueDate } from "@/lib/finance";
 import {
   addDays,
   formatDateLong,
@@ -23,7 +23,7 @@ import { ReminderTable } from "@/components/lists/tables";
 import { PlanSheet } from "@/components/lists/PlanSheet";
 import { EmptyState } from "@/components/EmptyState";
 import { cn } from "@/lib/utils";
-import type { Reminder } from "@/lib/erp-types";
+import { isEnforcementClosed, type Reminder } from "@/lib/erp-types";
 
 export const Route = createFileRoute("/takvim")({
   head: () => ({ meta: [{ title: "Ajanda — Avukat Yönetim Paneli" }] }),
@@ -36,7 +36,7 @@ type Ev = {
   time?: string;
   title: string;
   sub?: string;
-  kind: "Duruşma" | "Süre" | "Görev" | "Taksit" | "Ödeme sözü";
+  kind: "Duruşma" | "Süre" | "Görev" | "Taksit" | "Ödeme sözü" | "Haciz";
   done?: boolean;
   reminder?: Reminder;
   planId?: string;
@@ -49,6 +49,7 @@ const kindStyle: Record<Ev["kind"], string> = {
   Görev: "bg-blue-500/10 text-blue-700 dark:text-blue-300 border-l-blue-500",
   Taksit: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-l-emerald-500",
   "Ödeme sözü": "bg-amber-500/12 text-amber-800 dark:text-amber-300 border-l-amber-500",
+  Haciz: "bg-orange-500/12 text-orange-800 dark:text-orange-300 border-l-orange-500",
 };
 const kindDot: Record<Ev["kind"], string> = {
   Duruşma: "bg-violet-500",
@@ -56,6 +57,7 @@ const kindDot: Record<Ev["kind"], string> = {
   Görev: "bg-blue-500",
   Taksit: "bg-emerald-500",
   "Ödeme sözü": "bg-amber-500",
+  Haciz: "bg-orange-500",
 };
 
 function Page() {
@@ -120,6 +122,23 @@ function Page() {
         enforcementId: p.enforcementId,
       });
     }
+    // Haczin düşeceği tarih: son haciz tarihi girilince kendiliğinden takvime düşer (elle kayıt gerekmez)
+    if (permissions.can("enforcements")) {
+      for (const e of state.enforcements) {
+        if (scope === "mine" && !e.responsibleIds.includes(currentUser.id)) continue;
+        if (e.side === "Borçlu" || isEnforcementClosed(e.status)) continue;
+        const due = seizureDueDate(e, state.settings.seizureValidMonths);
+        if (!due) continue;
+        out.push({
+          id: `hz-${e.id}`,
+          date: due,
+          title: `Haciz düşüyor · ${e.no}`,
+          sub: e.office,
+          kind: "Haciz",
+          enforcementId: e.id,
+        });
+      }
+    }
     return out.sort(
       (a, b) => a.date.localeCompare(b.date) || (a.time ?? "99").localeCompare(b.time ?? "99"),
     );
@@ -155,7 +174,7 @@ function Page() {
     <PageShell>
       <PageHeader
         title="Ajanda"
-        description="Duruşmalar, süreler, görevler, taksit vadeleri ve ödeme sözleri"
+        description="Duruşmalar, süreler, görevler, taksit vadeleri, ödeme sözleri ve haciz düşme tarihleri"
         icon={CalendarDays}
         actions={
           <Button onClick={() => quick.open("reminder", { preset: { date: selected } })}>

@@ -332,7 +332,7 @@ export function Topbar() {
             >
               <KeyRound className="mr-2 h-4 w-4" /> Hesabım ve şifre
             </DropdownMenuItem>
-            {permissions.manageSettings && (
+            {permissions.canOpenSettings && (
               <DropdownMenuItem onClick={() => navigate({ to: "/ayarlar" })}>
                 <Settings className="mr-2 h-4 w-4" /> Ayarlar
               </DropdownMenuItem>

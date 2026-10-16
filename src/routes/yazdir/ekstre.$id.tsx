@@ -20,7 +20,7 @@ function Page() {
   const { from, to } = Route.useSearch();
   const { state, permissions } = useErp();
   const client = state.clients.find((c) => c.id === id);
-  if (!client || !permissions.can("ledger")) return <NoAccess />;
+  if (!client || !permissions.can("ledger") || !permissions.can("statements")) return <NoAccess />;
 
   const { entries, opening, closing } = clientLedger(state, id, { from, to });
   const fin = clientFinance(state, id);

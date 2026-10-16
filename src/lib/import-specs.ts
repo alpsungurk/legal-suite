@@ -10,17 +10,27 @@ import {
   type Account,
   type CaseFile,
   type Client,
+  DEFAULT_ENFORCEMENT_STATUS,
+  STOPPED_ENFORCEMENT_STATUS,
   type Debtor,
   type EnforcementFile,
+  type EnforcementSide,
   type ErpState,
   type Permissions,
   type User,
 } from "@/lib/erp-types";
 import { caseCourtLabel } from "@/lib/finance";
-import { formatDate, round2, today } from "@/lib/format";
+import { fileNoKey, formatDate, normalizeFileNo, round2, today } from "@/lib/format";
+import { newId } from "@/lib/mappers";
 import { excelSerialToISO, type RawCell } from "@/lib/excel-read";
 
-export type ImportKind = "clients" | "cases" | "expenses" | "debtors" | "enforcements";
+export type ImportKind =
+  | "clients"
+  | "cases"
+  | "expenses"
+  | "debtors"
+  | "enforcements"
+  | "enforcementsOwed";
 
 export type ColumnType = "text" | "money" | "date" | "enum" | "lookup" | "multi";
 
@@ -38,6 +48,8 @@ export type ImportColumn = {
   hint: string;
   example?: string;
   width?: number;
+  /** Çok satırlı metin: satır sonları korunur, önizlemede geniş kutu */
+  multiline?: boolean;
 };
 
 export type ImportContext = {
@@ -69,6 +81,8 @@ export type ImportSpec = {
   softDuplicates: boolean;
   check: (v: RowValues, ctx: ImportContext) => RowCheck;
   build: (rows: RowValues[], ctx: ImportContext) => ImportBatch;
+  /** Hazır şablon dosyası: verilirse "Şablon" düğmesi bu dosyayı olduğu gibi indirir (public/ altında) */
+  templateFile?: { url: string; filename: string };
 };
 
 /* ───────────── Ortak çözümleyiciler ───────────── */
@@ -139,7 +153,12 @@ const amountText = new Intl.NumberFormat("tr-TR", {
 });
 
 /** Excel hücresini ekranda düzenlenecek metne çevirir */
-export function cellToText(cell: RawCell, type: ColumnType | undefined, date1904: boolean): string {
+export function cellToText(
+  cell: RawCell,
+  type: ColumnType | undefined,
+  date1904: boolean,
+  multiline = false,
+): string {
   if (cell == null) return "";
   if (typeof cell === "boolean") return cell ? "Evet" : "Hayır";
   if (type === "date") {
@@ -148,6 +167,14 @@ export function cellToText(cell: RawCell, type: ColumnType | undefined, date1904
   }
   if (typeof cell === "number")
     return type === "money" ? amountText.format(round2(cell)) : String(round2(cell));
+  if (multiline)
+    return cell
+      .replace(/\r\n?/g, "\n")
+      .split("\n")
+      .map((l) => l.replace(/[ \t\u00a0]+/g, " ").trim())
+      .join("\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
   return cell.replace(/\s+/g, " ").trim();
 }
 
@@ -231,9 +258,11 @@ function findEnforcement(
   state: ErpState,
   value: string,
 ): { enf?: EnforcementFile; error?: string } {
-  const [noPart, officePart] = value.split("·").map((x) => norm(x));
+  const [noRaw, officeRaw] = value.split("·");
+  const noPart = fileNoKey(noRaw ?? "");
+  const officePart = norm(officeRaw);
   if (!noPart) return {};
-  const byNo = state.enforcements.filter((e) => norm(e.no) === noPart);
+  const byNo = state.enforcements.filter((e) => fileNoKey(e.no) === noPart);
   const exact = officePart ? byNo.filter((e) => norm(e.office) === officePart) : byNo;
   if (exact.length === 1) return { enf: exact[0] };
   if (byNo.length > 1)
@@ -831,10 +860,14 @@ const debtors: ImportSpec = {
 
 /* ───────────── İcra dosyaları ───────────── */
 
-function splitNames(value: string) {
+/**
+ * Hücredeki birden fazla adı ayırır: "1- A 2- B", "1) A 2) B", "A; B" ve satır sonları.
+ * Numarasız tek ad olduğu gibi kalır.
+ */
+export function splitNames(value: string) {
   return value
-    .split(/[;\n]/)
-    .map((x) => x.trim())
+    .split(/[;\n]|(?:^|\s)\d{1,2}\s*[-)]\s+/)
+    .map((x) => x.replace(/^\s*\d{1,2}\s*[-)]\s*/, "").trim())
     .filter(Boolean);
 }
 
@@ -846,193 +879,332 @@ function findDebtor(state: ErpState, name: string): Debtor | undefined {
   );
 }
 
-const enforcements: ImportSpec = {
-  kind: "enforcements",
-  title: "İcra dosyaları",
-  noun: "icra dosyası",
-  description: "İcra takiplerini toplu ekleyin. Kayıtlı olmayan borçlular otomatik oluşturulur.",
-  allowed: (p) => p.can("enforcements", "create"),
-  softDuplicates: false,
-  columns: [
-    {
-      key: "no",
-      header: "İcra dosya no",
-      required: true,
-      hint: "Ör. 2026/1234 E.",
-      example: "2026/1234 E.",
-      aliases: ["Dosya no", "Esas no", "No"],
-    },
-    {
-      key: "office",
-      header: "İcra dairesi",
-      required: true,
-      type: "lookup",
-      creatable: true,
-      options: (c) => c.state.settings.enforcementOffices,
-      hint: "Listeden seçin veya yazın; yeni daire listeye eklenir",
-      example: "İstanbul 12. İcra Dairesi",
-      width: 28,
-      aliases: ["Daire"],
-    },
-    {
-      key: "type",
-      header: "Takip türü",
-      type: "enum",
-      options: (c) => c.state.settings.enforcementTypes,
-      hint: "İlamsız, İlamlı, Kambiyo, Rehin, Kira, Diğer (boşsa İlamsız)",
-      aliases: ["Tür"],
-    },
-    {
-      key: "client",
-      header: "Alacaklı müvekkil",
-      required: true,
-      type: "lookup",
-      options: lists.clients,
-      hint: "Kayıtlı müvekkil adı veya TC / vergi no",
-      width: 26,
-      aliases: ["Müvekkil", "Alacaklı"],
-    },
-    {
-      key: "debtors",
-      header: "Borçlular",
-      required: true,
-      type: "multi",
-      hint: "Borçlu adları; birden fazlaysa ; ile ayırın. Kayıtlı değilse oluşturulur",
-      example: "Mehmet Yılmaz",
-      width: 28,
-      aliases: ["Borçlu"],
-    },
-    {
-      key: "principal",
-      header: "Asıl alacak",
-      required: true,
-      type: "money",
-      hint: "Ör. 85.000",
-      example: "85000",
-      aliases: ["Asıl", "Alacak"],
-    },
-    { key: "interest", header: "Faiz", type: "money", hint: "İşlemiş faiz (boşsa 0)" },
-    {
-      key: "costs",
-      header: "Takip masrafı",
-      type: "money",
-      hint: "Takip masrafları (boşsa 0)",
-      aliases: ["Masraf"],
-    },
-    {
-      key: "status",
-      header: "Durum",
-      type: "enum",
-      options: (c) => c.state.settings.enforcementStatuses,
-      hint: "Boşsa Derdest",
-    },
-    {
-      key: "openingDate",
-      header: "Takip tarihi",
-      type: "date",
-      hint: "GG.AA.YYYY (boşsa bugün)",
-      aliases: ["Açılış tarihi", "Tarih"],
-    },
-    {
-      key: "responsible",
-      header: "Sorumlu avukat",
-      type: "multi",
-      options: lists.lawyers,
-      hint: "Birden fazlaysa ; ile ayırın",
-      width: 22,
-      aliases: ["Sorumlu"],
-    },
-    {
-      key: "case",
-      header: "İlgili dosya",
-      type: "lookup",
-      options: lists.cases,
-      hint: "İsteğe bağlı; dava dosya no",
-      width: 28,
-    },
-    { key: "note", header: "Not", hint: "Serbest not", width: 28 },
-  ],
-  check(v, ctx) {
-    const errors: Errors = {};
-    const warnings: string[] = [];
-    const s = ctx.state;
-    const no = required(v, "no", errors);
-    const office = required(v, "office", errors);
-    enumOf(v, "type", s.settings.enforcementTypes, errors, s.settings.enforcementTypes[0]);
-    enumOf(v, "status", s.settings.enforcementStatuses, errors, "Derdest");
-    let clientId: string | undefined;
-    if (required(v, "client", errors)) {
-      const r = findClient(s, v.client);
-      if (r.error) errors.client = r.error;
-      clientId = r.client?.id;
-    }
-    if (required(v, "debtors", errors, "En az bir borçlu girin")) {
-      const fresh = splitNames(v.debtors).filter((n) => !findDebtor(s, n));
-      if (fresh.length) warnings.push(`Yeni borçlu oluşturulacak: ${fresh.join(", ")}`);
-    }
-    money(v, "principal", errors, { required: true });
-    money(v, "interest", errors);
-    money(v, "costs", errors);
-    date(v, "openingDate", errors);
-    if (v.responsible?.trim()) {
-      const u = findUsers(s, v.responsible);
-      if (u.missing.length) errors.responsible = `Kullanıcı bulunamadı: ${u.missing.join(", ")}`;
-    }
-    if (v.case?.trim()) {
-      const r = findCase(s, v.case);
-      if (r.error) errors.case = r.error;
-      else if (clientId && r.kase?.clientId !== clientId)
-        errors.case = "Dosya bu müvekkile ait değil";
-    }
-    const dup = s.enforcements.find(
-      (e) => norm(e.no) === norm(no) && norm(e.office) === norm(office),
-    );
-    return {
-      errors,
-      warnings,
-      existing: dup ? `Bu icra dosyası zaten kayıtlı: ${dup.no}` : undefined,
-      key: `${norm(no)}|${norm(office)}`,
-    };
-  },
-  build(rows, ctx) {
-    const s = ctx.state;
-    const created = new Map<string, Draft<"debtors"> & { id: string }>();
-    const debtorId = (name: string) => {
-      const existing = findDebtor(s, name);
-      if (existing) return existing.id;
-      const k = norm(name);
-      if (!created.has(k))
-        created.set(k, {
-          id: `dbt-${Date.now().toString(36)}-${created.size}-${Math.random().toString(36).slice(2, 6)}`,
-          name: name.trim(),
-          kind: "Bireysel",
-        });
-      return created.get(k)!.id;
-    };
-    const out: Draft<"enforcements">[] = rows.map((v) => ({
-      no: v.no.trim(),
-      office: v.office.trim(),
-      type:
-        matchOption(v.type ?? "", s.settings.enforcementTypes) ?? s.settings.enforcementTypes[0],
-      clientId: findClient(s, v.client).client!.id,
-      debtorIds: [...new Set(splitNames(v.debtors).map(debtorId))],
-      principal: parseAmount(v.principal) ?? 0,
-      interest: parseAmount(v.interest ?? "") ?? 0,
-      costs: parseAmount(v.costs ?? "") ?? 0,
-      status: (matchOption(v.status ?? "", s.settings.enforcementStatuses) ??
-        "Derdest") as EnforcementFile["status"],
-      openingDate: parseDateText(v.openingDate ?? "") ?? today(),
-      responsibleIds: v.responsible?.trim()
-        ? findUsers(s, v.responsible).ids
-        : ctx.user.role === "Avukat"
-          ? [ctx.user.id]
-          : [],
-      caseId: v.case?.trim() ? findCase(s, v.case).kase?.id : undefined,
-      note: opt(v.note),
-    }));
-    return { debtors: [...created.values()], enforcements: out };
-  },
+/** Addan kişi / şirket tahmini (A.Ş., Ltd. Şti., Tic. vb. → Kurumsal) */
+export function guessKind(name: string): "Bireysel" | "Kurumsal" {
+  return /\b(a\.?\s?ş\.?|ltd|şti|şirketi|tic\.?|san\.?|holding|koop|vakf|derne|belediye|bakanl|a\.s\.?|inc|gmbh)/i.test(
+    name,
+  )
+    ? "Kurumsal"
+    : "Bireysel";
+}
+
+/** Liste değerini esnek eşler: "İlamsız Takip" → "İlamsız", "kapali" → "Kapalı" */
+function matchLoose(value: string, options: readonly string[]) {
+  const exact = matchOption(value, options);
+  if (exact) return exact;
+  const k = headerKey(value);
+  if (k.length < 3) return undefined;
+  return options
+    .filter((o) => {
+      const ok = headerKey(o);
+      return ok.length >= 3 && (k.startsWith(ok) || ok.startsWith(k));
+    })
+    .sort((a, b) => headerKey(b).length - headerKey(a).length)[0];
+}
+
+const firstDateIn = (text?: string) => {
+  const m = text?.match(/\b(\d{1,2})[./](\d{1,2})[./](\d{4})\b/);
+  return m ? parseDateText(`${m[1]}.${m[2]}.${m[3]}`) : null;
 };
+
+const defaultStatus = (s: ErpState) =>
+  s.settings.enforcementStatuses.includes(DEFAULT_ENFORCEMENT_STATUS)
+    ? DEFAULT_ENFORCEMENT_STATUS
+    : (s.settings.enforcementStatuses[0] ?? DEFAULT_ENFORCEMENT_STATUS);
+
+/**
+ * Alacaklı olduğumuz ve borçlu olduğumuz dosyalar aynı sütunlarla tutulur; yalnızca
+ * "Alacaklı" / "Borçlu" sütunlarından hangisinin müvekkilimiz olduğu değişir.
+ * Sütunlar başlığa göre tanındığı için sıranın önemi yoktur.
+ */
+function enforcementSpec(side: EnforcementSide): ImportSpec {
+  const owed = side === "Borçlu";
+  const partyWord = owed ? "alacaklı" : "borçlu";
+  const clientColumn: ImportColumn = {
+    key: "client",
+    header: owed ? "Borçlu (müvekkil)" : "Alacaklı (müvekkil)",
+    required: true,
+    type: "lookup",
+    creatable: true,
+    options: lists.clients,
+    hint: "Müvekkil adı veya TC / vergi no. Kayıtlı değilse müvekkil olarak oluşturulur",
+    example: owed ? "Kaya Holding A.Ş." : "Mehmet Yılmaz",
+    width: 26,
+    aliases: owed ? ["Borçlu", "Borçlu müvekkil", "Müvekkil"] : ["Alacaklı", "Alacaklı müvekkil", "Müvekkil"],
+  };
+  const partiesColumn: ImportColumn = {
+    key: "debtors",
+    header: owed ? "Alacaklı (karşı taraf)" : "Borçlu",
+    required: true,
+    type: "multi",
+    hint: `Birden fazlaysa "1- Ad 2- Ad" ya da ; ile yazın. Kayıtlı değilse oluşturulur`,
+    example: "1- Ali Veli 2- Ayşe Kaya",
+    width: 30,
+    aliases: owed ? ["Alacaklı", "Alacaklılar", "Karşı taraf"] : ["Borçlular", "Borçlu adı"],
+  };
+  return {
+    kind: owed ? "enforcementsOwed" : "enforcements",
+    // Büronun kendi Excel şablonu (İcra Boş Şablon.xlsx); borçlu listesinde Borçlu solda, Alacaklı sağda
+    templateFile: owed
+      ? { url: "/sablonlar/icra-borclu-bos-sablon.xlsx", filename: "İcra Borçlu Boş Şablon.xlsx" }
+      : { url: "/sablonlar/icra-bos-sablon.xlsx", filename: "İcra Boş Şablon.xlsx" },
+    title: owed ? "İcra – borçlu olduğumuz" : "İcra – alacaklı olduğumuz",
+    noun: "icra dosyası",
+    description: owed
+      ? "Müvekkilimizin borçlu olduğu takipler. Büronun Excel listesi doğrudan yüklenebilir."
+      : "Müvekkilimizin alacaklı olduğu takipler. Büronun Excel listesi doğrudan yüklenebilir.",
+    allowed: (p) => p.can("enforcements", "create"),
+    softDuplicates: false,
+    columns: [
+      {
+        key: "status",
+        header: "Dosya durumu",
+        type: "lookup",
+        options: (c) => c.state.settings.enforcementStatuses,
+        hint: "Açık, Durdurulmuş, Kapalı… (boşsa Açık)",
+        aliases: ["Durum"],
+      },
+      ...(owed ? [clientColumn, partiesColumn] : [clientColumn, partiesColumn]),
+      {
+        key: "office",
+        header: "Birim",
+        required: true,
+        type: "lookup",
+        creatable: true,
+        options: (c) => c.state.settings.enforcementOffices,
+        hint: "İcra dairesi; yeni yazılan listeye eklenir",
+        example: "Ankara 5. Genel İcra Dairesi",
+        width: 28,
+        aliases: ["İcra dairesi", "Daire"],
+      },
+      {
+        key: "no",
+        header: "Dosya no",
+        required: true,
+        hint: "Ör. 2026/101 E. (aktarımda bu biçime getirilir)",
+        example: "2026/101 E.",
+        aliases: ["İcra dosya no", "Esas no", "No"],
+      },
+      {
+        key: "type",
+        header: "Takip türü",
+        type: "lookup",
+        creatable: true,
+        options: (c) => c.state.settings.enforcementTypes,
+        hint: "İlamsız, İlamlı, Kambiyo… (\"İlamsız Takip\" de tanınır)",
+        aliases: ["Tür"],
+      },
+      {
+        key: "details",
+        header: "Takip bilgileri",
+        hint: "Dosyaya özgü serbest metin: alacağın niteliği, ilgili dosya…",
+        example: "Kambiyo alacağı – çek",
+        width: 32,
+        multiline: true,
+        aliases: ["Takip bilgisi", "Dosya bilgisi", "Dosya bilgileri"],
+      },
+      {
+        key: "principal",
+        header: "Takip çıkış rakamı",
+        required: true,
+        type: "money",
+        hint: "Asıl alacak + faiz + masraf toplamı",
+        example: "41786,30",
+        aliases: ["Takip çıkış tutarı", "Asıl alacak", "Asıl", "Alacak", "Tutar"],
+      },
+      {
+        key: "note",
+        header: "Açıklamalar",
+        hint: "İşlem geçmişi notları; satır sonları korunur",
+        width: 40,
+        multiline: true,
+        aliases: ["Açıklama", "Not", "Notlar"],
+      },
+      {
+        key: "lastSeizureDate",
+        header: "Son haciz tarihi",
+        type: "date",
+        hint: "GG.AA.YYYY; haczin düşmesine yaklaşınca hatırlatılır",
+        aliases: ["Haciz tarihi"],
+      },
+      {
+        key: "stopReason",
+        header: "Durdurulma sebebi",
+        type: "lookup",
+        creatable: true,
+        options: (c) => c.state.settings.enforcementStopReasons,
+        hint: "Durum Durdurulmuş ise",
+        aliases: ["Durdurma sebebi"],
+      },
+      {
+        key: "openingDate",
+        header: "Takip tarihi",
+        type: "date",
+        hint: "GG.AA.YYYY (boşsa açıklamadaki ilk tarih, o da yoksa bugün)",
+        aliases: ["Açılış tarihi", "Tarih"],
+      },
+      {
+        key: "interest",
+        header: "Faiz",
+        type: "money",
+        hint: "Varsa takip çıkış rakamına eklenir",
+      },
+      {
+        key: "costs",
+        header: "Takip masrafı",
+        type: "money",
+        hint: "Varsa takip çıkış rakamına eklenir",
+        aliases: ["Masraf"],
+      },
+      {
+        key: "responsible",
+        header: "Sorumlu avukat",
+        type: "multi",
+        options: lists.lawyers,
+        hint: "Birden fazlaysa ; ile ayırın",
+        width: 22,
+        aliases: ["Sorumlu"],
+      },
+      {
+        key: "case",
+        header: "İlgili dosya",
+        type: "lookup",
+        options: lists.cases,
+        hint: "İsteğe bağlı; dava dosya no",
+        width: 28,
+      },
+    ],
+    check(v, ctx) {
+      const errors: Errors = {};
+      const warnings: string[] = [];
+      const s = ctx.state;
+      const no = normalizeFileNo(required(v, "no", errors));
+      const office = required(v, "office", errors);
+      if (v.type?.trim() && !matchLoose(v.type, s.settings.enforcementTypes))
+        warnings.push(`Takip türü listeye eklenecek: ${v.type.trim()}`);
+      const status = v.status?.trim()
+        ? matchLoose(v.status, s.settings.enforcementStatuses)
+        : defaultStatus(s);
+      if (!status)
+        errors.status = `Listeden seçin: ${s.settings.enforcementStatuses.slice(0, 6).join(", ")}…`;
+      let clientId: string | undefined;
+      if (required(v, "client", errors)) {
+        const r = findClient(s, v.client);
+        clientId = r.client?.id;
+        if (!r.client) {
+          if (/birden fazla/.test(r.error ?? "")) errors.client = r.error!;
+          else warnings.push(`Yeni müvekkil oluşturulacak: ${v.client.trim()}`);
+        }
+      }
+      if (required(v, "debtors", errors, `En az bir ${partyWord} girin`)) {
+        const fresh = splitNames(v.debtors).filter((n) => !findDebtor(s, n));
+        if (fresh.length) warnings.push(`Yeni kart oluşturulacak: ${fresh.join(", ")}`);
+      }
+      const total =
+        money(v, "principal", errors, { required: true }) +
+        money(v, "interest", errors) +
+        money(v, "costs", errors);
+      if (!errors.principal && total <= 0) errors.principal = "Tutar sıfırdan büyük olmalı";
+      date(v, "openingDate", errors);
+      if (v.lastSeizureDate?.trim()) date(v, "lastSeizureDate", errors);
+      if (owed && v.lastSeizureDate?.trim())
+        warnings.push("Borçlu olduğumuz dosyada son haciz tarihi hatırlatma üretmez");
+      if (v.responsible?.trim()) {
+        const u = findUsers(s, v.responsible);
+        if (u.missing.length) errors.responsible = `Kullanıcı bulunamadı: ${u.missing.join(", ")}`;
+      }
+      if (v.case?.trim()) {
+        const r = findCase(s, v.case);
+        if (r.error) errors.case = r.error;
+        else if (clientId && r.kase?.clientId !== clientId)
+          errors.case = "Dosya bu müvekkile ait değil";
+      }
+      const dup = s.enforcements.find(
+        (e) => fileNoKey(e.no) === fileNoKey(no) && norm(e.office) === norm(office),
+      );
+      return {
+        errors,
+        warnings,
+        existing: dup ? `Bu icra dosyası zaten kayıtlı: ${dup.no}` : undefined,
+        key: `${fileNoKey(no)}|${norm(office)}`,
+      };
+    },
+    build(rows, ctx) {
+      const s = ctx.state;
+      const newClients = new Map<string, Draft<"clients"> & { id: string }>();
+      const clientId = (value: string) => {
+        const found = findClient(s, value).client;
+        if (found) return found.id;
+        const k = norm(value);
+        if (!newClients.has(k))
+          newClients.set(k, {
+            id: newId(),
+            name: value.trim(),
+            kind: guessKind(value),
+            email: "",
+            phone: "",
+            status: "Aktif",
+          });
+        return newClients.get(k)!.id;
+      };
+      const newParties = new Map<string, Draft<"debtors"> & { id: string }>();
+      const partyId = (name: string) => {
+        const existing = findDebtor(s, name);
+        if (existing) return existing.id;
+        const k = norm(name);
+        if (!newParties.has(k))
+          newParties.set(k, { id: newId(), name: name.trim(), kind: guessKind(name) });
+        return newParties.get(k)!.id;
+      };
+      const out: Draft<"enforcements">[] = rows.map((v) => {
+        const status = v.status?.trim()
+          ? (matchLoose(v.status, s.settings.enforcementStatuses) ?? defaultStatus(s))
+          : defaultStatus(s);
+        const type = v.type?.trim()
+          ? (matchLoose(v.type, s.settings.enforcementTypes) ?? v.type.trim())
+          : (s.settings.enforcementTypes[0] ?? "İlamsız");
+        const note = v.note?.trim() || "";
+        return {
+          side,
+          no: normalizeFileNo(v.no),
+          office: v.office.replace(/\s+/g, " ").trim(),
+          type,
+          clientId: clientId(v.client),
+          debtorIds: [...new Set(splitNames(v.debtors).map(partyId))],
+          principal: round2(
+            (parseAmount(v.principal) ?? 0) +
+              (parseAmount(v.interest ?? "") ?? 0) +
+              (parseAmount(v.costs ?? "") ?? 0),
+          ),
+          interest: 0,
+          costs: 0,
+          status,
+          stopReason: status === STOPPED_ENFORCEMENT_STATUS ? v.stopReason?.trim() || "" : "",
+          openingDate:
+            parseDateText(v.openingDate ?? "") ?? firstDateIn(note) ?? firstDateIn(v.details) ?? today(),
+          lastSeizureDate: owed ? "" : (parseDateText(v.lastSeizureDate ?? "") ?? ""),
+          responsibleIds: v.responsible?.trim()
+            ? findUsers(s, v.responsible).ids
+            : ctx.user.role === "Avukat"
+              ? [ctx.user.id]
+              : [],
+          caseId: v.case?.trim() ? findCase(s, v.case).kase?.id : undefined,
+          details: v.details?.trim() || "",
+          note,
+        };
+      });
+      // Sıra önemli: önce müvekkiller ve karşı taraflar, sonra onlara bağlı dosyalar
+      return {
+        clients: [...newClients.values()],
+        debtors: [...newParties.values()],
+        enforcements: out,
+      };
+    },
+  };
+}
+
+const enforcements = enforcementSpec("Alacaklı");
+const enforcementsOwed = enforcementSpec("Borçlu");
 
 export const IMPORT_SPECS: Record<ImportKind, ImportSpec> = {
   clients,
@@ -1040,6 +1212,7 @@ export const IMPORT_SPECS: Record<ImportKind, ImportSpec> = {
   expenses,
   debtors,
   enforcements,
+  enforcementsOwed,
 };
 
 export const IMPORT_ORDER: ImportKind[] = [
@@ -1048,4 +1221,5 @@ export const IMPORT_ORDER: ImportKind[] = [
   "expenses",
   "debtors",
   "enforcements",
+  "enforcementsOwed",
 ];
