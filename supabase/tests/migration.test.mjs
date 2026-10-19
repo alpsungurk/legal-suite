@@ -69,6 +69,18 @@ let kapaliErr = null;
 try { await db.exec(kapaliSql); await db.exec(kapaliSql); } catch (e) { kapaliErr = e; }
 ok("kapalı dosya migration'ı çalıştı (iki kez)", !kapaliErr, kapaliErr ? kapaliErr.message : "");
 if (kapaliErr) { console.log(R.join("\n")); process.exit(1); }
+const STCL = fileURLToPath(new URL("../migrations/20261019000000_storage_cleanup_api.sql", import.meta.url));
+const stclSql = readFileSync(STCL, "utf8");
+let stclErr = null;
+try { await db.exec(stclSql); await db.exec(stclSql); } catch (e) { stclErr = e; }
+ok("storage temizliği migration'ı çalıştı (iki kez)", !stclErr, stclErr ? stclErr.message : "");
+if (stclErr) { console.log(R.join("\n")); process.exit(1); }
+// Supabase gibi: storage.objects'ten doğrudan SQL silme yasak (cron_retention buna takılmamalı)
+await db.exec(`
+  create function storage.protect_delete() returns trigger language plpgsql as $$
+  begin raise exception 'Direct deletion from storage tables is not allowed. Use the Storage API instead.'; end $$;
+  create trigger protect_objects_delete before delete on storage.objects for each statement execute function storage.protect_delete();
+`);
 
 const q = async (text, params) => (await db.query(text, params)).rows;
 const one = async (text, params) => (await q(text, params))[0];
@@ -297,6 +309,7 @@ await db.exec(`
   insert into public.expenses (org_id,title,type,amount,charge_to,paid_by,date,created_by) values ('${orgA}','2023 gideri','Harç',50,'Büro','Büro','2023-03-03','${A}');
 `);
 const ret = (await one(`select app.cron_retention() r`)).r;
+ok("saklama: Storage sırası Edge Function için korunur", ret.storage_queue >= 1 && (await one(`select count(*)::int c from public.storage_cleanup`)).c === ret.storage_queue, JSON.stringify(ret));
 ok("saklama: eski okunmuş bildirim silindi", (await q(`select 1 from public.notifications where title='eski bildirim'`)).length === 0);
 ok("saklama: 24 aydan eski aktivite silindi", (await q(`select 1 from public.activities where detail='çok eski'`)).length === 0);
 ok("otomatik arşiv: yıl-1'den eski yıllar", (await q(`select 1 from public.expenses where title='2023 gideri'`)).length === 0 && ret.archived >= 1, JSON.stringify(ret));
