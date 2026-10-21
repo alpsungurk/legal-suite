@@ -7,15 +7,18 @@ import type {
   Collections,
   ErpState,
   FeePlan,
+  SalaryGarnishment,
   Settings,
 } from "@/lib/erp-types";
 import {
   accountFromRow,
   accountToRow,
-  activityFromRow,
   attachmentFromRow,
   bankFromRow,
   bankToRow,
+  salaryEntryFromRow,
+  salaryGarnishmentFromRow,
+  salaryGarnishmentToRow,
   caseFromRow,
   caseToRow,
   clientFromRow,
@@ -105,11 +108,12 @@ export async function loadFullState(): Promise<LoadResult | null> {
     remindersRes,
     docsRes,
     notifsRes,
-    actsRes,
     yearsRes,
     archiveRes,
     eventsRes,
     banksRes,
+    salaryRes,
+    salaryEntriesRes,
   ] = await Promise.all([
     supabase.from("organizations").select("*").eq("id", orgId).single(),
     supabase.from("org_settings").select("*").eq("org_id", orgId).maybeSingle(),
@@ -117,7 +121,11 @@ export async function loadFullState(): Promise<LoadResult | null> {
     supabase.from("clients").select("*").eq("org_id", orgId),
     supabase.from("cases").select("*").eq("org_id", orgId),
     supabase.from("accounts").select("*").eq("org_id", orgId),
-    supabase.from("account_transactions").select("*").eq("org_id", orgId).order("date", { ascending: false }),
+    supabase
+      .from("account_transactions")
+      .select("*")
+      .eq("org_id", orgId)
+      .order("date", { ascending: false }),
     supabase.from("debtors").select("*").eq("org_id", orgId),
     supabase.from("enforcements").select("*").eq("org_id", orgId),
     supabase.from("enforcement_debtors").select("*").eq("org_id", orgId),
@@ -131,16 +139,29 @@ export async function loadFullState(): Promise<LoadResult | null> {
     supabase.from("installment_payments").select("*").eq("org_id", orgId),
     supabase.from("reminders").select("*").eq("org_id", orgId),
     supabase.from("documents").select("*").eq("org_id", orgId),
-    supabase.from("notifications").select("*").eq("org_id", orgId).order("created_at", { ascending: false }).limit(500),
-    supabase.from("activities").select("*").eq("org_id", orgId).order("created_at", { ascending: false }).limit(1000),
+    supabase
+      .from("notifications")
+      .select("*")
+      .eq("org_id", orgId)
+      .order("created_at", { ascending: false })
+      .limit(500),
     supabase.from("yearly_stats").select("*").eq("org_id", orgId),
     supabase.from("org_archive").select("*").eq("org_id", orgId).maybeSingle(),
     // 20261016 migration'ı çalıştırılmadıysa tablo yoktur: hata yükü durdurmaz, liste boş gelir
-    supabase.from("enforcement_events").select("*").eq("org_id", orgId).order("date", { ascending: false }),
+    supabase
+      .from("enforcement_events")
+      .select("*")
+      .eq("org_id", orgId)
+      .order("date", { ascending: false }),
     supabase.from("banks").select("*").eq("org_id", orgId).order("name"),
+    supabase.from("salary_garnishments").select("*").eq("org_id", orgId).order("employee_name"),
+    supabase.from("salary_garnishment_entries").select("*").eq("org_id", orgId).order("position"),
   ]);
   if (eventsRes.error) console.warn("İcra işlem geçmişi yüklenemedi:", eventsRes.error.message);
   if (banksRes.error) console.warn("Banka listesi yüklenemedi:", banksRes.error.message);
+  if (salaryRes.error) console.warn("Maaş haczi sıraları yüklenemedi:", salaryRes.error.message);
+  if (salaryEntriesRes.error)
+    console.warn("Maaş haczi dosyaları yüklenemedi:", salaryEntriesRes.error.message);
 
   const firstErr = [
     orgRes,
@@ -164,7 +185,6 @@ export async function loadFullState(): Promise<LoadResult | null> {
     remindersRes,
     docsRes,
     notifsRes,
-    actsRes,
     yearsRes,
     archiveRes,
   ].find((r) => r.error)?.error;
@@ -175,7 +195,7 @@ export async function loadFullState(): Promise<LoadResult | null> {
     ref: attachmentFromRow(r as Record<string, unknown>),
   }));
   const attById = new Map(attachments.map((a) => [a.ref.id, a.ref]));
-  const expenseReceipts = new Map<string, typeof attachments[0]["ref"][]>();
+  const expenseReceipts = new Map<string, (typeof attachments)[0]["ref"][]>();
   for (const a of attachments) {
     if (a.row.entity === "expense" && a.row.entity_id) {
       const eid = String(a.row.entity_id);
@@ -246,6 +266,21 @@ export async function loadFullState(): Promise<LoadResult | null> {
     banks: banksRes.error
       ? []
       : (banksRes.data ?? []).map((r) => bankFromRow(r as Record<string, unknown>)),
+    salaryGarnishments: (() => {
+      if (salaryRes.error || salaryEntriesRes.error) return [];
+      const byQueue = new Map<string, ReturnType<typeof salaryEntryFromRow>[]>();
+      for (const row of salaryEntriesRes.data ?? []) {
+        const r = row as Record<string, unknown>;
+        const qid = String(r.queue_id);
+        const list = byQueue.get(qid) ?? [];
+        list.push(salaryEntryFromRow(r));
+        byQueue.set(qid, list);
+      }
+      return (salaryRes.data ?? []).map((row) => {
+        const r = row as Record<string, unknown>;
+        return salaryGarnishmentFromRow(r, byQueue.get(String(r.id)) ?? []);
+      });
+    })(),
     expenses: (expensesRes.data ?? []).map((r) => {
       const row = r as Record<string, unknown>;
       return expenseFromRow(row, expenseReceipts.get(String(row.id)) ?? []);
@@ -266,7 +301,6 @@ export async function loadFullState(): Promise<LoadResult | null> {
     notifications: (notifsRes.data ?? []).map((r) =>
       notificationFromRow(r as Record<string, unknown>),
     ),
-    activities: (actsRes.data ?? []).map((r) => activityFromRow(r as Record<string, unknown>)),
   };
 
   const organization: Organization = {
@@ -298,6 +332,7 @@ const TABLE: Partial<Record<CollectionKey, string>> = {
   contacts: "contact_logs",
   events: "enforcement_events",
   banks: "banks",
+  salaryGarnishments: "salary_garnishments",
   expenses: "expenses",
   reminders: "reminders",
   documents: "documents",
@@ -319,18 +354,40 @@ const TO_ROW: Partial<Record<CollectionKey, ToRowFn>> = {
   contacts: (c) => contactToRow(c as never),
   events: (e) => eventToRow(e as never),
   banks: (b) => bankToRow(b as never),
+  salaryGarnishments: (q) => salaryGarnishmentToRow(q as never),
   expenses: (e) => expenseToRow(e as never),
   reminders: (r) => reminderToRow(r as never),
   documents: (d) => documentToRow(d as never),
   notifications: (n) => notificationToRow(n as never),
 };
 
+async function syncSalaryEntries(queue: SalaryGarnishment) {
+  // position unique: sil-yeniden yaz (sıra değişiminde çakışma olmasın)
+  const { error: delErr } = await supabase
+    .from("salary_garnishment_entries")
+    .delete()
+    .eq("queue_id", queue.id);
+  if (delErr) throw new Error(errMsg(delErr));
+  if (!queue.entries.length) return;
+  const rows = queue.entries.map((e, i) => ({
+    id: e.id,
+    queue_id: queue.id,
+    position: i + 1,
+    office: e.office.trim(),
+    file_no: e.fileNo.trim(),
+    notified_at: e.notifiedAt || null,
+    note: e.note || null,
+  }));
+  const { error } = await supabase.from("salary_garnishment_entries").insert(rows);
+  if (error) throw new Error(errMsg(error));
+}
+
 async function syncEnforcementDebtors(enforcementId: string, debtorIds: string[]) {
   await supabase.from("enforcement_debtors").delete().eq("enforcement_id", enforcementId);
   if (!debtorIds.length) return;
-  const { error } = await supabase.from("enforcement_debtors").insert(
-    debtorIds.map((debtor_id) => ({ enforcement_id: enforcementId, debtor_id })),
-  );
+  const { error } = await supabase
+    .from("enforcement_debtors")
+    .insert(debtorIds.map((debtor_id) => ({ enforcement_id: enforcementId, debtor_id })));
   if (error) throw new Error(errMsg(error));
 }
 
@@ -366,11 +423,12 @@ async function syncFeePlan(plan: FeePlan) {
       .select("id")
       .eq("installment_id", inst.id);
     const keepPay = new Set(inst.payments.map((p) => p.id));
-    const delPay = (existingPays ?? [])
-      .map((r) => r.id as string)
-      .filter((id) => !keepPay.has(id));
+    const delPay = (existingPays ?? []).map((r) => r.id as string).filter((id) => !keepPay.has(id));
     if (delPay.length) {
-      const { error: dpErr } = await supabase.from("installment_payments").delete().in("id", delPay);
+      const { error: dpErr } = await supabase
+        .from("installment_payments")
+        .delete()
+        .in("id", delPay);
       if (dpErr) throw new Error(errMsg(dpErr));
     }
     for (const pay of inst.payments) {
@@ -388,10 +446,7 @@ async function syncFeePlan(plan: FeePlan) {
   }
 }
 
-async function syncExpenseReceipts(
-  expenseId: string,
-  receipts: { id: string }[],
-) {
+async function syncExpenseReceipts(expenseId: string, receipts: { id: string }[]) {
   const ids = receipts.map((r) => r.id);
   if (ids.length) {
     const { error } = await supabase
@@ -413,15 +468,71 @@ async function syncExpenseReceipts(
   }
 }
 
-/** Kaydı Supabase'e yazar (upsert). activities istemci yazmaz. */
+/** Kaydı Supabase'e yazar (upsert). */
 export async function persistSave<K extends CollectionKey>(
   key: K,
   item: Collections[K],
 ): Promise<void> {
-  if (key === "activities") return;
+  await persistSaveMany(key, [item]);
+}
+
+const IMPORT_BATCH_KEYS = [
+  "clients",
+  "debtors",
+  "banks",
+  "cases",
+  "expenses",
+  "enforcements",
+] as const;
+
+type ImportBatchKey = (typeof IMPORT_BATCH_KEYS)[number];
+
+/** Excel aktarımı: tek RPC ile JSON batch (PostgREST satır satır yazmaz). */
+export async function persistImportBatch(
+  batch: Partial<{ [K in ImportBatchKey]: Collections[K][] }>,
+): Promise<{ total: number; counts: Record<string, number> }> {
+  const payload: Record<string, unknown[]> = {};
+  let prepared = 0;
+
+  for (const key of IMPORT_BATCH_KEYS) {
+    const items = batch[key];
+    if (!items?.length) continue;
+    if (key === "enforcements") {
+      payload.enforcements = (items as Collections["enforcements"][]).map((e) => ({
+        id: e.id,
+        ...enforcementToRow(e),
+        debtor_ids: e.debtorIds ?? [],
+      }));
+    } else {
+      const toRow = TO_ROW[key];
+      if (!toRow) continue;
+      payload[key] = items.map((item) => ({
+        id: item.id,
+        ...toRow(item as unknown as Record<string, unknown>),
+      }));
+    }
+    prepared += items.length;
+  }
+
+  if (!prepared) return { total: 0, counts: {} };
+
+  const { data, error } = await supabase.rpc("import_batch", { p_payload: payload });
+  if (error) throw new Error(errMsg(error));
+  const counts = (data ?? {}) as Record<string, number>;
+  return { total: Number(counts.total ?? prepared), counts };
+}
+
+const UPSERT_CHUNK = 250;
+
+/** Toplu upsert (aktarım). enforcements için borçlu eşlemesi de gruplanır. */
+export async function persistSaveMany<K extends CollectionKey>(
+  key: K,
+  items: Collections[K][],
+): Promise<void> {
+  if (!items.length) return;
 
   if (key === "plans") {
-    await syncFeePlan(item as FeePlan);
+    for (const item of items) await syncFeePlan(item as FeePlan);
     return;
   }
 
@@ -429,29 +540,74 @@ export async function persistSave<K extends CollectionKey>(
   const toRow = TO_ROW[key];
   if (!table || !toRow) throw new Error(`Desteklenmeyen koleksiyon: ${key}`);
 
-  const row = { id: item.id, ...toRow(item as unknown as Record<string, unknown>) };
-  if (key === "users") {
-    // Kullanıcı profilleri istemciden eklenmez (Edge Function ekler); yalnızca güncellenir.
-    // upsert burada kullanılamaz: profiles tablosuna istemci için INSERT yetkisi yoktur.
-    const { id, ...changes } = row;
-    const { data, error } = await supabase.from("profiles").update(changes).eq("id", id).select("id");
-    if (error) throw new Error(errMsg(error));
-    if (!data?.length) throw new Error("Kullanıcı güncellenemedi: yetkiniz yok ya da kayıt bulunamadı");
+  if (key === "salaryGarnishments") {
+    for (const item of items) {
+      const q = item as SalaryGarnishment;
+      const row = { id: q.id, ...salaryGarnishmentToRow(q) };
+      const { error } = await supabase.from("salary_garnishments").upsert(row);
+      if (error) throw new Error(errMsg(error));
+      await syncSalaryEntries(q);
+    }
     return;
   }
-  const { error } = await supabase.from(table).upsert(row);
-  if (error) throw new Error(errMsg(error));
+
+  if (key === "users") {
+    for (const item of items) {
+      const row = { id: item.id, ...toRow(item as unknown as Record<string, unknown>) };
+      const { id, ...changes } = row;
+      const { data, error } = await supabase
+        .from("profiles")
+        .update(changes)
+        .eq("id", id)
+        .select("id");
+      if (error) throw new Error(errMsg(error));
+      if (!data?.length)
+        throw new Error("Kullanıcı güncellenemedi: yetkiniz yok ya da kayıt bulunamadı");
+    }
+    return;
+  }
+
+  for (let i = 0; i < items.length; i += UPSERT_CHUNK) {
+    const slice = items.slice(i, i + UPSERT_CHUNK);
+    const rows = slice.map((item) => ({
+      id: item.id,
+      ...toRow(item as unknown as Record<string, unknown>),
+    }));
+    const { error } = await supabase.from(table).upsert(rows);
+    if (error) throw new Error(errMsg(error));
+  }
 
   if (key === "enforcements") {
-    await syncEnforcementDebtors(item.id, (item as Collections["enforcements"]).debtorIds ?? []);
+    const enfItems = items as Collections["enforcements"][];
+    const ids = enfItems.map((e) => e.id);
+    if (ids.length) {
+      const { error: delErr } = await supabase
+        .from("enforcement_debtors")
+        .delete()
+        .in("enforcement_id", ids);
+      if (delErr) throw new Error(errMsg(delErr));
+      const links = enfItems.flatMap((e) =>
+        (e.debtorIds ?? []).map((debtor_id) => ({ enforcement_id: e.id, debtor_id })),
+      );
+      if (links.length) {
+        for (let j = 0; j < links.length; j += UPSERT_CHUNK) {
+          const { error: insErr } = await supabase
+            .from("enforcement_debtors")
+            .insert(links.slice(j, j + UPSERT_CHUNK));
+          if (insErr) throw new Error(errMsg(insErr));
+        }
+      }
+    }
   }
   if (key === "expenses") {
-    await syncExpenseReceipts(item.id, (item as Collections["expenses"]).receipts ?? []);
+    for (const item of items) {
+      await syncExpenseReceipts(item.id, (item as Collections["expenses"]).receipts ?? []);
+    }
   }
 }
 
 export async function persistRemove(key: CollectionKey, ids: string[]): Promise<void> {
-  if (!ids.length || key === "activities") return;
+  if (!ids.length) return;
   if (key === "plans") {
     const { error } = await supabase.from("fee_plans").delete().in("id", ids);
     if (error) throw new Error(errMsg(error));
@@ -474,7 +630,8 @@ export async function persistSettings(orgId: string, patch: Partial<Settings>): 
     .eq("org_id", orgId)
     .select("org_id");
   if (error) throw new Error(errMsg(error));
-  if (!data?.length) throw new Error("Ayarlar kaydedilemedi: yönetici yetkisi gerekli veya ayar satırı yok");
+  if (!data?.length)
+    throw new Error("Ayarlar kaydedilemedi: yönetici yetkisi gerekli veya ayar satırı yok");
 }
 
 export async function persistOrgName(orgId: string, name: string): Promise<void> {

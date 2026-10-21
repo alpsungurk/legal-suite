@@ -74,11 +74,6 @@ const STATUS_TONES: Record<string, Tone> = {
   "Süre sonu": "red",
   Keşif: "cyan",
   Toplantı: "blue",
-  // aktivite
-  Ekleme: "green",
-  Güncelleme: "blue",
-  Silme: "red",
-  İşlem: "violet",
 };
 
 export function toneFor(status: string): Tone {

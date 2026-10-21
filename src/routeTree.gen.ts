@@ -10,7 +10,6 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AktiviteRouteImport } from './routes/aktivite'
 import { Route as AyarlarRouteImport } from './routes/ayarlar'
 import { Route as BankaKasaRouteImport } from './routes/banka-kasa'
 import { Route as BelgelerRouteImport } from './routes/belgeler'
@@ -31,6 +30,7 @@ import { Route as DosyalarIdRouteImport } from './routes/dosyalar/$id'
 import { Route as IcraIndexRouteImport } from './routes/icra/index'
 import { Route as IcraIdRouteImport } from './routes/icra/$id'
 import { Route as IcraBorcluRouteImport } from './routes/icra/borclu'
+import { Route as IcraMaasHacziRouteImport } from './routes/icra/maas-haczi'
 import { Route as IcraSurelerRouteImport } from './routes/icra/sureler'
 import { Route as MuvekkillerIndexRouteImport } from './routes/muvekkiller/index'
 import { Route as MuvekkillerIdRouteImport } from './routes/muvekkiller/$id'
@@ -41,11 +41,6 @@ import { Route as YazdirEkstreIdRouteImport } from './routes/yazdir/ekstre.$id'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AktiviteRoute = AktiviteRouteImport.update({
-  id: '/aktivite',
-  path: '/aktivite',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AyarlarRoute = AyarlarRouteImport.update({
@@ -148,6 +143,11 @@ const IcraBorcluRoute = IcraBorcluRouteImport.update({
   path: '/icra/borclu',
   getParentRoute: () => rootRouteImport,
 } as any)
+const IcraMaasHacziRoute = IcraMaasHacziRouteImport.update({
+  id: '/icra/maas-haczi',
+  path: '/icra/maas-haczi',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IcraSurelerRoute = IcraSurelerRouteImport.update({
   id: '/icra/sureler',
   path: '/icra/sureler',
@@ -181,7 +181,6 @@ const YazdirEkstreIdRoute = YazdirEkstreIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/aktivite': typeof AktiviteRoute
   '/ayarlar': typeof AyarlarRoute
   '/banka-kasa': typeof BankaKasaRoute
   '/belgeler': typeof BelgelerRoute
@@ -199,6 +198,7 @@ export interface FileRoutesByFullPath {
   '/dosyalar/$id': typeof DosyalarIdRoute
   '/icra/$id': typeof IcraIdRoute
   '/icra/borclu': typeof IcraBorcluRoute
+  '/icra/maas-haczi': typeof IcraMaasHacziRoute
   '/icra/sureler': typeof IcraSurelerRoute
   '/muvekkiller/$id': typeof MuvekkillerIdRoute
   '/borclular/': typeof BorclularIndexRoute
@@ -211,7 +211,6 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/aktivite': typeof AktiviteRoute
   '/ayarlar': typeof AyarlarRoute
   '/banka-kasa': typeof BankaKasaRoute
   '/belgeler': typeof BelgelerRoute
@@ -229,6 +228,7 @@ export interface FileRoutesByTo {
   '/dosyalar/$id': typeof DosyalarIdRoute
   '/icra/$id': typeof IcraIdRoute
   '/icra/borclu': typeof IcraBorcluRoute
+  '/icra/maas-haczi': typeof IcraMaasHacziRoute
   '/icra/sureler': typeof IcraSurelerRoute
   '/muvekkiller/$id': typeof MuvekkillerIdRoute
   '/borclular': typeof BorclularIndexRoute
@@ -242,7 +242,6 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/aktivite': typeof AktiviteRoute
   '/ayarlar': typeof AyarlarRoute
   '/banka-kasa': typeof BankaKasaRoute
   '/belgeler': typeof BelgelerRoute
@@ -260,6 +259,7 @@ export interface FileRoutesById {
   '/dosyalar/$id': typeof DosyalarIdRoute
   '/icra/$id': typeof IcraIdRoute
   '/icra/borclu': typeof IcraBorcluRoute
+  '/icra/maas-haczi': typeof IcraMaasHacziRoute
   '/icra/sureler': typeof IcraSurelerRoute
   '/muvekkiller/$id': typeof MuvekkillerIdRoute
   '/borclular/': typeof BorclularIndexRoute
@@ -274,7 +274,6 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/aktivite'
     | '/ayarlar'
     | '/banka-kasa'
     | '/belgeler'
@@ -292,6 +291,7 @@ export interface FileRouteTypes {
     | '/dosyalar/$id'
     | '/icra/$id'
     | '/icra/borclu'
+    | '/icra/maas-haczi'
     | '/icra/sureler'
     | '/muvekkiller/$id'
     | '/borclular/'
@@ -304,7 +304,6 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/aktivite'
     | '/ayarlar'
     | '/banka-kasa'
     | '/belgeler'
@@ -322,6 +321,7 @@ export interface FileRouteTypes {
     | '/dosyalar/$id'
     | '/icra/$id'
     | '/icra/borclu'
+    | '/icra/maas-haczi'
     | '/icra/sureler'
     | '/muvekkiller/$id'
     | '/borclular'
@@ -334,7 +334,6 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
-    | '/aktivite'
     | '/ayarlar'
     | '/banka-kasa'
     | '/belgeler'
@@ -352,6 +351,7 @@ export interface FileRouteTypes {
     | '/dosyalar/$id'
     | '/icra/$id'
     | '/icra/borclu'
+    | '/icra/maas-haczi'
     | '/icra/sureler'
     | '/muvekkiller/$id'
     | '/borclular/'
@@ -365,7 +365,6 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AktiviteRoute: typeof AktiviteRoute
   AyarlarRoute: typeof AyarlarRoute
   BankaKasaRoute: typeof BankaKasaRoute
   BelgelerRoute: typeof BelgelerRoute
@@ -383,6 +382,7 @@ export interface RootRouteChildren {
   DosyalarIdRoute: typeof DosyalarIdRoute
   IcraIdRoute: typeof IcraIdRoute
   IcraBorcluRoute: typeof IcraBorcluRoute
+  IcraMaasHacziRoute: typeof IcraMaasHacziRoute
   IcraSurelerRoute: typeof IcraSurelerRoute
   MuvekkillerIdRoute: typeof MuvekkillerIdRoute
   BorclularIndexRoute: typeof BorclularIndexRoute
@@ -401,13 +401,6 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/aktivite': {
-      id: '/aktivite'
-      path: '/aktivite'
-      fullPath: '/aktivite'
-      preLoaderRoute: typeof AktiviteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/ayarlar': {
@@ -550,6 +543,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IcraBorcluRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/icra/maas-haczi': {
+      id: '/icra/maas-haczi'
+      path: '/icra/maas-haczi'
+      fullPath: '/icra/maas-haczi'
+      preLoaderRoute: typeof IcraMaasHacziRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/icra/sureler': {
       id: '/icra/sureler'
       path: '/icra/sureler'
@@ -597,7 +597,6 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AktiviteRoute: AktiviteRoute,
   AyarlarRoute: AyarlarRoute,
   BankaKasaRoute: BankaKasaRoute,
   BelgelerRoute: BelgelerRoute,
@@ -615,6 +614,7 @@ const rootRouteChildren: RootRouteChildren = {
   DosyalarIdRoute: DosyalarIdRoute,
   IcraIdRoute: IcraIdRoute,
   IcraBorcluRoute: IcraBorcluRoute,
+  IcraMaasHacziRoute: IcraMaasHacziRoute,
   IcraSurelerRoute: IcraSurelerRoute,
   MuvekkillerIdRoute: MuvekkillerIdRoute,
   BorclularIndexRoute: BorclularIndexRoute,

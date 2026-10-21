@@ -6,7 +6,6 @@ import {
   FolderKanban,
   FolderOpen,
   Gavel,
-  History,
   Landmark,
   LayoutDashboard,
   PiggyBank,
@@ -61,11 +60,16 @@ export const NAV_PAGES: NavPage[] = [
     icon: Timer,
     allow: (p) => p.can("enforcements"),
   },
+  {
+    title: "Maaş haczi sıraları",
+    url: "/icra/maas-haczi",
+    icon: Users,
+    allow: (p) => p.can("enforcements"),
+  },
   { title: "Borçlular", url: "/borclular", icon: UserX, allow: (p) => p.can("enforcements") },
   { title: "Bildirimler", url: "/bildirimler", icon: Bell },
   { title: "Dikkat gerektirenler", url: "/uyarilar", icon: Bell },
   { title: "Raporlar", url: "/raporlar", icon: BarChart3, allow: (p) => p.can("reports") },
-  { title: "Aktivite geçmişi", url: "/aktivite", icon: History, allow: (p) => p.can("activity") },
   { title: "Ayarlar", url: "/ayarlar", icon: Settings, allow: (p) => p.canOpenSettings },
 ];
 

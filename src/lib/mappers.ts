@@ -6,10 +6,11 @@ import { normalizeBankAnswers } from "@/lib/erp-types";
 import type {
   Account,
   AccountTx,
-  ActivityLog,
   AppNotification,
   AttachmentRef,
   Bank,
+  SalaryGarnishment,
+  SalaryGarnishmentEntry,
   CaseFile,
   Client,
   Collection,
@@ -149,8 +150,7 @@ export function settingsFromRow(r: Record<string, unknown> | null): Settings {
     enforcementOffices: (r.enforcement_offices as string[]) ?? [],
     rolePermissions: (r.role_permissions as Record<string, boolean>) ?? base.rolePermissions,
     // Aşağıdakiler 20261016 migration'ı ile geldi; çalıştırılmadıysa varsayılanlar kullanılır
-    enforcementStopReasons:
-      (r.enforcement_stop_reasons as string[]) ?? base.enforcementStopReasons,
+    enforcementStopReasons: (r.enforcement_stop_reasons as string[]) ?? base.enforcementStopReasons,
     enforcementEventTypes: (r.enforcement_event_types as string[]) ?? base.enforcementEventTypes,
     inquiryTypes: (r.inquiry_types as string[]) ?? base.inquiryTypes,
     seizureTypes: (r.seizure_types as string[]) ?? base.seizureTypes,
@@ -379,6 +379,49 @@ export function bankToRow(b: Partial<Bank>) {
   const row: Record<string, unknown> = {};
   if (b.name != null) row.name = b.name.trim();
   if (b.active != null) row.active = b.active;
+  return row;
+}
+
+/* ───── Maaş haczi sıraları ───── */
+
+export function salaryEntryFromRow(r: Record<string, unknown>): SalaryGarnishmentEntry {
+  return {
+    id: String(r.id),
+    office: String(r.office ?? ""),
+    fileNo: String(r.file_no ?? ""),
+    notifiedAt: optStr(dateOnly(r.notified_at as string)),
+    note: optStr(r.note),
+    position: num(r.position) || 1,
+  };
+}
+
+export function salaryGarnishmentFromRow(
+  r: Record<string, unknown>,
+  entries: SalaryGarnishmentEntry[] = [],
+): SalaryGarnishment {
+  return {
+    id: String(r.id),
+    firmId: String(r.org_id),
+    createdAt: iso(r.created_at as string),
+    updatedAt: iso(r.updated_at as string),
+    clientId: String(r.client_id),
+    employeeName: String(r.employee_name ?? ""),
+    payday: r.payday == null ? undefined : num(r.payday),
+    status: r.status === "İşten ayrıldı" ? "İşten ayrıldı" : "Devam ediyor",
+    leftAt: optStr(dateOnly(r.left_at as string)),
+    note: optStr(r.note),
+    entries: [...entries].sort((a, b) => a.position - b.position),
+  };
+}
+
+export function salaryGarnishmentToRow(q: Partial<SalaryGarnishment>) {
+  const row: Record<string, unknown> = {};
+  if (q.clientId != null) row.client_id = q.clientId;
+  if (q.employeeName != null) row.employee_name = q.employeeName.trim();
+  if (q.payday !== undefined) row.payday = q.payday ?? null;
+  if (q.status != null) row.status = q.status;
+  if (q.leftAt !== undefined) row.left_at = q.leftAt || null;
+  if (q.note !== undefined) row.note = q.note || null;
   return row;
 }
 
@@ -702,10 +745,7 @@ export function installmentFromRow(
   };
 }
 
-export function planFromRow(
-  r: Record<string, unknown>,
-  installments: Installment[] = [],
-): FeePlan {
+export function planFromRow(r: Record<string, unknown>, installments: Installment[] = []): FeePlan {
   return {
     id: String(r.id),
     firmId: String(r.org_id),
@@ -832,21 +872,6 @@ export function notificationToRow(n: Partial<AppNotification>) {
   if (n.read != null) row.read = n.read;
   if (n.link !== undefined) row.link = n.link || null;
   return row;
-}
-
-export function activityFromRow(r: Record<string, unknown>): ActivityLog {
-  return {
-    id: String(r.id),
-    firmId: String(r.org_id),
-    createdAt: iso(r.created_at as string),
-    updatedAt: iso(r.created_at as string),
-    actorId: String(r.actor_id ?? ""),
-    action: r.action as ActivityLog["action"],
-    entity: String(r.entity ?? ""),
-    entityId: optStr(r.entity_id),
-    detail: String(r.detail ?? ""),
-    changes: r.changes as ActivityLog["changes"],
-  };
 }
 
 export function yearStatsFromRow(r: Record<string, unknown>): { year: number; stats: YearStats } {

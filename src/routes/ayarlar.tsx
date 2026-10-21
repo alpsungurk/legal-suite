@@ -945,7 +945,7 @@ function ArchiveSection() {
         ["Biten ajanda kaydı", c.reminders.length],
         ["Sonuçlanan ödeme sözü", c.promises.length],
         ["Görüşme notu", c.contacts.length],
-        ["Aktivite / bildirim", c.activities.length + c.notifications.length],
+        ["Bildirim", c.notifications.length],
       ]
     : [];
   const total = counts.reduce((n, [, v]) => n + v, 0);

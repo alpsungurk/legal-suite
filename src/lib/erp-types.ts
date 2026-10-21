@@ -183,6 +183,29 @@ export type Bank = BaseEntity & {
   active: boolean;
 };
 
+/** Maaş haczi sırasındaki tek icra dosyası (tutar tutulmaz) */
+export type SalaryGarnishmentEntry = {
+  id: string;
+  office: string;
+  fileNo: string;
+  /** Tebliğ tarihi — varsayılan sıralama buna göre */
+  notifiedAt?: ISODate;
+  note?: string;
+  position: number;
+};
+
+/** İşveren (müvekkil) + çalışan başına maaş haczi sırası */
+export type SalaryGarnishment = BaseEntity & {
+  clientId: string;
+  employeeName: string;
+  /** 1–31; doluysa o gün kesinti hatırlatması */
+  payday?: number;
+  status: "Devam ediyor" | "İşten ayrıldı";
+  leftAt?: ISODate;
+  note?: string;
+  entries: SalaryGarnishmentEntry[];
+};
+
 /** Banka/kasa üzerinde elle girilen hareket (virman, diğer gelir/gider). */
 export type AccountTx = BaseEntity & {
   accountId: string;
@@ -246,7 +269,11 @@ export const CLOSED_ENFORCEMENT_STATUS = "Kapalı";
  * Büronun listesindeki biçim: "Açık", "Açık (Durdurulmuş : Takibe İtiraz)", "Kapalı (İnfaz)".
  * Excel'e bu biçimde yazılır, içe aktarımda da bu biçim çözülür.
  */
-export function enforcementStatusLabel(e: { status: string; stopReason?: string; closeReason?: string }) {
+export function enforcementStatusLabel(e: {
+  status: string;
+  stopReason?: string;
+  closeReason?: string;
+}) {
   if (e.status === STOPPED_ENFORCEMENT_STATUS)
     return e.stopReason ? `Açık (Durdurulmuş : ${e.stopReason})` : "Açık (Durdurulmuş)";
   if (e.status === CLOSED_ENFORCEMENT_STATUS && e.closeReason) return `Kapalı (${e.closeReason})`;
@@ -266,13 +293,15 @@ export function parseEnforcementStatus(raw: string): {
   const low = (x: string) => x.toLocaleLowerCase("tr");
   const stop = /^durdurulmu[şs]\s*:?\s*(.*)$/i.exec(inner);
   if (stop || low(head).startsWith("durdurulmu"))
-    return { status: STOPPED_ENFORCEMENT_STATUS, stopReason: (stop ? stop[1] : inner).trim() || undefined };
+    return {
+      status: STOPPED_ENFORCEMENT_STATUS,
+      stopReason: (stop ? stop[1] : inner).trim() || undefined,
+    };
   if (low(head).startsWith("kapal"))
     return { status: CLOSED_ENFORCEMENT_STATUS, closeReason: inner || undefined };
   return { status: head || s };
 }
-export const isEnforcementClosed = (status: string) =>
-  CLOSED_ENFORCEMENT_STATUSES.includes(status);
+export const isEnforcementClosed = (status: string) => CLOSED_ENFORCEMENT_STATUSES.includes(status);
 export type EnforcementStatus = string;
 
 /** Alacaklı olduğumuz (müvekkil alacaklı) / borçlu olduğumuz (müvekkil borçlu) takip */
@@ -406,7 +435,11 @@ export type InquiryResult = {
   mosip?: "Aktif" | "Pasif";
   firma?: number;
 };
-export const INQUIRY_FIELDS: Array<{ key: keyof InquiryResult; label: string; kind: "count" | "status" | "text" }> = [
+export const INQUIRY_FIELDS: Array<{
+  key: keyof InquiryResult;
+  label: string;
+  kind: "count" | "status" | "text";
+}> = [
   { key: "arac", label: "Araç", kind: "count" },
   { key: "tasinmaz", label: "Taşınmaz", kind: "count" },
   { key: "icra", label: "Alacaklı olduğu icra dosyası", kind: "count" },
@@ -440,7 +473,10 @@ export function normalizeBankAnswers(raw: unknown): BankAnswer[] {
             const amount = (a as BankAnswerItem).amount;
             answers.push({
               type,
-              amount: typeof amount === "number" && Number.isFinite(amount) && amount > 0 ? amount : undefined,
+              amount:
+                typeof amount === "number" && Number.isFinite(amount) && amount > 0
+                  ? amount
+                  : undefined,
             });
           }
         }
@@ -580,17 +616,6 @@ export type AppNotification = BaseEntity & {
   link?: string;
 };
 
-export type FieldChange = { field: string; before: string; after: string };
-
-export type ActivityLog = BaseEntity & {
-  actorId: string;
-  action: "Ekleme" | "Güncelleme" | "Silme" | "İşlem";
-  entity: string;
-  entityId?: string;
-  detail: string;
-  changes?: FieldChange[];
-};
-
 export type FirmProfile = {
   name: string;
   legalName: string;
@@ -667,9 +692,9 @@ export type Collections = {
   contacts: ContactLog;
   events: EnforcementEvent;
   banks: Bank;
+  salaryGarnishments: SalaryGarnishment;
   documents: DocumentFile;
   notifications: AppNotification;
-  activities: ActivityLog;
 };
 
 export type CollectionKey = keyof Collections;
@@ -760,7 +785,6 @@ export type PermissionModuleKey =
   | "ledger"
   | "accounts"
   | "reports"
-  | "activity"
   | "statements"
   | "settings_firm"
   | "settings_categories"
@@ -877,14 +901,6 @@ export const PERMISSION_MODULES: PermissionModule[] = [
     menu: "Raporlar",
   },
   {
-    key: "activity",
-    label: "Aktivite geçmişi",
-    hint: "Kimin neyi değiştirdiği",
-    actions: ["view"],
-    coupled: true,
-    menu: "Aktivite geçmişi",
-  },
-  {
     key: "statements",
     label: "Ekstre ve döküm yazdırma",
     hint: "Müvekkil ekstresi ve dosya masraf dökümünü yazdırır / PDF alır (ekstre için Cari hesap, döküm için Masraflar görme izni de gerekir)",
@@ -957,9 +973,9 @@ export const PERMISSION_MODULES: PermissionModule[] = [
 ];
 
 /** Ayarlar bölümü izinleri; "Tam yetki" gibi hazır ayarlarda ayrıca ele alınır */
-export const SETTINGS_PERMISSION_KEYS = PERMISSION_MODULES.filter((m) => m.group === "settings").map(
-  (m) => m.key,
-);
+export const SETTINGS_PERMISSION_KEYS = PERMISSION_MODULES.filter(
+  (m) => m.group === "settings",
+).map((m) => m.key);
 
 export type PermissionKey = `${PermissionModuleKey}.${PermissionAction}`;
 

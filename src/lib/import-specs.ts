@@ -27,13 +27,7 @@ import { newId } from "@/lib/mappers";
 import { excelSerialToISO, type RawCell } from "@/lib/excel-read";
 
 export type ImportKind =
-  | "clients"
-  | "cases"
-  | "expenses"
-  | "debtors"
-  | "banks"
-  | "enforcements"
-  | "enforcementsOwed";
+  "clients" | "cases" | "expenses" | "debtors" | "banks" | "enforcements" | "enforcementsOwed";
 
 export type ColumnType = "text" | "money" | "date" | "enum" | "lookup" | "multi";
 
@@ -59,6 +53,8 @@ export type ImportContext = {
   state: ErpState;
   user: User;
   permissions: Permissions;
+  /** Şirket sayfası aktarımında seçilen müvekkil (Samyeli, AYBEY…). Satır tarafını ve müvekkili belirler. */
+  companyClient?: string;
 };
 
 export type RowValues = Record<string, string>;
@@ -110,9 +106,12 @@ export function headerKey(s: string) {
 /** Dropdown etiketlerindeki "no · açıklama" biçiminden ilk parçayı alır */
 const firstPart = (s: string) => s.split("·")[0].trim();
 
-/** "1.234,56 ₺", "1234.56", "1,234.56", "₺1.500" → sayı; geçersizse null */
+/** "1.234,56 ₺", "1234.56", "1,234.56", "₺1.500", "2.642,00-TL" → sayı; geçersizse null */
 export function parseAmount(input: string): number | null {
-  let s = input.replace(/₺|TL|TRY|\s/gi, "");
+  let s = input
+    .replace(/₺|TL|TRY/gi, "")
+    .replace(/\s/g, "")
+    .replace(/^-+|-+$/g, "");
   if (!s) return null;
   if (!/^-?[\d.,]+$/.test(s)) return null;
   const lastDot = s.lastIndexOf(".");
@@ -131,15 +130,15 @@ export function parseAmount(input: string): number | null {
   return Number.isFinite(n) ? round2(n) : null;
 }
 
-/** "12.10.2026", "12/10/2026", "2026-10-12", "12.10.26" → YYYY-AA-GG; geçersizse null */
+/** "12.10.2026", "12/10/2026", "2026-10-12", "12.10.26", "02.06.2025 18:23:00" → YYYY-AA-GG; geçersizse null */
 export function parseDateText(input: string): string | null {
   const s = input.trim();
   if (!s) return null;
   let y: number, m: number, d: number;
-  let match = s.match(/^(\d{4})[-./](\d{1,2})[-./](\d{1,2})/);
+  let match = s.match(/^(\d{4})[-./](\d{1,2})[-./](\d{1,2})(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?/);
   if (match) [y, m, d] = [Number(match[1]), Number(match[2]), Number(match[3])];
   else {
-    match = s.match(/^(\d{1,2})[-./](\d{1,2})[-./](\d{2,4})$/);
+    match = s.match(/^(\d{1,2})[-./](\d{1,2})[-./](\d{2,4})(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?$/);
     if (!match) return null;
     [d, m, y] = [Number(match[1]), Number(match[2]), Number(match[3])];
     if (y < 100) y += 2000;
@@ -148,6 +147,77 @@ export function parseDateText(input: string): string | null {
   if (date.getUTCFullYear() !== y || date.getUTCMonth() !== m - 1 || date.getUTCDate() !== d)
     return null;
   return date.toISOString().slice(0, 10);
+}
+
+/** Metindeki GG.AA.YYYY tarihlerinin en yenisi (son haciz listesi hücreleri için) */
+export function latestDateIn(text: string): string | null {
+  let best: string | null = null;
+  for (const m of text.matchAll(/\b(\d{1,2})[./](\d{1,2})[./](\d{4})\b/g)) {
+    const iso = parseDateText(`${m[1]}.${m[2]}.${m[3]}`);
+    if (iso && (!best || iso > best)) best = iso;
+  }
+  return best;
+}
+
+/** Adın diğer metinde geçip geçmediği (AYBEY ↔ AYBEY LOJİSTİK) */
+export function nameMentions(haystack: string, needle: string) {
+  const h = norm(haystack);
+  const n = norm(needle);
+  if (!h || !n) return false;
+  if (h.includes(n) || n.includes(h)) return true;
+  return splitNames(haystack).some((part) => {
+    const p = norm(part);
+    return p.includes(n) || n.includes(p);
+  });
+}
+
+/**
+ * Alacaklı hücresinden müvekkil + nota gidecek bilgi.
+ * Parantezdeki rol (Diğer Haciz Alacaklısı / Üçüncü şahıs) → şirket müvekkil;
+ * "1- A 2- B" → ilk isim müvekkil, diğerleri nota.
+ */
+export function parseClientCell(raw: string, companyHint?: string) {
+  const text = raw.trim();
+  const noteParts: string[] = [];
+  let clientName = "";
+  let working = text;
+
+  const roleRe =
+    /\(([^)]*(?:di[gğ]er\s*haciz|[uü][cç][uü]nc[uü]\s*[sş]ah[iı]s|rehin\s*alacakl)[^)]*)\)/gi;
+  const roles = [...text.matchAll(roleRe)];
+  if (roles.length) {
+    for (const m of roles) {
+      noteParts.push(m[0].slice(1, -1).trim());
+      const labeled = m[1].match(/:\s*(.+)$/);
+      if (labeled && !clientName) {
+        const cand = labeled[1].replace(/\s+/g, " ").trim();
+        // Parantezdeki şirket adı (ilk anlamlı parça)
+        clientName = cand.split(/[,;]/)[0]?.trim() || cand;
+      }
+    }
+    working = text.replace(roleRe, " ").replace(/\s+/g, " ").trim();
+  }
+
+  const names = splitNames(working);
+  if (!clientName && companyHint && nameMentions(text, companyHint))
+    clientName = companyHint.trim();
+  if (!clientName && names.length) {
+    clientName = names[0];
+    if (names.length > 1) noteParts.push(`Diğer alacaklılar: ${names.slice(1).join("; ")}`);
+  } else if (clientName && names.length) {
+    const others = names.filter(
+      (n) => norm(n) !== norm(clientName) && !nameMentions(n, clientName),
+    );
+    if (others.length) noteParts.push(`Asıl / diğer alacaklılar: ${others.join("; ")}`);
+  }
+
+  if (companyHint?.trim()) clientName = companyHint.trim();
+
+  return {
+    clientName: clientName.trim(),
+    noteExtra: noteParts.filter(Boolean).join("\n"),
+    raw: text,
+  };
 }
 
 const amountText = new Intl.NumberFormat("tr-TR", {
@@ -1009,21 +1079,27 @@ function enforcementSpec(side: EnforcementSide): ImportSpec {
   const clientColumn: ImportColumn = {
     key: "client",
     header: owed ? "Borçlu (müvekkil)" : "Alacaklı (müvekkil)",
-    required: true,
+    required: !owed,
     type: "lookup",
     creatable: true,
     options: lists.clients,
-    hint: "Müvekkil adı veya TC / vergi no. Kayıtlı değilse müvekkil olarak oluşturulur",
+    hint: owed
+      ? "Müvekkil adı. Boş bırakılabilir (Belirtilmedi olarak kaydedilir)."
+      : "Müvekkil adı veya TC / vergi no. Parantezdeki şirket / ilk isim müvekkil olur; şirket sayfasında üstten seçilir.",
     example: owed ? "Kaya Holding A.Ş." : "Mehmet Yılmaz",
     width: 26,
-    aliases: owed ? ["Borçlu", "Borçlu müvekkil", "Müvekkil"] : ["Alacaklı", "Alacaklı müvekkil", "Müvekkil"],
+    aliases: owed
+      ? ["Borçlu", "Borçlu müvekkil", "Müvekkil"]
+      : ["Alacaklı", "Alacaklı müvekkil", "Müvekkil"],
   };
   const partiesColumn: ImportColumn = {
     key: "debtors",
     header: owed ? "Alacaklı (karşı taraf)" : "Borçlu",
-    required: true,
+    required: !owed,
     type: "multi",
-    hint: `Birden fazlaysa "1- Ad 2- Ad" ya da ; ile yazın. Kayıtlı değilse oluşturulur`,
+    hint: owed
+      ? `Birden fazlaysa "1- Ad 2- Ad" ya da ; ile yazın. Boş bırakılabilir.`
+      : `Birden fazlaysa "1- Ad 2- Ad" ya da ; ile yazın. Kayıtlı değilse oluşturulur`,
     example: "1- Ali Veli 2- Ayşe Kaya",
     width: 30,
     aliases: owed ? ["Alacaklı", "Alacaklılar", "Karşı taraf"] : ["Borçlular", "Borçlu adı"],
@@ -1075,7 +1151,8 @@ function enforcementSpec(side: EnforcementSide): ImportSpec {
         required: true,
         hint: "Ör. 2026/101 E. (aktarımda bu biçime getirilir)",
         example: "2026/101 E.",
-        aliases: ["İcra dosya no", "Esas no", "No"],
+        // "No" takma adı yok: AYBEY sayfasındaki sıra no sütunu gerçek Dosya No'yu gölgelemesin
+        aliases: ["İcra dosya no", "Esas no", "Dosya No"],
       },
       {
         key: "type",
@@ -1083,7 +1160,7 @@ function enforcementSpec(side: EnforcementSide): ImportSpec {
         type: "lookup",
         creatable: true,
         options: (c) => c.state.settings.enforcementTypes,
-        hint: "İlamsız, İlamlı, Kambiyo… (\"İlamsız Takip\" de tanınır)",
+        hint: 'İlamsız, İlamlı, Kambiyo… ("İlamsız Takip" de tanınır). Boş bırakılabilir.',
         aliases: ["Tür"],
       },
       {
@@ -1091,7 +1168,7 @@ function enforcementSpec(side: EnforcementSide): ImportSpec {
         header: "Takip şekli",
         type: "lookup",
         options: (c) => c.state.settings.procedures.map((p) => p.name),
-        hint: "Örnek No: 7 gibi; kesinleştirme / tahliye hatırlatması buna göre (\"7\" de tanınır)",
+        hint: 'Örnek No: 7 gibi; kesinleştirme / tahliye hatırlatması buna göre ("7" de tanınır)',
         example: "Örnek No: 7",
         width: 18,
         aliases: ["Örnek No", "Örnek", "Takip şekli (örnek no)"],
@@ -1108,11 +1185,18 @@ function enforcementSpec(side: EnforcementSide): ImportSpec {
       {
         key: "principal",
         header: "Takip çıkış rakamı",
-        required: true,
         type: "money",
-        hint: "Asıl alacak + faiz + masraf toplamı",
+        hint: "Asıl alacak + faiz + masraf toplamı (boşsa 0; uyarı verilir)",
         example: "41786,30",
-        aliases: ["Takip çıkış tutarı", "Asıl alacak", "Asıl", "Alacak", "Tutar"],
+        aliases: [
+          "Takip çıkış tutarı",
+          "Asıl alacak",
+          "Asıl",
+          "Alacak",
+          "Tutar",
+          "Çıkış Rakamı",
+          "Çıkış rakamı",
+        ],
       },
       {
         key: "note",
@@ -1126,8 +1210,9 @@ function enforcementSpec(side: EnforcementSide): ImportSpec {
         key: "lastSeizureDate",
         header: "Son haciz tarihi",
         type: "date",
-        hint: "GG.AA.YYYY; haczin düşmesine yaklaşınca hatırlatılır",
+        hint: "GG.AA.YYYY veya tarih listesi; en son tarih alınır, hücrenin tamamı nota eklenir",
         aliases: ["Haciz tarihi"],
+        multiline: true,
       },
       {
         key: "stopReason",
@@ -1142,8 +1227,8 @@ function enforcementSpec(side: EnforcementSide): ImportSpec {
         key: "openingDate",
         header: "Takip tarihi",
         type: "date",
-        hint: "GG.AA.YYYY (boşsa açıklamadaki ilk tarih, o da yoksa bugün)",
-        aliases: ["Açılış tarihi", "Tarih"],
+        hint: "GG.AA.YYYY veya GG.AA.YYYY SS:DD (boşsa açıklamadaki ilk tarih, o da yoksa bugün)",
+        aliases: ["Açılış tarihi", "Tarih", "Dosya Açılış Tarihi", "Dosya açılış tarihi"],
       },
       {
         key: "interest",
@@ -1180,9 +1265,11 @@ function enforcementSpec(side: EnforcementSide): ImportSpec {
       const errors: Errors = {};
       const warnings: string[] = [];
       const s = ctx.state;
+      const company = ctx.companyClient?.trim() || "";
       const no = normalizeFileNo(required(v, "no", errors));
       const office = required(v, "office", errors);
-      if (v.type?.trim() && !matchLoose(v.type, s.settings.enforcementTypes))
+      if (!v.type?.trim()) warnings.push("Takip türü boş");
+      else if (!matchLoose(v.type, s.settings.enforcementTypes))
         warnings.push(`Takip türü listeye eklenecek: ${v.type.trim()}`);
       const st = statusCell(v.status, s);
       if (!st.status)
@@ -1191,29 +1278,73 @@ function enforcementSpec(side: EnforcementSide): ImportSpec {
         warnings.push(`Durdurulma sebebi listeye eklenecek: ${st.stopReason}`);
       if (st.closeReason && !matchLoose(st.closeReason, s.settings.enforcementCloseReasons))
         warnings.push(`Kapanış sebebi listeye eklenecek: ${st.closeReason}`);
-      if (v.procedure?.trim() && !matchProcedure(v.procedure, s.settings.procedures.map((p) => p.name)))
-        errors.procedure = "Takip şekli bulunamadı; Ayarlar → Kategoriler → Takip şekilleri'ne ekleyin";
+      if (
+        v.procedure?.trim() &&
+        !matchProcedure(
+          v.procedure,
+          s.settings.procedures.map((p) => p.name),
+        )
+      )
+        errors.procedure =
+          "Takip şekli bulunamadı; Ayarlar → Kategoriler → Takip şekilleri'ne ekleyin";
+
+      const rowOwed =
+        owed ||
+        (!!company &&
+          nameMentions(v.debtors ?? "", company) &&
+          !nameMentions(v.client ?? "", company));
+      const parsed = parseClientCell(v.client ?? "", company || undefined);
+      const clientRaw = rowOwed
+        ? company || v.client?.trim() || "Belirtilmedi"
+        : parsed.clientName || v.client?.trim() || "";
+
       let clientId: string | undefined;
-      if (required(v, "client", errors)) {
-        const r = findClient(s, v.client);
+      if (!clientRaw && !owed && !company) {
+        errors.client = "Zorunlu alan";
+      } else if (clientRaw) {
+        const r = findClient(s, clientRaw);
         clientId = r.client?.id;
         if (!r.client) {
           if (/birden fazla/.test(r.error ?? "")) errors.client = r.error!;
-          else warnings.push(`Yeni müvekkil oluşturulacak: ${v.client.trim()}`);
+          else warnings.push(`Yeni müvekkil oluşturulacak: ${clientRaw}`);
         }
       }
-      if (required(v, "debtors", errors, `En az bir ${partyWord} girin`)) {
-        const fresh = splitNames(v.debtors).filter((n) => !findDebtor(s, n));
+      if (!clientRaw && owed) warnings.push("Müvekkil boş — Belirtilmedi olarak kaydedilecek");
+
+      const partyCell = rowOwed && company ? (v.client ?? "") : (v.debtors ?? "");
+      if (!owed && !company && !required(v, "debtors", errors, `En az bir ${partyWord} girin`)) {
+        /* required already recorded */
+      } else if (partyCell.trim()) {
+        const fresh = splitNames(partyCell).filter((n) => !findDebtor(s, n));
         if (fresh.length) warnings.push(`Yeni kart oluşturulacak: ${fresh.join(", ")}`);
+      } else if (!owed) {
+        /* alacaklı aktarımında şirket seçiliyse borçlu yine zorunlu */
+        if (!company) {
+          /* already handled */
+        } else if (!(v.debtors ?? "").trim()) {
+          errors.debtors = `En az bir ${partyWord} girin`;
+        }
       }
-      const total =
-        money(v, "principal", errors, { required: true }) +
-        money(v, "interest", errors) +
-        money(v, "costs", errors);
-      if (!errors.principal && total <= 0) errors.principal = "Tutar sıfırdan büyük olmalı";
+
+      if (company && rowOwed) warnings.push(`Taraf: borçlu olduğumuz (${company})`);
+      if (parsed.noteExtra) warnings.push("Rol / diğer alacaklı bilgisi nota eklenecek");
+
+      money(v, "principal", errors);
+      money(v, "interest", errors);
+      money(v, "costs", errors);
+      if (!errors.principal && !(v.principal ?? "").trim()) warnings.push("Tutar girilmemiş");
+
       date(v, "openingDate", errors);
-      if (v.lastSeizureDate?.trim()) date(v, "lastSeizureDate", errors);
-      if (owed && v.lastSeizureDate?.trim())
+      const seizureRaw = v.lastSeizureDate?.trim() ?? "";
+      if (seizureRaw) {
+        if (!parseDateText(seizureRaw) && !latestDateIn(seizureRaw))
+          errors.lastSeizureDate = "Tarih GG.AA.YYYY biçiminde olmalı";
+        else if (!parseDateText(seizureRaw) && latestDateIn(seizureRaw))
+          warnings.push(
+            "Son haciz: listedeki en son tarih alınacak; hücrenin tamamı nota eklenecek",
+          );
+      }
+      if ((rowOwed || owed) && seizureRaw)
         warnings.push("Borçlu olduğumuz dosyada son haciz tarihi hatırlatma üretmez");
       if (v.responsible?.trim()) {
         const u = findUsers(s, v.responsible);
@@ -1237,6 +1368,7 @@ function enforcementSpec(side: EnforcementSide): ImportSpec {
     },
     build(rows, ctx) {
       const s = ctx.state;
+      const company = ctx.companyClient?.trim() || "";
       const newClients = new Map<string, Draft<"clients"> & { id: string }>();
       const clientId = (value: string) => {
         const found = findClient(s, value).client;
@@ -1277,15 +1409,32 @@ function enforcementSpec(side: EnforcementSide): ImportSpec {
             : "";
         const type = v.type?.trim()
           ? (matchLoose(v.type, s.settings.enforcementTypes) ?? v.type.trim())
-          : (s.settings.enforcementTypes[0] ?? "İlamsız");
-        const note = v.note?.trim() || "";
+          : "";
+        const rowOwed =
+          owed ||
+          (!!company &&
+            nameMentions(v.debtors ?? "", company) &&
+            !nameMentions(v.client ?? "", company));
+        const parsed = parseClientCell(v.client ?? "", company || undefined);
+        const clientName = rowOwed
+          ? company || v.client?.trim() || "Belirtilmedi"
+          : parsed.clientName || v.client?.trim() || company || "Belirtilmedi";
+        const partyNames = splitNames(rowOwed && company ? (v.client ?? "") : (v.debtors ?? ""));
+        const seizureRaw = v.lastSeizureDate?.trim() ?? "";
+        const seizureIso = parseDateText(seizureRaw) ?? latestDateIn(seizureRaw) ?? "";
+        const noteBits = [v.note?.trim() || "", parsed.noteExtra];
+        if (seizureRaw && seizureRaw !== formatDate(seizureIso) && latestDateIn(seizureRaw))
+          noteBits.push(`Son haciz notu:\n${seizureRaw}`);
+        if (parsed.raw && company && !rowOwed && norm(parsed.raw) !== norm(company))
+          noteBits.push(`Alacaklı hücresi: ${parsed.raw}`);
+        const note = noteBits.filter(Boolean).join("\n\n");
         return {
-          side,
+          side: (rowOwed ? "Borçlu" : "Alacaklı") as EnforcementSide,
           no: normalizeFileNo(v.no),
           office: v.office.replace(/\s+/g, " ").trim(),
           type,
-          clientId: clientId(v.client),
-          debtorIds: [...new Set(splitNames(v.debtors).map(partyId))],
+          clientId: clientId(clientName),
+          debtorIds: [...new Set(partyNames.map(partyId))],
           principal: round2(
             (parseAmount(v.principal) ?? 0) +
               (parseAmount(v.interest ?? "") ?? 0) +
@@ -1296,10 +1445,17 @@ function enforcementSpec(side: EnforcementSide): ImportSpec {
           status,
           stopReason,
           closeReason,
-          procedure: matchProcedure(v.procedure ?? "", s.settings.procedures.map((p) => p.name)) ?? "",
+          procedure:
+            matchProcedure(
+              v.procedure ?? "",
+              s.settings.procedures.map((p) => p.name),
+            ) ?? "",
           openingDate:
-            parseDateText(v.openingDate ?? "") ?? firstDateIn(note) ?? firstDateIn(v.details) ?? today(),
-          lastSeizureDate: owed ? "" : (parseDateText(v.lastSeizureDate ?? "") ?? ""),
+            parseDateText(v.openingDate ?? "") ??
+            firstDateIn(note) ??
+            firstDateIn(v.details) ??
+            today(),
+          lastSeizureDate: rowOwed ? "" : seizureIso,
           responsibleIds: v.responsible?.trim()
             ? findUsers(s, v.responsible).ids
             : ctx.user.role === "Avukat"

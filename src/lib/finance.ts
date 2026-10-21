@@ -598,7 +598,6 @@ export function archiveCandidates(state: ErpState, throughYear: number) {
     reminders: state.reminders.filter((r) => old(r.date) && r.status !== "Bekliyor"),
     promises: state.promises.filter((p) => old(p.dueDate) && p.status !== "Bekliyor"),
     contacts: state.contacts.filter((c) => old(c.date)),
-    activities: state.activities.filter((a) => old(a.createdAt)),
     notifications: state.notifications.filter((n) => old(n.createdAt)),
   };
 }

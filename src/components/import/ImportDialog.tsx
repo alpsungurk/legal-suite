@@ -63,6 +63,7 @@ type Checked = Row & { check: RowCheck; status: Status; problems: string[] };
 type FileInfo = {
   name: string;
   sheet: string;
+  sheets: string[];
   unknown: string[];
   missing: string[];
   truncated: boolean;
@@ -70,59 +71,84 @@ type FileInfo = {
 
 /* ───────────── Dosyayı satırlara çevirme ───────────── */
 
-async function ingest(file: File, spec: ImportSpec) {
+async function ingest(file: File, spec: ImportSpec, sheetName?: string) {
   const wb = await readSpreadsheet(file);
-  const keyOf = new Map<string, string>();
-  for (const c of spec.columns)
-    for (const h of [c.header, ...(c.aliases ?? [])]) keyOf.set(headerKey(h), c.key);
-
-  // Başlık satırını ilk 10 satırda, en çok sütunun eşleştiği sayfada ara
-  let best = { score: 0, sheet: wb.sheets[0], headerRow: 0 };
-  for (const sheet of wb.sheets) {
-    sheet.rows.slice(0, 10).forEach((row, i) => {
-      const score = new Set(row.map((c) => keyOf.get(headerKey(String(c ?? "")))).filter(Boolean))
-        .size;
-      if (score > best.score) best = { score, sheet, headerRow: i };
-    });
+  const exactOf = new Map<string, string>();
+  const aliasOf = new Map<string, string>();
+  for (const c of spec.columns) {
+    exactOf.set(headerKey(c.header), c.key);
+    for (const h of c.aliases ?? []) {
+      const k = headerKey(h);
+      if (!exactOf.has(k) && !aliasOf.has(k)) aliasOf.set(k, c.key);
+    }
   }
-  if (!best.score)
+  const anyKey = (h: string) => exactOf.get(h) ?? aliasOf.get(h);
+
+  // Varsayılan: ilk sayfa (çok sayfalı dosyada kullanıcı seçer)
+  const sheet =
+    (sheetName ? wb.sheets.find((s) => s.name === sheetName) : undefined) ?? wb.sheets[0];
+  if (!sheet) throw new Error("Dosyada sayfa bulunamadı.");
+
+  let headerRow = 0;
+  let bestScore = 0;
+  sheet.rows.slice(0, 10).forEach((row, i) => {
+    const score = new Set(row.map((c) => anyKey(headerKey(String(c ?? "")))).filter(Boolean)).size;
+    if (score > bestScore) {
+      bestScore = score;
+      headerRow = i;
+    }
+  });
+  if (!bestScore)
     throw new Error(
-      `Dosyada ${spec.title.toLocaleLowerCase("tr")} şablonunun sütunları bulunamadı. Şablonu indirip onu doldurun.`,
+      `"${sheet.name}" sayfasında ${spec.title.toLocaleLowerCase("tr")} sütunları bulunamadı. Başka sayfa seçin veya şablonu indirip doldurun.`,
     );
 
-  const header = best.sheet.rows[best.headerRow] ?? [];
+  const header = sheet.rows[headerRow] ?? [];
   const mapping: Array<{ index: number; key: string }> = [];
   const unknown: string[] = [];
   const used = new Set<string>();
+  // 1) Birebir başlık  2) Takma ad (birebir eşleşen sütun öncelikli)
   header.forEach((cell, index) => {
     const text = String(cell ?? "").trim();
     if (!text) return;
-    const key = keyOf.get(headerKey(text));
+    const key = exactOf.get(headerKey(text));
     if (key && !used.has(key)) {
       mapping.push({ index, key });
       used.add(key);
-    } else if (!key && headerKey(text) !== headerKey(ERROR_COLUMN)) unknown.push(text);
+    }
+  });
+  header.forEach((cell, index) => {
+    const text = String(cell ?? "").trim();
+    if (!text) return;
+    const hk = headerKey(text);
+    if (exactOf.has(hk)) return;
+    const key = aliasOf.get(hk);
+    if (key && !used.has(key)) {
+      mapping.push({ index, key });
+      used.add(key);
+    } else if (!key && hk !== headerKey(ERROR_COLUMN)) unknown.push(text);
   });
   const missing = spec.columns.filter((c) => c.required && !used.has(c.key)).map((c) => c.header);
   const typeOf = new Map(spec.columns.map((c) => [c.key, c.type]));
   const multiOf = new Set(spec.columns.filter((c) => c.multiline).map((c) => c.key));
 
   const rows: Row[] = [];
-  const data = best.sheet.rows.slice(best.headerRow + 1);
+  const data = sheet.rows.slice(headerRow + 1);
   for (let i = 0; i < data.length && rows.length < MAX_ROWS; i++) {
     const raw = data[i] ?? [];
     const values: RowValues = {};
     for (const { index, key } of mapping)
       values[key] = cellToText(raw[index] ?? null, typeOf.get(key), wb.date1904, multiOf.has(key));
     if (Object.values(values).every((v) => !v)) continue;
-    rows.push({ id: i, line: best.headerRow + i + 2, values });
+    rows.push({ id: i, line: headerRow + i + 2, values });
   }
   const remaining = data
     .slice(rows.length ? rows[rows.length - 1].id + 1 : 0)
     .some((r) => r?.some((c) => c != null && c !== ""));
   const info: FileInfo = {
     name: file.name,
-    sheet: best.sheet.name,
+    sheet: sheet.name,
+    sheets: wb.sheets.map((s) => s.name),
     unknown,
     missing,
     truncated: rows.length >= MAX_ROWS && remaining,
@@ -266,10 +292,13 @@ export function ImportDialog({
   const [rows, setRows] = useState<Row[] | null>(null);
   const [info, setInfo] = useState<FileInfo | null>(null);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [dragging, setDragging] = useState(false);
   const [filter, setFilter] = useState<"all" | "error" | "ok">("all");
   const [page, setPage] = useState(0);
   const [includeExisting, setIncludeExisting] = useState(false);
+  const [companyClient, setCompanyClient] = useState("");
+  const fileRef = useRef<File | null>(null);
   const input = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -280,13 +309,22 @@ export function ImportDialog({
       setFilter("all");
       setPage(0);
       setIncludeExisting(false);
+      setCompanyClient("");
+      setProgress(null);
+      fileRef.current = null;
     }
   }, [open, fixedKind]);
 
   const spec = kind ? IMPORT_SPECS[kind] : undefined;
+  const isIcra = kind === "enforcements" || kind === "enforcementsOwed";
   const ctx: ImportContext = useMemo(
-    () => ({ state, user: currentUser, permissions }),
-    [state, currentUser, permissions],
+    () => ({
+      state,
+      user: currentUser,
+      permissions,
+      companyClient: isIcra ? companyClient || undefined : undefined,
+    }),
+    [state, currentUser, permissions, companyClient, isIcra],
   );
 
   // Satır doğrulaması: düzenlenmeyen satırlar önbellekten gelir
@@ -373,11 +411,12 @@ export function ImportDialog({
     );
   };
 
-  const loadFile = async (file: File) => {
+  const loadFile = async (file: File, sheetName?: string) => {
     if (!spec) return;
     setBusy(true);
     try {
-      const res = await ingest(file, spec);
+      fileRef.current = file;
+      const res = await ingest(file, spec, sheetName);
       if (!res.rows.length) {
         toast.error("Dosyada aktarılacak satır bulunamadı.");
         return;
@@ -391,6 +430,11 @@ export function ImportDialog({
     } finally {
       setBusy(false);
     }
+  };
+
+  const changeSheet = async (sheetName: string) => {
+    if (!fileRef.current || !spec || sheetName === info?.sheet) return;
+    await loadFile(fileRef.current, sheetName);
   };
 
   const update = (id: number, key: string, value: string) =>
@@ -425,28 +469,39 @@ export function ImportDialog({
     ]);
   };
 
-  const commit = () => {
+  const commit = async () => {
     if (!spec || busy) return;
     const ready = checked.filter((r) => r.status === "ok").map((r) => r.values);
     if (!ready.length) return;
     setBusy(true);
+    setProgress({ done: 0, total: ready.length });
     try {
       const batch = spec.build(ready, ctx);
-      importRecords(batch, `${ready.length} ${spec.noun} · ${info?.name ?? "Excel"}`);
-      // Yeni mahkeme / icra daireleri seçim listelerine eklenir
+      const total =
+        (batch.clients?.length ?? 0) +
+          (batch.debtors?.length ?? 0) +
+          (batch.enforcements?.length ?? 0) +
+          (batch.cases?.length ?? 0) +
+          (batch.expenses?.length ?? 0) +
+          (batch.banks?.length ?? 0) || ready.length;
+      setProgress({ done: 0, total });
+      const saved = await importRecords(
+        batch,
+        `${ready.length} ${spec.noun} · ${info?.name ?? "Excel"}`,
+        (done, tot) => setProgress({ done, total: tot }),
+      );
       for (const c of batch.cases ?? []) rememberOption("courts", c.court);
       for (const e of batch.enforcements ?? []) {
         rememberOption("enforcementOffices", e.office);
-        rememberOption("enforcementTypes", e.type);
+        if (e.type) rememberOption("enforcementTypes", e.type);
         if (e.stopReason) rememberOption("enforcementStopReasons", e.stopReason);
         if (e.closeReason) rememberOption("enforcementCloseReasons", e.closeReason);
       }
-      const icra = kind === "enforcements" || kind === "enforcementsOwed";
-      const extraParties = icra ? (batch.debtors?.length ?? 0) : 0;
-      const extraClients = icra ? (batch.clients?.length ?? 0) : 0;
+      const extraParties = isIcra ? (batch.debtors?.length ?? 0) : 0;
+      const extraClients = isIcra ? (batch.clients?.length ?? 0) : 0;
       toast.success(
         [
-          `${ready.length} ${spec.noun} aktarıldı`,
+          `${saved} kayıt aktarıldı`,
           extraClients ? `${extraClients} yeni müvekkil` : "",
           extraParties ? `${extraParties} yeni karşı taraf kartı` : "",
         ]
@@ -456,9 +511,15 @@ export function ImportDialog({
       if (counts.error) toast.warning(`${counts.error} hatalı satır aktarılmadı`);
       onOpenChange(false);
     } catch (e) {
-      toast.error(`Aktarım yapılamadı: ${(e as Error).message}`);
+      const msg = (e as Error).message;
+      toast.error(
+        progress && progress.done > 0
+          ? `Aktarım yarıda kaldı (${progress.done}/${progress.total}): ${msg}. Başarılı kayıtlar sunucuda; kalanı düzeltip yeniden deneyin.`
+          : `Aktarım yapılamadı: ${msg}`,
+      );
     } finally {
       setBusy(false);
+      setProgress(null);
     }
   };
 
@@ -471,7 +532,11 @@ export function ImportDialog({
           "flex h-[min(92svh,920px)] w-[min(96vw,1600px)] max-w-[min(96vw,1600px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(96vw,1600px)]",
         )}
       >
-        {busy && rows ? <OverlayLoader label="Aktarılıyor…" /> : null}
+        {busy && rows ? (
+          <OverlayLoader
+            label={progress ? `Aktarılıyor… ${progress.done}/${progress.total}` : "Dosya okunuyor…"}
+          />
+        ) : null}
         <DialogHeader className="border-b border-border/60 px-6 pb-4 pt-5 text-left">
           <DialogTitle className="text-lg">{title}</DialogTitle>
           <DialogDescription>
@@ -523,11 +588,7 @@ export function ImportDialog({
                         : "Listeli sütunlarda (tür, müvekkil, dosya…) Excel'de açılır liste vardır. Açıklama sayfasında her sütun anlatılır."}
                     </p>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => downloadTemplate(spec, ctx)}
-                  >
+                  <Button size="sm" variant="outline" onClick={() => downloadTemplate(spec, ctx)}>
                     <Download /> Şablon
                   </Button>
                 </li>
@@ -636,6 +697,46 @@ export function ImportDialog({
                     />
                   </div>
                 </div>
+                {(info?.sheets.length ?? 0) > 1 && (
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className="text-xs font-semibold text-muted-foreground">Sayfa</span>
+                    <Select value={info?.sheet} onValueChange={(v) => void changeSheet(v)}>
+                      <SelectTrigger className="h-9 w-64" aria-label="Excel sayfası">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {info?.sheets.map((s) => (
+                          <SelectItem key={s} value={s}>
+                            {s}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                {isIcra && (
+                  <div className="flex flex-wrap items-end gap-2 rounded-lg border border-border/70 bg-secondary/30 px-3 py-2">
+                    <div className="min-w-[220px] flex-1">
+                      <p className="mb-1 text-xs font-semibold text-muted-foreground">
+                        Bu sayfa hangi müvekkil şirkete ait? (isteğe bağlı)
+                      </p>
+                      <Combobox
+                        value={companyClient || undefined}
+                        onChange={setCompanyClient}
+                        options={state.clients
+                          .filter((c) => c.status !== "Pasif")
+                          .map((c) => ({ value: c.name, label: c.name }))}
+                        placeholder="Samyeli, AYBEY… — boşsa hücredeki ad kullanılır"
+                        creatable
+                        allowClear
+                      />
+                    </div>
+                    <p className="max-w-md text-[11px] leading-4 text-muted-foreground">
+                      Şirket Borçlu sütunundaysa satır borçlu olduğumuz dosyaya yazılır;
+                      parantezdeki rol notları müvekkil + dosya notuna ayrılır.
+                    </p>
+                  </div>
+                )}
                 <BulkApply
                   key={kind}
                   spec={spec}
@@ -725,7 +826,10 @@ export function ImportDialog({
                               </p>
                             ))}
                           {r.problems.map((p) => (
-                            <p key={p} className="mt-1 text-[12.5px] leading-4 text-muted-foreground">
+                            <p
+                              key={p}
+                              className="mt-1 text-[12.5px] leading-4 text-muted-foreground"
+                            >
                               {p}
                             </p>
                           ))}
@@ -805,8 +909,8 @@ export function ImportDialog({
                         >
                           {filter === "error" ? (
                             <span className="inline-flex items-center gap-2">
-                              <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Hatalı satır
-                              kalmadı
+                              <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />{" "}
+                              Hatalı satır kalmadı
                             </span>
                           ) : (
                             "Gösterilecek satır yok"

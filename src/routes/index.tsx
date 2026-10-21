@@ -24,7 +24,6 @@ import {
   AlertsPanel,
   CashflowChart,
   ExpenseBreakdown,
-  RecentActivity,
   UpcomingInstallments,
 } from "@/components/dashboard/widgets";
 import { QuickAddMenu } from "@/components/layout/Topbar";
@@ -169,7 +168,6 @@ function FinanceDashboard() {
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
         {seeExpenses && <ExpenseBreakdown />}
         {perm.can("ledger") && <ClientBalances />}
-        {perm.can("activity") && <RecentActivity />}
       </div>
     </>
   );

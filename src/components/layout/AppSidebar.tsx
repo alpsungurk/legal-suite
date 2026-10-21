@@ -10,7 +10,6 @@ import {
   FolderKanban,
   FolderOpen,
   Gavel,
-  History,
   Landmark,
   LayoutDashboard,
   Receipt,
@@ -473,6 +472,7 @@ function buildGroups(
               badge: dueDeadlines,
               badgeTone: "red",
             },
+            { title: "Maaş haczi sıraları", url: "/icra/maas-haczi", icon: Users },
             {
               id: "sirket-listeleri",
               title: "Şirket listeleri",
@@ -492,7 +492,6 @@ function buildGroups(
 
   const admin: Item[] = [];
   if (p.can("reports")) admin.push({ title: "Raporlar", url: "/raporlar", icon: BarChart3 });
-  if (p.can("activity")) admin.push({ title: "Aktivite geçmişi", url: "/aktivite", icon: History });
   if (p.canOpenSettings) admin.push({ title: "Ayarlar", url: "/ayarlar", icon: Settings });
   if (admin.length) groups.push({ label: "Yönetim", items: admin });
 

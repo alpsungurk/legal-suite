@@ -11,7 +11,7 @@ export const CRON_META: Record<string, { label: string; hint: string }> = {
   },
   "lexkasa-saklama": {
     label: "Saklama / arşiv",
-    hint: "Eski bildirim ve aktivite kayıtları temizlenir",
+    hint: "Eski bildirimler temizlenir; ayarlıysa otomatik arşiv çalışır",
   },
   "lexkasa-haciz": {
     label: "İcra süreleri ve haciz",

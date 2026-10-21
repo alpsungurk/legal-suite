@@ -144,7 +144,7 @@ ok("avukat hesapları göremez", (await asUser(S, () => q(`select * from public.
 ok("avukat bakiye görünümünden satır alamaz", (await asUser(S, () => q(`select * from public.v_account_balances`))).length === 0);
 ok("avukat cari görünümünden satır alamaz", (await asUser(S, () => q(`select * from public.v_client_balances`))).length === 0);
 ok("avukat hesap seçeneklerini görür (masraf formu)", (await asUser(S, () => q(`select * from public.account_options()`))).length === 2);
-ok("avukat aktiviteyi göremez", (await asUser(S, () => q(`select * from public.activities`))).length === 0);
+ok("avukat aktiviteyi göremez (tablo varken RLS)", (await asUser(S, () => q(`select * from public.activities`))).length === 0);
 ok("avukat ayarları okur ama değiştiremez", (await asUser(S, () => q(`select * from public.org_settings`))).length === 1
   && (await asUser(S, () => q(`update public.org_settings set courts='{x}' returning org_id`))).length === 0);
 ok("avukat izinlerini göremez/değiştiremez (profil)", await fails(() => asUser(S, () => q(`update public.profiles set role='admin' where id='${S}'`)), /yalnızca yönetici/));
@@ -251,7 +251,7 @@ ok("yıllık özete eklendi", await (async () => {
   const y = await one(`select fee_income, client_expense, closed_cases from public.yearly_stats where org_id='${orgA}' and year = extract(year from current_date)::int`);
   return Number(y.fee_income) === 6500 && Number(y.client_expense) === 700 && y.closed_cases === 1;
 })());
-ok("kapatma aktivite kaydı", (await asUser(A, () => q(`select * from public.activities where entity='Dosya' and detail like 'Dosya kapatıldı%'`))).length === 1);
+ok("kapatma aktivite kaydı (kaldırılmadan önce)", (await asUser(A, () => q(`select * from public.activities where entity='Dosya' and detail like 'Dosya kapatıldı%'`))).length === 1);
 
 // ── Arşiv: eski yıl verisi
 await db.exec(`
@@ -583,6 +583,90 @@ const jobs2 = await q(`select jobname, schedule from cron.job order by jobname`)
 ok("cron: kapalı dosya işi her ayın 1'i 03:45 (TR), tekrarlanmadı", jobs2.filter((j) => j.jobname === "lexkasa-kapali-dosya").length === 1 && jobs2.some((j) => j.jobname === "lexkasa-kapali-dosya" && j.schedule === "45 0 1 * *"), JSON.stringify(jobs2));
 ok("cron: haciz işi her gün 08:00 (TR), tekrarlanmadı", jobs2.length === 6 && jobs2.some((j) => j.jobname === "lexkasa-haciz" && j.schedule === "0 5 * * *"), JSON.stringify(jobs2));
 ok("cron: Zamanlama ekranı haciz işini listeler", (await asUser(A, () => q(`select * from public.list_cron_jobs()`))).some((j) => j.jobname === "lexkasa-haciz"));
+
+// ── Maaş haczi sıraları
+const MH = fileURLToPath(new URL("../migrations/20261021120000_maas_haczi.sql", import.meta.url));
+const mhSql = readFileSync(MH, "utf8");
+let mhErr = null;
+try { await db.exec(mhSql); await db.exec(mhSql); } catch (e) { mhErr = e; }
+ok("maaş haczi migration'ı çalıştı (iki kez)", !mhErr, mhErr ? mhErr.message : "");
+if (mhErr) { console.log(R.join("\n")); process.exit(1); }
+await db.exec(mhSql); // cron.job varken lexkasa-haciz yeniden bağlanır
+const employer = await asUser(A, async () => (await one(`insert into public.clients (name, kind) values ('İşveren A.Ş.','Kurumsal') returning id`)).id);
+const qid = await asUser(A, async () => (await one(
+  `insert into public.salary_garnishments (client_id, employee_name, payday, status)
+   values ($1, 'Suat Buzluk', extract(day from current_date)::int, 'Devam ediyor') returning id`,
+  [employer],
+)).id);
+await asUser(A, () => q(
+  `insert into public.salary_garnishment_entries (queue_id, position, office, file_no, notified_at) values
+   ($1, 1, 'Ankara Banka Alacakları İcra Dairesi', '2024/47030', current_date - 10),
+   ($1, 2, 'İzmir 3. İcra Dairesi', '2026/980', current_date - 5)`,
+  [qid],
+));
+ok("maaş haczi: kayıt ve 2 dosya yazıldı", (await asUser(A, () => q(`select 1 from public.salary_garnishment_entries where queue_id=$1`, [qid]))).length === 2);
+await setAs(U, { "enforcements.view": false, "enforcements.create": false, "enforcements.edit": false, "enforcements.delete": false });
+ok("maaş haczi: icra izni kapalıyken göremez", (await asUser(U, () => q(`select 1 from public.salary_garnishments`))).length === 0);
+await setAs(U, { "enforcements.view": true, "enforcements.create": true, "enforcements.edit": true });
+ok("maaş haczi: icra izniyle görür / düzenler", (await asUser(U, () => q(`select employee_name from public.salary_garnishments where id=$1`, [qid]))).length === 1
+  && (await asUser(U, () => q(`update public.salary_garnishments set note='ok' where id=$1 returning id`, [qid]))).length === 1);
+await setAs(U, {});
+ok("maaş haczi: başka büro göremez", (await asUser(B, () => q(`select 1 from public.salary_garnishments`))).length === 0);
+const nPay = (await one(`select app.cron_salary_payday_reminders() n`)).n;
+const payN = await asUser(A, () => q(`select title from public.notifications where type='Maaş haczi'`));
+ok("maaş haczi: ödeme günü hatırlatması gitti", nPay >= 1 && payN.length >= 1, JSON.stringify({ nPay, payN }));
+ok("maaş haczi: aynı gün ikinci kez yinelemez", (await one(`select app.cron_salary_payday_reminders() n`)).n === 0);
+ok("maaş haczi: cron_icra_daily payday'i de çalıştırır", typeof (await one(`select app.cron_icra_daily() n`)).n === "number");
+
+// ── Aktivite geçmişi tamamen kaldırıldı
+const ACTOFF = fileURLToPath(new URL("../migrations/20261021130000_activities_kapat.sql", import.meta.url));
+const actOffSql = readFileSync(ACTOFF, "utf8");
+let actOffErr = null;
+try { await db.exec(actOffSql); await db.exec(actOffSql); } catch (e) { actOffErr = e; }
+ok("aktivite silme migration'ı çalıştı (iki kez)", !actOffErr, actOffErr ? actOffErr.message : "");
+ok("activities tablosu yok", (await one(`select to_regclass('public.activities') is null as gone`)).gone === true);
+ok("app.audit() yok", (await one(`select to_regprocedure('app.audit()') is null as gone`)).gone === true);
+ok("trg_audit kalmadı", Number((await one(`select count(*)::int c from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where t.tgname='trg_audit' and not t.tgisinternal and n.nspname='public'`)).c) === 0);
+await asUser(A, () => q(`insert into public.clients (name) values ('AuditNoOp')`));
+ok("dosya kapatma audit'siz çalışır", await (async () => {
+  const c = await asUser(A, async () => (await one(`insert into public.cases (no,title,client_id) values ('2026/AUDIT','x',$1) returning id`, [client2])).id);
+  await asUser(A, () => q(`select public.close_case($1)`, [c]));
+  return (await q(`select 1 from public.cases where id=$1`, [c])).length === 0;
+})());
+
+// ── Toplu Excel aktarım: tek JSON RPC
+const IMP = fileURLToPath(new URL("../migrations/20261021140000_import_batch.sql", import.meta.url));
+const impSql = readFileSync(IMP, "utf8");
+let impErr = null;
+try { await db.exec(impSql); await db.exec(impSql); } catch (e) { impErr = e; }
+ok("import_batch migration'ı çalıştı (iki kez)", !impErr, impErr ? impErr.message : "");
+const ibClient = "aaaaaaaa-bbbb-cccc-dddd-000000000001";
+const ibDebtor = "aaaaaaaa-bbbb-cccc-dddd-000000000002";
+const ibEnf = "aaaaaaaa-bbbb-cccc-dddd-000000000003";
+const ibPayload = {
+  clients: [{ id: ibClient, name: "Toplu Müvekkil", kind: "Kurumsal", email: "", phone: "", status: "Aktif" }],
+  debtors: [{ id: ibDebtor, name: "Toplu Borçlu", kind: "Bireysel" }],
+  enforcements: [{
+    id: ibEnf, no: "2026/BATCH E.", office: "Ankara 1. İcra", type: "İlamsız", side: "Alacaklı",
+    client_id: ibClient, principal: 1000, interest: 0, costs: 0, status: "Açık",
+    opening_date: "2026-01-15", responsible_ids: [], debtor_ids: [ibDebtor], details: "batch test",
+  }],
+};
+const ibRes = await asUser(A, async () => (await one(`select public.import_batch($1::jsonb) r`, [JSON.stringify(ibPayload)])).r);
+ok("import_batch: müvekkil+borçlu+icra yazıldı", ibRes.clients === 1 && ibRes.debtors === 1 && ibRes.enforcements === 1 && ibRes.enforcement_debtors === 1 && ibRes.total === 3, JSON.stringify(ibRes));
+ok("import_batch: bağlar doğru", (await one(`select count(*)::int c from public.enforcement_debtors where enforcement_id='${ibEnf}' and debtor_id='${ibDebtor}'`)).c === 1);
+ok("import_batch: başka büro göremez", (await asUser(B, () => q(`select 1 from public.enforcements where id='${ibEnf}'`))).length === 0);
+await setAs(U, { "clients.create": false });
+ok("import_batch: izinsiz avukat yazamaz", await fails(() => asUser(U, () => q(
+  `select public.import_batch($1::jsonb)`,
+  [JSON.stringify({ clients: [{ id: "aaaaaaaa-bbbb-cccc-dddd-000000000099", name: "X", kind: "Bireysel", email: "", phone: "", status: "Aktif" }] })],
+)), /yetkiniz yok|42501|permission/i));
+await setAs(U, {});
+const ib2 = await asUser(A, async () => (await one(
+  `select public.import_batch($1::jsonb) r`,
+  [JSON.stringify({ enforcements: [{ ...ibPayload.enforcements[0], principal: 2500, debtor_ids: [ibDebtor] }] })],
+)).r);
+ok("import_batch: upsert günceller", ib2.enforcements === 1 && Number((await one(`select principal from public.enforcements where id='${ibEnf}'`)).principal) === 2500, JSON.stringify(ib2));
 
 console.log(R.join("\n"));
 console.log(`\nPASS: ${R.filter((x) => x.startsWith("PASS")).length}  FAIL: ${R.filter((x) => x.startsWith("FAIL")).length}`);
