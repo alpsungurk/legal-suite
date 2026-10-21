@@ -201,6 +201,8 @@ export type SalaryGarnishment = BaseEntity & {
   /** 1–31; doluysa o gün kesinti hatırlatması */
   payday?: number;
   status: "Devam ediyor" | "İşten ayrıldı";
+  /** Ödeme günü hatırlatması bunlara; boşsa yöneticilere gider */
+  responsibleIds: string[];
   leftAt?: ISODate;
   note?: string;
   entries: SalaryGarnishmentEntry[];

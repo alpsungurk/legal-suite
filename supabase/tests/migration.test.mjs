@@ -595,7 +595,7 @@ await db.exec(mhSql); // cron.job varken lexkasa-haciz yeniden bağlanır
 const employer = await asUser(A, async () => (await one(`insert into public.clients (name, kind) values ('İşveren A.Ş.','Kurumsal') returning id`)).id);
 const qid = await asUser(A, async () => (await one(
   `insert into public.salary_garnishments (client_id, employee_name, payday, status)
-   values ($1, 'Suat Buzluk', extract(day from current_date)::int, 'Devam ediyor') returning id`,
+   values ($1, 'Örnek Çalışan', extract(day from current_date)::int, 'Devam ediyor') returning id`,
   [employer],
 )).id);
 await asUser(A, () => q(
@@ -667,6 +667,52 @@ const ib2 = await asUser(A, async () => (await one(
   [JSON.stringify({ enforcements: [{ ...ibPayload.enforcements[0], principal: 2500, debtor_ids: [ibDebtor] }] })],
 )).r);
 ok("import_batch: upsert günceller", ib2.enforcements === 1 && Number((await one(`select principal from public.enforcements where id='${ibEnf}'`)).principal) === 2500, JSON.stringify(ib2));
+
+// ── Toplu aktarım: boş takip türü boş kalır
+const IMP2 = fileURLToPath(new URL("../migrations/20261021150000_import_batch_bos_tur.sql", import.meta.url));
+let imp2Err = null;
+try { await db.exec(readFileSync(IMP2, "utf8")); } catch (e) { imp2Err = e; }
+ok("import_batch boş tür migration'ı çalıştı", !imp2Err, imp2Err ? imp2Err.message : "");
+const ibEnf2 = "aaaaaaaa-bbbb-cccc-dddd-000000000004";
+await asUser(A, () => one(`select public.import_batch($1::jsonb) r`, [JSON.stringify({ enforcements: [{
+  ...ibPayload.enforcements[0], id: ibEnf2, no: "2026/BOSTUR", type: "", debtor_ids: [ibDebtor],
+}] })]));
+ok("import_batch: boş takip türü İlamsız yapılmaz", (await one(`select type from public.enforcements where id='${ibEnf2}'`)).type === "");
+await setAs(U, { "enforcements.create": true, "enforcements.edit": false });
+ok("import_batch: düzenleme yetkisi olmadan kayıtlı dosya güncellenemez", await fails(() => asUser(U, () => q(
+  `select public.import_batch($1::jsonb)`,
+  [JSON.stringify({ enforcements: [{ ...ibPayload.enforcements[0], id: ibEnf2, no: "2026/BOSTUR", type: "", principal: 1, debtor_ids: [ibDebtor] }] })],
+)), /güncelleme yetkiniz yok|42501/i));
+const ibEnf3 = "aaaaaaaa-bbbb-cccc-dddd-000000000005";
+ok("import_batch: düzenleme yetkisi olmadan yeni dosya eklenebilir", (await asUser(U, async () => (await one(
+  `select public.import_batch($1::jsonb) r`,
+  [JSON.stringify({ enforcements: [{ ...ibPayload.enforcements[0], id: ibEnf3, no: "2026/YENIYETKI", debtor_ids: [ibDebtor] }] })],
+)).r)).enforcements === 1);
+await setAs(U, {});
+
+// ── Maaş haczi: hatırlatma yalnızca sorumluya, sorumlu yoksa yöneticiye
+const MHS = fileURLToPath(new URL("../migrations/20261021160000_maas_haczi_sorumlu.sql", import.meta.url));
+let mhsErr = null;
+try { const sql = readFileSync(MHS, "utf8"); await db.exec(sql); await db.exec(sql); } catch (e) { mhsErr = e; }
+ok("maaş haczi sorumlu migration'ı çalıştı (iki kez)", !mhsErr, mhsErr ? mhsErr.message : "");
+const qResp = await asUser(A, async () => (await one(
+  `insert into public.salary_garnishments (client_id, employee_name, payday, status, responsible_ids)
+   values ($1, 'Sorumlulu Çalışan', extract(day from current_date)::int, 'Devam ediyor', array['${U}']::uuid[]) returning id`,
+  [employer],
+)).id);
+const qNone = await asUser(A, async () => (await one(
+  `insert into public.salary_garnishments (client_id, employee_name, payday, status)
+   values ($1, 'Sorumsuz Çalışan', extract(day from current_date)::int, 'Devam ediyor') returning id`,
+  [employer],
+)).id);
+await one(`select app.cron_salary_payday_reminders() n`);
+const notifTo = async (qidX) => (await q(
+  `select user_id from public.notifications where dedupe_key like 'maas-payday:' || $1 || ':%'`, [qidX],
+)).map((x) => x.user_id);
+const toResp = await notifTo(qResp);
+ok("maaş haczi: sorumlu varsa yalnızca ona gider", toResp.length === 1 && toResp[0] === U, JSON.stringify(toResp));
+const toNone = await notifTo(qNone);
+ok("maaş haczi: sorumlu yoksa yöneticiye gider", toNone.includes(A) && !toNone.includes(U), JSON.stringify(toNone));
 
 console.log(R.join("\n"));
 console.log(`\nPASS: ${R.filter((x) => x.startsWith("PASS")).length}  FAIL: ${R.filter((x) => x.startsWith("FAIL")).length}`);

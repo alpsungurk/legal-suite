@@ -233,6 +233,8 @@ type ErpContextValue = {
   removeMany: <K extends CollectionKey>(key: K, ids: string[]) => void;
   updateSettings: (patch: Partial<Settings>) => void;
   rememberOption: (key: CategoryKey, value?: string) => void;
+  /** Toplu aktarımda yeni değerleri tek ayar yazımıyla listelere ekler */
+  rememberOptions: (values: Partial<Record<CategoryKey, Array<string | undefined>>>) => void;
   recordInstallmentPayment: (
     planId: string,
     installmentId: string,
@@ -592,6 +594,28 @@ export function ErpProvider({ children }: { children: ReactNode }) {
       if (list.some((x) => x.toLocaleLowerCase("tr") === v.toLocaleLowerCase("tr"))) return;
       const next = [...list, v].sort((a, b) => a.localeCompare(b, "tr"));
       updateSettings({ [key]: next } as Partial<Settings>);
+    },
+    [updateSettings, canManageSettings],
+  );
+  const rememberOptions = useCallback(
+    (values: Partial<Record<CategoryKey, Array<string | undefined>>>) => {
+      if (!canManageSettings) return;
+      const patch: Partial<Record<CategoryKey, string[]>> = {};
+      for (const [key, raw] of Object.entries(values) as Array<
+        [CategoryKey, Array<string | undefined>]
+      >) {
+        const list = stateRef.current.settings[key];
+        const known = new Set(list.map((x) => x.toLocaleLowerCase("tr")));
+        const fresh: string[] = [];
+        for (const value of raw) {
+          const v = value?.trim();
+          if (!v || known.has(v.toLocaleLowerCase("tr"))) continue;
+          known.add(v.toLocaleLowerCase("tr"));
+          fresh.push(v);
+        }
+        if (fresh.length) patch[key] = [...list, ...fresh].sort((a, b) => a.localeCompare(b, "tr"));
+      }
+      if (Object.keys(patch).length) updateSettings(patch as Partial<Settings>);
     },
     [updateSettings, canManageSettings],
   );
@@ -1029,14 +1053,7 @@ export function ErpProvider({ children }: { children: ReactNode }) {
     ) => {
       const firmId = stateRef.current.firmId;
       const now = new Date().toISOString();
-      const keys = [
-        "clients",
-        "debtors",
-        "banks",
-        "cases",
-        "expenses",
-        "enforcements",
-      ] as const;
+      const keys = ["clients", "debtors", "banks", "cases", "expenses", "enforcements"] as const;
       const prepared: Partial<{ [K in (typeof keys)[number]]: Collections[K][] }> = {};
       let total = 0;
       for (const key of keys) {
@@ -1109,6 +1126,7 @@ export function ErpProvider({ children }: { children: ReactNode }) {
     removeMany,
     updateSettings,
     rememberOption,
+    rememberOptions,
     recordInstallmentPayment,
     removeInstallmentPayment,
     createTransfer,

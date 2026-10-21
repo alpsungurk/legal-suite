@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
+import { MultiCombobox } from "@/components/app/fields";
 
 export const Route = createFileRoute("/icra/maas-haczi")({
   head: () => ({ meta: [{ title: "Maaş haczi sıraları — Avukat Yönetim Paneli" }] }),
@@ -214,10 +215,14 @@ function QueueEditor({
   record?: SalaryGarnishment;
   onClose: () => void;
   onSave: (
-    d: Omit<SalaryGarnishment, "firmId" | "createdAt" | "updatedAt"> & { id?: string },
+    d: Omit<SalaryGarnishment, "id" | "firmId" | "createdAt" | "updatedAt"> & { id?: string },
   ) => void;
 }) {
-  const { state, permissions } = useErp();
+  const { state, permissions, lawyers, currentUser } = useErp();
+  const defaultResponsible = useMemo(
+    () => (currentUser.role === "Avukat" ? [currentUser.id] : []),
+    [currentUser.role, currentUser.id],
+  );
   const canEdit = record
     ? permissions.can("enforcements", "edit")
     : permissions.can("enforcements", "create");
@@ -225,6 +230,9 @@ function QueueEditor({
   const [employeeName, setEmployeeName] = useState(record?.employeeName ?? "");
   const [payday, setPayday] = useState(record?.payday != null ? String(record.payday) : "");
   const [status, setStatus] = useState(record?.status ?? "Devam ediyor");
+  const [responsibleIds, setResponsibleIds] = useState<string[]>(
+    record?.responsibleIds ?? defaultResponsible,
+  );
   const [leftAt, setLeftAt] = useState(record?.leftAt ?? "");
   const [note, setNote] = useState(record?.note ?? "");
   const [entries, setEntries] = useState<SalaryGarnishmentEntry[]>(() =>
@@ -237,10 +245,11 @@ function QueueEditor({
     setEmployeeName(record?.employeeName ?? "");
     setPayday(record?.payday != null ? String(record.payday) : "");
     setStatus(record?.status ?? "Devam ediyor");
+    setResponsibleIds(record?.responsibleIds ?? defaultResponsible);
     setLeftAt(record?.leftAt ?? "");
     setNote(record?.note ?? "");
     setEntries(record ? [...record.entries].sort((a, b) => a.position - b.position) : []);
-  }, [open, record]);
+  }, [open, record, defaultResponsible]);
 
   const move = (index: number, dir: -1 | 1) => {
     const j = index + dir;
@@ -293,6 +302,7 @@ function QueueEditor({
       employeeName: employeeName.trim(),
       payday: pd,
       status: status as SalaryGarnishment["status"],
+      responsibleIds,
       leftAt: status === "İşten ayrıldı" ? leftAt || today() : undefined,
       note: note.trim() || undefined,
       entries: entries.map((e, i) => ({
@@ -359,6 +369,17 @@ function QueueEditor({
                 onChange={(e) => setPayday(e.target.value)}
                 placeholder="Boşsa hatırlatma yok"
               />
+            </div>
+            <div>
+              <Label className="text-xs">Sorumlu avukat</Label>
+              <div className="mt-1">
+                <MultiCombobox
+                  value={responsibleIds}
+                  onChange={setResponsibleIds}
+                  options={lawyers.map((u) => ({ value: u.id, label: u.name }))}
+                  placeholder="Boşsa hatırlatma yöneticilere gider"
+                />
+              </div>
             </div>
             <div>
               <Label className="text-xs">Durum</Label>

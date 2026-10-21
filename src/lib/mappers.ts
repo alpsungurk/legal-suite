@@ -408,6 +408,7 @@ export function salaryGarnishmentFromRow(
     employeeName: String(r.employee_name ?? ""),
     payday: r.payday == null ? undefined : num(r.payday),
     status: r.status === "İşten ayrıldı" ? "İşten ayrıldı" : "Devam ediyor",
+    responsibleIds: Array.isArray(r.responsible_ids) ? (r.responsible_ids as string[]) : [],
     leftAt: optStr(dateOnly(r.left_at as string)),
     note: optStr(r.note),
     entries: [...entries].sort((a, b) => a.position - b.position),
@@ -420,6 +421,7 @@ export function salaryGarnishmentToRow(q: Partial<SalaryGarnishment>) {
   if (q.employeeName != null) row.employee_name = q.employeeName.trim();
   if (q.payday !== undefined) row.payday = q.payday ?? null;
   if (q.status != null) row.status = q.status;
+  if (q.responsibleIds != null) row.responsible_ids = q.responsibleIds;
   if (q.leftAt !== undefined) row.left_at = q.leftAt || null;
   if (q.note !== undefined) row.note = q.note || null;
   return row;

@@ -53,7 +53,7 @@ export type ImportContext = {
   state: ErpState;
   user: User;
   permissions: Permissions;
-  /** Şirket sayfası aktarımında seçilen müvekkil (Samyeli, AYBEY…). Satır tarafını ve müvekkili belirler. */
+  /** Şirket sayfası aktarımında seçilen müvekkil (ör. ABC İnşaat, XYZ Lojistik). Satır tarafını ve müvekkili belirler. */
   companyClient?: string;
 };
 
@@ -78,6 +78,8 @@ export type ImportSpec = {
   allowed: (p: Permissions) => boolean;
   /** Mevcut kayıtla aynıysa: true → kullanıcı isterse yine de aktarabilir, false → aktarılamaz */
   softDuplicates: boolean;
+  /** Kayıtlı satır hata sayılmaz; Excel'deki değişikliklerle kayıt güncellenir (icra) */
+  updatable?: boolean;
   check: (v: RowValues, ctx: ImportContext) => RowCheck;
   build: (rows: RowValues[], ctx: ImportContext) => ImportBatch;
   /** Hazır şablon dosyası: verilirse "Şablon" düğmesi bu dosyayı olduğu gibi indirir (public/ altında) */
@@ -159,7 +161,7 @@ export function latestDateIn(text: string): string | null {
   return best;
 }
 
-/** Adın diğer metinde geçip geçmediği (AYBEY ↔ AYBEY LOJİSTİK) */
+/** Adın diğer metinde geçip geçmediği (ABC ↔ ABC LOJİSTİK) */
 export function nameMentions(haystack: string, needle: string) {
   const h = norm(haystack);
   const n = norm(needle);
@@ -1079,12 +1081,12 @@ function enforcementSpec(side: EnforcementSide): ImportSpec {
   const clientColumn: ImportColumn = {
     key: "client",
     header: owed ? "Borçlu (müvekkil)" : "Alacaklı (müvekkil)",
-    required: !owed,
+    required: true,
     type: "lookup",
     creatable: true,
     options: lists.clients,
     hint: owed
-      ? "Müvekkil adı. Boş bırakılabilir (Belirtilmedi olarak kaydedilir)."
+      ? "Müvekkil adı (borçlu olan müvekkilimiz). Kayıtlı değilse oluşturulur."
       : "Müvekkil adı veya TC / vergi no. Parantezdeki şirket / ilk isim müvekkil olur; şirket sayfasında üstten seçilir.",
     example: owed ? "Kaya Holding A.Ş." : "Mehmet Yılmaz",
     width: 26,
@@ -1117,6 +1119,7 @@ function enforcementSpec(side: EnforcementSide): ImportSpec {
       : "Müvekkilimizin alacaklı olduğu takipler. Büronun Excel listesi doğrudan yüklenebilir.",
     allowed: (p) => p.can("enforcements", "create"),
     softDuplicates: false,
+    updatable: true,
     columns: [
       {
         key: "status",
@@ -1151,7 +1154,7 @@ function enforcementSpec(side: EnforcementSide): ImportSpec {
         required: true,
         hint: "Ör. 2026/101 E. (aktarımda bu biçime getirilir)",
         example: "2026/101 E.",
-        // "No" takma adı yok: AYBEY sayfasındaki sıra no sütunu gerçek Dosya No'yu gölgelemesin
+        // "No" takma adı yok: şirket sayfalarındaki "No" (sıra no) sütunu gerçek Dosya No'yu gölgelemesin
         aliases: ["İcra dosya no", "Esas no", "Dosya No"],
       },
       {
@@ -1295,12 +1298,13 @@ function enforcementSpec(side: EnforcementSide): ImportSpec {
           !nameMentions(v.client ?? "", company));
       const parsed = parseClientCell(v.client ?? "", company || undefined);
       const clientRaw = rowOwed
-        ? company || v.client?.trim() || "Belirtilmedi"
+        ? company || v.client?.trim() || ""
         : parsed.clientName || v.client?.trim() || "";
 
       let clientId: string | undefined;
-      if (!clientRaw && !owed && !company) {
-        errors.client = "Zorunlu alan";
+      // Boş müvekkil için "Belirtilmedi" gibi yer tutucu kart açılmaz; kullanıcı doldurur
+      if (!clientRaw && !company) {
+        errors.client = owed ? "Müvekkil (borçlu) boş; adını yazın" : "Zorunlu alan";
       } else if (clientRaw) {
         const r = findClient(s, clientRaw);
         clientId = r.client?.id;
@@ -1309,7 +1313,6 @@ function enforcementSpec(side: EnforcementSide): ImportSpec {
           else warnings.push(`Yeni müvekkil oluşturulacak: ${clientRaw}`);
         }
       }
-      if (!clientRaw && owed) warnings.push("Müvekkil boş — Belirtilmedi olarak kaydedilecek");
 
       const partyCell = rowOwed && company ? (v.client ?? "") : (v.debtors ?? "");
       if (!owed && !company && !required(v, "debtors", errors, `En az bir ${partyWord} girin`)) {

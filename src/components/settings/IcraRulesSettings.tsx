@@ -20,7 +20,11 @@ type Row = { name: string; days: string; action: string };
 
 const NONE = "__none";
 const toRows = (ps: Procedure[]): Row[] =>
-  ps.map((p) => ({ name: p.name, days: p.days == null ? "" : String(p.days), action: p.action ?? "" }));
+  ps.map((p) => ({
+    name: p.name,
+    days: p.days == null ? "" : String(p.days),
+    action: p.action ?? "",
+  }));
 
 /**
  * Takip şekilleri (Örnek No) ve süreleri: ödeme emri tebliğinden itibaren "gün" dolunca
@@ -55,7 +59,8 @@ export function IcraRulesSettings({ access }: { access: Access }) {
       const days = r.days.trim() === "" ? null : Number(r.days);
       if (days != null && !(Number.isInteger(days) && days >= 1 && days <= 365))
         return toast.error(`${name}: gün 1–365 arası olmalı ya da boş bırakılmalı`);
-      if (days != null && !r.action) return toast.error(`${name}: süre dolunca ne yapılacağını seçin`);
+      if (days != null && !r.action)
+        return toast.error(`${name}: süre dolunca ne yapılacağını seçin`);
       out.push({ name, days, action: days == null ? null : r.action });
     }
     updateSettings({ procedures: out });
@@ -64,7 +69,8 @@ export function IcraRulesSettings({ access }: { access: Access }) {
 
   const b = Number(bank);
   const m = Number(salary);
-  const daysValid = Number.isInteger(b) && b >= 1 && b <= 60 && Number.isInteger(m) && m >= 1 && m <= 120;
+  const daysValid =
+    Number.isInteger(b) && b >= 1 && b <= 60 && Number.isInteger(m) && m >= 1 && m <= 120;
   const daysDirty = b !== s.bankResponseDays || m !== s.salaryResponseDays;
 
   return (
@@ -73,6 +79,10 @@ export function IcraRulesSettings({ access }: { access: Access }) {
         title="Takip şekilleri ve süreleri"
         description="Dosyada seçilen takip şekline göre, ödeme emri tebliğinden itibaren süre dolunca ertesi gün kesinleştirme ya da tahliye hatırlatılır (ör. Örnek No: 7 → 7 gün, 8. gün kesinleştirme). Gün boşsa hatırlatma yapılmaz."
       >
+        <p className="mb-3 rounded-lg border border-amber-200/80 bg-amber-50/70 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+          Buradaki gün sayıları başlangıç için örnek olarak girilmiştir. Büronuzun uygulamasına göre
+          kontrol edip gerekirse düzeltin; hatırlatmalar bu günlere göre hesaplanır.
+        </p>
         <div inert={!access.edit} className={cn("space-y-2", !access.edit && "opacity-60")}>
           <div className="hidden grid-cols-[minmax(0,1fr)_96px_150px_36px] gap-2 px-1 text-xs font-medium text-muted-foreground sm:grid">
             <span>Takip şekli</span>
@@ -153,7 +163,12 @@ export function IcraRulesSettings({ access }: { access: Access }) {
               Kaydet
             </Button>
             {dirty && (
-              <Button type="button" size="sm" variant="ghost" onClick={() => setRows(toRows(s.procedures))}>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => setRows(toRows(s.procedures))}
+              >
                 Vazgeç
               </Button>
             )}
