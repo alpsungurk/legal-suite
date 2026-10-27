@@ -753,6 +753,21 @@ const r30 = (await q(`select title from public.reminders where title like 's30-%
 ok("saklama: 30 gün önce biten ajanda kaydı silinir; yenisi ve bekleyen kalır",
   r30.length === 2 && r30.includes("s30-bitti-yeni") && r30.includes("s30-bekliyor"), JSON.stringify(r30));
 
+// ── Kilitli ayar değerleri sunucuda da silinemez
+let lockErr = null;
+try { const sql = readFileSync(fileURLToPath(new URL("../migrations/20261027140000_kilitli_ayarlar.sql", import.meta.url)), "utf8"); await db.exec(sql); await db.exec(sql); } catch (e) { lockErr = e; }
+ok("kilitli ayarlar migration'ı çalıştı (iki kez)", !lockErr, lockErr ? lockErr.message : "");
+const lk = await asUser(A, () => one(
+  `update public.org_settings set enforcement_statuses = '{Derdest}', case_statuses = '{}', fee_kinds = '{Danışmanlık}',
+     enforcement_close_reasons = '{}', enforcement_event_types = '{Diğer}'
+   returning enforcement_statuses s, case_statuses c, fee_kinds f, enforcement_close_reasons r, enforcement_event_types t`));
+ok("kilitli: icra durumları silinemez, kilitsiz değer silinebilir",
+  ["Açık", "Durdurulmuş", "Kapalı", "İşlem Yapılmayacak", "Tahsil edildi"].every((x) => lk.s.includes(x)) && lk.s.includes("Derdest") && !lk.s.includes("Haciz"), JSON.stringify(lk.s));
+ok("kilitli: dosya durumları, aylık ücret, İnfaz geri gelir",
+  lk.c.includes("Açık") && lk.c.includes("Kapalı") && lk.f.includes("Aylık ücret") && lk.f.includes("Danışmanlık") && lk.r.includes("İnfaz"), JSON.stringify(lk));
+ok("kilitli: süre hesabındaki işlem türleri silinemez",
+  lk.t.length === 11 && lk.t.includes("Ödeme emri tebliği") && lk.t.includes("89/3 haciz ihbarnamesi") && lk.t.includes("Diğer"), JSON.stringify(lk.t));
+
 console.log(R.join("\n"));
 console.log(`\nPASS: ${R.filter((x) => x.startsWith("PASS")).length}  FAIL: ${R.filter((x) => x.startsWith("FAIL")).length}`);
 process.exit(R.some((x) => x.startsWith("FAIL")) ? 1 : 0);

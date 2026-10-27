@@ -338,6 +338,8 @@ export const DEFAULT_CLOSE_REASONS = [
   "İnfaz",
   "Haricen Tahsil",
 ];
+/** Silinemez kapanış sebepleri (sunucuda da kilitli: app.keep_locked_settings) */
+export const LOCKED_CLOSE_REASONS = ["İnfaz"];
 /** Takip bilgileri için hazır seçenekler; listede olmayan elle yazılabilir */
 export const DEFAULT_CLAIM_TYPES = [
   "Araç Mahrumiyet Bedeli Alacağı",

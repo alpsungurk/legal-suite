@@ -38,6 +38,7 @@ import { useQuick } from "@/components/forms/quick";
 import { useConfirm } from "@/components/app/confirm";
 import {
   LOCKED_CASE_STATUSES,
+  LOCKED_CLOSE_REASONS,
   LOCKED_ENFORCEMENT_STATUSES,
   LOCKED_EVENT_TYPES,
   LOCKED_FEE_KINDS,
@@ -530,7 +531,7 @@ const CAT_GROUPS: Array<{
         key: "enforcementCloseReasons",
         title: "Kapanış sebepleri",
         desc: "Durum \"Kapalı\" seçilince sorulur (kapatma elle yapılır)",
-        locked: ["İnfaz"],
+        locked: LOCKED_CLOSE_REASONS,
         canEmpty: true,
       },
       {

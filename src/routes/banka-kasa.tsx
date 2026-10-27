@@ -32,7 +32,7 @@ export const Route = createFileRoute("/banka-kasa")({
 });
 
 function Page() {
-  const { state, permissions, remove, patch } = useErp();
+  const { state, permissions, removeMany, patch } = useErp();
   const quick = useQuick();
   const confirm = useConfirm();
   const balances = accountBalances(state);
@@ -259,7 +259,7 @@ function Page() {
                               .filter((t) => t.transferId === tx.transferId)
                               .map((t) => t.id)
                           : [tx.id];
-                        ids.forEach((id) => remove("transactions", id));
+                        removeMany("transactions", ids);
                         toast.success("Hareket silindi");
                       }
                     }}

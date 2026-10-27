@@ -407,42 +407,46 @@ async function syncFeePlan(plan: FeePlan) {
     if (dErr) throw new Error(errMsg(dErr));
   }
 
-  for (let i = 0; i < plan.installments.length; i++) {
-    const inst = plan.installments[i];
-    const { error: iErr } = await supabase.from("installments").upsert({
+  // Taksitler ve ödemeler tek istekte toplu yazılır (taksit başına ayrı istek yok)
+  if (!plan.installments.length) return;
+  const { error: iErr } = await supabase.from("installments").upsert(
+    plan.installments.map((inst, i) => ({
       id: inst.id,
       plan_id: plan.id,
       position: i + 1,
       due_date: inst.dueDate,
       amount: inst.amount,
-    });
-    if (iErr) throw new Error(errMsg(iErr));
+    })),
+  );
+  if (iErr) throw new Error(errMsg(iErr));
 
-    const { data: existingPays } = await supabase
-      .from("installment_payments")
-      .select("id")
-      .eq("installment_id", inst.id);
-    const keepPay = new Set(inst.payments.map((p) => p.id));
-    const delPay = (existingPays ?? []).map((r) => r.id as string).filter((id) => !keepPay.has(id));
-    if (delPay.length) {
-      const { error: dpErr } = await supabase
-        .from("installment_payments")
-        .delete()
-        .in("id", delPay);
-      if (dpErr) throw new Error(errMsg(dpErr));
-    }
-    for (const pay of inst.payments) {
-      const { error: pErr } = await supabase.from("installment_payments").upsert({
-        id: pay.id,
-        installment_id: inst.id,
-        date: pay.date,
-        amount: pay.amount,
-        method: pay.method,
-        account_id: pay.accountId || null,
-        note: pay.note || null,
-      });
-      if (pErr) throw new Error(errMsg(pErr));
-    }
+  const { data: existingPays } = await supabase
+    .from("installment_payments")
+    .select("id")
+    .in(
+      "installment_id",
+      plan.installments.map((i) => i.id),
+    );
+  const pays = plan.installments.flatMap((inst) =>
+    inst.payments.map((pay) => ({
+      id: pay.id,
+      installment_id: inst.id,
+      date: pay.date,
+      amount: pay.amount,
+      method: pay.method,
+      account_id: pay.accountId || null,
+      note: pay.note || null,
+    })),
+  );
+  const keepPay = new Set(pays.map((p) => p.id));
+  const delPay = (existingPays ?? []).map((r) => r.id as string).filter((id) => !keepPay.has(id));
+  if (delPay.length) {
+    const { error: dpErr } = await supabase.from("installment_payments").delete().in("id", delPay);
+    if (dpErr) throw new Error(errMsg(dpErr));
+  }
+  if (pays.length) {
+    const { error: pErr } = await supabase.from("installment_payments").upsert(pays);
+    if (pErr) throw new Error(errMsg(pErr));
   }
 }
 
