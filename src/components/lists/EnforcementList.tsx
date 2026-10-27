@@ -31,9 +31,11 @@ import {
 import { fileNoKey, formatDate, formatMoney, relativeDue, sumBy } from "@/lib/format";
 import {
   CLOSED_ENFORCEMENT_STATUS,
+  NO_ACTION_ENFORCEMENT_STATUS,
   STOPPED_ENFORCEMENT_STATUS,
   enforcementStatusLabel,
   isEnforcementClosed,
+  isEnforcementInactive,
   type EnforcementFile,
   type EnforcementSide,
 } from "@/lib/erp-types";
@@ -74,7 +76,9 @@ export function EnforcementList({
     due: owed ? undefined : seizureDueDate(e, settings.seizureValidMonths),
   }));
   type R = (typeof rows)[number];
-  const open = rows.filter((r) => !isEnforcementClosed(r.e.status));
+  // "İşlem Yapılmayacak" dosyalar açık sayılmaz (takipteki alacağa girmez), kapalı da sayılmaz
+  const open = rows.filter((r) => !isEnforcementInactive(r.e.status));
+  const closedCount = rows.filter((r) => isEnforcementClosed(r.e.status)).length;
   const fileIds = new Set(files.map((e) => e.id));
   const broken = owed
     ? []
@@ -133,6 +137,17 @@ export function EnforcementList({
           <p className="font-semibold">{r.e.no}</p>
           <p className="truncate text-xs text-muted-foreground">{r.e.office}</p>
         </div>
+      ),
+    },
+    {
+      id: "opening",
+      header: "Takip tarihi",
+      hideBelow: "md",
+      sort: (r) => r.e.openingDate || "0000",
+      cell: (r) => (
+        <span className="whitespace-nowrap text-sm">
+          {r.e.openingDate ? formatDate(r.e.openingDate) : "—"}
+        </span>
       ),
     },
     {
@@ -302,7 +317,7 @@ export function EnforcementList({
               />
               <StatTile
                 label="Kapalı"
-                value={rows.length - open.length}
+                value={closedCount}
                 icon={Lock}
                 tone="green"
               />
@@ -400,6 +415,14 @@ export function EnforcementList({
         exportName={exportName}
         exportColumns={exportColumns}
         onRowClick={(r) => navigate({ to: "/icra/$id", params: { id: r.e.id } })}
+        // Büronun Excel'deki işaretleri: kapalı dosyalar sarı, işlem yapılmayacaklar koyu lacivert
+        rowClassName={(r) =>
+          r.e.status === NO_ACTION_ENFORCEMENT_STATUS
+            ? "bg-indigo-950/[0.07] hover:bg-indigo-950/[0.11] dark:bg-indigo-500/10 dark:hover:bg-indigo-500/15"
+            : isEnforcementClosed(r.e.status)
+              ? "bg-amber-100/60 hover:bg-amber-100 dark:bg-amber-500/10 dark:hover:bg-amber-500/15"
+              : undefined
+        }
         rowActions={
           canEdit || canDelete
             ? (r) => (
@@ -464,6 +487,7 @@ export function EnforcementList({
             {!owed && <ProgressBar value={r.s.progress} className="mt-2" />}
             <p className="mt-1 text-xs text-muted-foreground">
               {formatMoney(r.s.claim)} · {r.e.office}
+              {r.e.openingDate && ` · Takip ${formatDate(r.e.openingDate)}`}
               {r.hz && r.due && (
                 <span className="text-rose-600 dark:text-rose-400">
                   {" "}

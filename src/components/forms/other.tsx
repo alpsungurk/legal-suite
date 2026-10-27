@@ -60,6 +60,24 @@ import type { FormProps } from "@/components/forms/core";
 const isBankGarnishment = (type?: string) =>
   !!type && (BANK_GARNISHMENT_EVENT_TYPES as readonly string[]).includes(type);
 
+/** İşlem formundaki "Kontrol hatırlatması": değer gün sayısı ya da "custom" */
+const REMIND_OPTIONS: Option[] = [
+  { value: "0", label: "Hatırlatma yok" },
+  { value: "3", label: "3 gün sonra" },
+  { value: "7", label: "1 hafta sonra" },
+  { value: "14", label: "2 hafta sonra" },
+  { value: "30", label: "1 ay sonra" },
+  { value: "custom", label: "Tarih seçeyim" },
+];
+/** Hatırlatma günü; geçmiş tarihli işlemde bugünden sayılır */
+function remindDateOf(v: FormValues): string | undefined {
+  if (v.remindIn === "custom") return v.remindDate || undefined;
+  const days = Number(v.remindIn);
+  if (!days) return undefined;
+  const base = v.date && v.date > today() ? v.date : today();
+  return addDays(base, days);
+}
+
 function bankDeadlineHint(type: string, date: string, days: number) {
   const when = formatDate(addDays(date, days + 1));
   if (type === EVENT_TYPE_BANK_891)
@@ -212,12 +230,17 @@ function BankAnswersEditor({
 export function ReminderForm({ open, onOpenChange, record, preset, onSaved }: FormProps<Reminder>) {
   const { save, state, currentUser } = useErp();
   const o = useOptions();
+  const ef = state.enforcements.find(
+    (e) => e.id === (record?.enforcementId ?? preset?.enforcementId),
+  );
   return (
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={record ? "Etkinliği düzenle" : "Yeni ajanda kaydı"}
-      description="Duruşma, süre, toplantı veya görev"
+      title={record ? "Etkinliği düzenle" : ef ? "Hatırlatma ekle" : "Yeni ajanda kaydı"}
+      description={
+        ef ? `İcra dosyası ${ef.no} · ${ef.office}` : "Duruşma, süre, toplantı veya görev"
+      }
       wide
       fields={[
         { name: "type", label: "Tür", type: "select", options: o.reminderTypes, required: true },
@@ -551,13 +574,16 @@ export function EnforcementEventForm({
   preset,
   onSaved,
 }: FormProps<EnforcementEvent>) {
-  const { save, patch, state } = useErp();
+  const { save, patch, state, currentUser, permissions } = useErp();
   const o = useOptions();
   const enfId = record?.enforcementId ?? preset?.enforcementId;
   const ef = state.enforcements.find((e) => e.id === enfId);
   const parties = state.debtors
     .filter((d) => ef?.debtorIds.includes(d.id))
     .map((d) => ({ value: d.id, label: d.name }));
+  // Listede olmayan borçlu (ör. maaş haczinde işveren) yazılıp dosyaya eklenebilir
+  const canAddParty = permissions.can("enforcements", "edit");
+  const canRemind = permissions.can("reminders", "create");
   const s = state.settings;
   /** İşlemin doğuracağı süre (talimattaki kurallar) */
   const deadlineHint = (v: FormValues) => {
@@ -623,6 +649,11 @@ export function EnforcementEventForm({
           options: parties,
           allowClear: true,
           placeholder: "Tümü",
+          creatable: canAddParty,
+          hint: (v) =>
+            canAddParty && v.debtorId && !parties.some((p) => p.value === v.debtorId)
+              ? "Kaydedince dosyanın borçlularına eklenir"
+              : undefined,
         },
         {
           name: "result",
@@ -634,8 +665,29 @@ export function EnforcementEventForm({
         { name: "amount", label: "Tutar (varsa)", type: "money" },
         ...inquiryFields,
         { name: "note", label: "Not", type: "textarea" },
+        ...(canRemind
+          ? [
+              {
+                name: "remindIn",
+                label: "Kontrol hatırlatması",
+                type: "select" as const,
+                options: REMIND_OPTIONS,
+                hint: (v: FormValues) => {
+                  const d = remindDateOf(v);
+                  return d ? `${formatDate(d)} günü size hatırlatılır (Ajanda)` : undefined;
+                },
+              },
+              {
+                name: "remindDate",
+                label: "Hatırlatma tarihi",
+                type: "date" as const,
+                visible: (v: FormValues) => v.remindIn === "custom",
+              },
+            ]
+          : []),
       ]}
       initial={{
+        remindIn: "0",
         date: today(),
         ...preset,
         ...record,
@@ -648,15 +700,41 @@ export function EnforcementEventForm({
         inquiryBanks: inquiryBankNames,
         banks: normalizeBankAnswers(record?.data?.banks ?? []),
       }}
-      validate={(v) =>
-        isBankGarnishment(String(v.type)) &&
-        (v.banks as BankAnswer[]).some((b) => !b.name.trim())
-          ? { type: "Banka adı boş bırakılamaz" }
-          : undefined
-      }
+      validate={(v): Record<string, string> | undefined => {
+        if (
+          isBankGarnishment(String(v.type)) &&
+          (v.banks as BankAnswer[]).some((b) => !b.name.trim())
+        )
+          return { type: "Banka adı boş bırakılamaz" };
+        if (v.remindIn === "custom" && !v.remindDate)
+          return { remindDate: "Hatırlatma tarihini seçin" };
+        return undefined;
+      }}
       onSubmit={(v) => {
         if (!enfId) return false;
         const type = String(v.type).trim();
+        // Yazılan yeni ad: aynı adlı kart varsa o kullanılır, yoksa açılır; dosyanın borçlularına eklenir
+        let debtorId = String(v.debtorId ?? "").trim();
+        if (ef && debtorId && !parties.some((p) => p.value === debtorId)) {
+          const key = debtorId.toLocaleLowerCase("tr");
+          const existing = state.debtors.find(
+            (d) => d.id === debtorId || d.name.trim().toLocaleLowerCase("tr") === key,
+          );
+          const debtor =
+            existing ??
+            save("debtors", {
+              name: debtorId,
+              kind: /\b(a\.?ş|ltd|şti|şirket|tic|san|koop)\b/i.test(debtorId)
+                ? "Kurumsal"
+                : "Bireysel",
+            });
+          debtorId = debtor.id;
+          if (!ef.debtorIds.includes(debtorId)) {
+            patch("enforcements", ef.id, { debtorIds: [...ef.debtorIds, debtorId] });
+            const where = ef.side === "Borçlu" ? "karşı tarafına" : "borçlularına";
+            toast.info(`${debtor.name} dosyanın ${where} eklendi`);
+          }
+        }
         // Ek bilgiler (sorgu sonuçları, bankalar) data'da; "tamamlandı" işareti korunur
         const data: EventData = { doneAt: record?.data?.doneAt };
         if (type === EVENT_TYPE_INQUIRY) {
@@ -690,7 +768,7 @@ export function EnforcementEventForm({
           enforcementId: enfId,
           date: v.date,
           type,
-          debtorId: v.debtorId || "",
+          debtorId,
           inquiryType: type === EVENT_TYPE_INQUIRY ? record?.inquiryType || "" : "",
           seizureType: type === EVENT_TYPE_SEIZURE ? v.seizureType || "" : "",
           result: type === EVENT_TYPE_INQUIRY || isBankGarnishment(type) ? "" : v.result || "",
@@ -698,6 +776,22 @@ export function EnforcementEventForm({
           amount: Number(v.amount) > 0 ? round2(Number(v.amount)) : undefined,
           note: v.note?.trim() || "",
         });
+        // İşlemden sonra kendine kontrol hatırlatması (Ajanda'ya dosyaya bağlı kayıt)
+        const remindOn = canRemind ? remindDateOf(v) : undefined;
+        if (ef && remindOn) {
+          save("reminders", {
+            title: `${ef.no} · ${type} kontrolü`,
+            type: o.reminderTypes.includes("Diğer") ? "Diğer" : o.reminderTypes[0],
+            date: remindOn,
+            caseId: ef.caseId || undefined,
+            clientId: ef.clientId || undefined,
+            enforcementId: ef.id,
+            assigneeId: currentUser.id,
+            status: "Bekliyor",
+            note: v.note?.trim() || undefined,
+          });
+          toast.info(`${formatDate(remindOn)} için hatırlatma eklendi`);
+        }
         // Haciz kaydı dosyanın son haciz tarihini ileri taşır (geri almaz)
         if (
           ef &&

@@ -714,6 +714,45 @@ ok("maaş haczi: sorumlu varsa yalnızca ona gider", toResp.length === 1 && toRe
 const toNone = await notifTo(qNone);
 ok("maaş haczi: sorumlu yoksa yöneticiye gider", toNone.includes(A) && !toNone.includes(U), JSON.stringify(toNone));
 
+// ── "İşlem Yapılmayacak": durum listesine girer, süre üretmez
+let naErr = null;
+try {
+  for (const f of ["20261016180000_bank_89_chain.sql", "20261027120000_islem_yapilmayacak.sql"]) {
+    const sql = readFileSync(fileURLToPath(new URL(`../migrations/${f}`, import.meta.url)), "utf8");
+    await db.exec(sql); await db.exec(sql);
+  }
+} catch (e) { naErr = e; }
+ok("işlem yapılmayacak migration'ı çalıştı (iki kez)", !naErr, naErr ? naErr.message : "");
+const naList = (await asUser(A, () => one(`select enforcement_statuses s from public.org_settings`))).s;
+ok("işlem yapılmayacak: durum listesinde 'Kapalı'dan hemen sonra, bir kez",
+  naList.filter((x) => x === "İşlem Yapılmayacak").length === 1 && naList[naList.indexOf("Kapalı") + 1] === "İşlem Yapılmayacak", JSON.stringify(naList));
+await db.exec(`update public.enforcement_events set data = null where id='${bev}'`);
+const bfDl = async () => (await asUser(S, () => q(`select 1 from public.v_icra_deadlines where enforcement_id=$1`, [bf.id]))).length;
+const naBefore = await bfDl();
+await db.exec(`update public.enforcements set status='İşlem Yapılmayacak' where id='${bf.id}'`);
+ok("işlem yapılmayacak: dosyanın süresi listelenmez", naBefore === 1 && (await bfDl()) === 0, String(naBefore));
+
+// ── Saklama 30 gün: bildirimler ve tamamlanan ajanda kayıtları
+let s30Err = null;
+try { const sql = readFileSync(fileURLToPath(new URL("../migrations/20261027130000_saklama_30_gun.sql", import.meta.url)), "utf8"); await db.exec(sql); await db.exec(sql); } catch (e) { s30Err = e; }
+ok("saklama 30 gün migration'ı çalıştı (iki kez)", !s30Err, s30Err ? s30Err.message : "");
+const org30 = (await one(`select org_id from public.enforcements where id=$1`, [bf.id])).org_id;
+await db.exec(`
+  insert into public.notifications (org_id, user_id, title, type, created_at) values
+    ('${org30}', '${A}', 's30-eski', 'Test', now() - interval '31 days'),
+    ('${org30}', '${A}', 's30-yeni', 'Test', now() - interval '29 days');
+  insert into public.reminders (org_id, title, type, date, assignee_id, status, updated_at) values
+    ('${org30}', 's30-bitti-eski', 'Diğer', current_date - 40, '${A}', 'Tamamlandı', now() - interval '31 days'),
+    ('${org30}', 's30-bitti-yeni', 'Diğer', current_date - 40, '${A}', 'İptal', now() - interval '29 days'),
+    ('${org30}', 's30-bekliyor', 'Diğer', current_date - 40, '${A}', 'Bekliyor', now() - interval '60 days');
+`);
+await one(`select app.cron_retention() r`);
+const n30 = (await q(`select title from public.notifications where title like 's30-%'`)).map((x) => x.title);
+ok("saklama: 30 günden eski bildirim (okunmamış da) silinir, yenisi kalır", n30.length === 1 && n30[0] === "s30-yeni", JSON.stringify(n30));
+const r30 = (await q(`select title from public.reminders where title like 's30-%' order by title`)).map((x) => x.title);
+ok("saklama: 30 gün önce biten ajanda kaydı silinir; yenisi ve bekleyen kalır",
+  r30.length === 2 && r30.includes("s30-bitti-yeni") && r30.includes("s30-bekliyor"), JSON.stringify(r30));
+
 console.log(R.join("\n"));
 console.log(`\nPASS: ${R.filter((x) => x.startsWith("PASS")).length}  FAIL: ${R.filter((x) => x.startsWith("FAIL")).length}`);
 process.exit(R.some((x) => x.startsWith("FAIL")) ? 1 : 0);

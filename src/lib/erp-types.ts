@@ -253,6 +253,7 @@ export const ENFORCEMENT_STATUSES = [
   "Açık",
   "Durdurulmuş",
   "Kapalı",
+  "İşlem Yapılmayacak",
   "Derdest",
   "Haciz",
   "Satış",
@@ -261,12 +262,20 @@ export const ENFORCEMENT_STATUSES = [
   "Kapandı",
 ];
 /** Büronun ana durumları ve otomatik "tahsil edildi" durumu: silinemez */
-export const LOCKED_ENFORCEMENT_STATUSES = ["Açık", "Durdurulmuş", "Kapalı", "Tahsil edildi"];
+export const LOCKED_ENFORCEMENT_STATUSES = [
+  "Açık",
+  "Durdurulmuş",
+  "Kapalı",
+  "İşlem Yapılmayacak",
+  "Tahsil edildi",
+];
 /** Bu durumlardaki dosya kapanmış sayılır ("Kapandı" eski kayıtlar için) */
 export const CLOSED_ENFORCEMENT_STATUSES = ["Kapalı", "Kapandı", "Tahsil edildi"];
 export const DEFAULT_ENFORCEMENT_STATUS = "Açık";
 export const STOPPED_ENFORCEMENT_STATUS = "Durdurulmuş";
 export const CLOSED_ENFORCEMENT_STATUS = "Kapalı";
+/** Büronun Excel'de koyu lacivert boyadığı dosyalar: kapanmaz ama süre / hatırlatma üretmez */
+export const NO_ACTION_ENFORCEMENT_STATUS = "İşlem Yapılmayacak";
 /**
  * Büronun listesindeki biçim: "Açık", "Açık (Durdurulmuş : Takibe İtiraz)", "Kapalı (İnfaz)".
  * Excel'e bu biçimde yazılır, içe aktarımda da bu biçim çözülür.
@@ -304,6 +313,9 @@ export function parseEnforcementStatus(raw: string): {
   return { status: head || s };
 }
 export const isEnforcementClosed = (status: string) => CLOSED_ENFORCEMENT_STATUSES.includes(status);
+/** Kapalı ya da "İşlem Yapılmayacak": süre, haciz uyarısı ve takipteki alacak hesabına girmez */
+export const isEnforcementInactive = (status: string) =>
+  isEnforcementClosed(status) || status === NO_ACTION_ENFORCEMENT_STATUS;
 export type EnforcementStatus = string;
 
 /** Alacaklı olduğumuz (müvekkil alacaklı) / borçlu olduğumuz (müvekkil borçlu) takip */

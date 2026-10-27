@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
+  Bell,
   CalendarCheck,
   CheckCircle2,
   Gavel,
@@ -33,7 +34,14 @@ import {
 import { CLOSED_ENFORCEMENT_STATUS, STOPPED_ENFORCEMENT_STATUS } from "@/lib/erp-types";
 import { EventDataSummary, doneData } from "@/components/icra/event-data";
 import { procedureRule } from "@/components/forms/other";
-import { formatDate, formatDateLong, formatMoney, relativeDue, today } from "@/lib/format";
+import {
+  addDays,
+  formatDate,
+  formatDateLong,
+  formatMoney,
+  relativeDue,
+  today,
+} from "@/lib/format";
 import { ExpenseTable } from "@/components/lists/tables";
 import { PageHeader } from "@/components/app/PageHeader";
 import {
@@ -146,6 +154,26 @@ function Page() {
       d.kind !== "Taksit / ödeme sözü",
   );
   const procedure = state.settings.procedures.find((p) => p.name === e.procedure);
+  // Avukatın bu dosya için kendine koyduğu hatırlatmalar (Ajanda kayıtları)
+  const canRemind = permissions.can("reminders", "create");
+  const reminders = state.reminders
+    .filter(
+      (r) =>
+        r.enforcementId === e.id &&
+        r.status === "Bekliyor" &&
+        (permissions.can("reminders") || r.assigneeId === currentUser.id),
+    )
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const addReminder = () =>
+    quick.open("reminder", {
+      preset: {
+        enforcementId: e.id,
+        clientId: e.clientId,
+        caseId: e.caseId,
+        title: `${e.no} · kontrol`,
+        date: addDays(today(), 7),
+      },
+    });
 
   return (
     <PageShell>
@@ -376,6 +404,79 @@ function Page() {
                   );
                 })}
               </ul>
+            </Section>
+          )}
+          {(reminders.length > 0 || canRemind) && (
+            <Section
+              title="Hatırlatmalar"
+              description="Bu dosya için kendinize koyduğunuz kontrol günleri"
+              actions={
+                canRemind && (
+                  <Button size="sm" variant="outline" onClick={addReminder}>
+                    <Bell /> Hatırlatma ekle
+                  </Button>
+                )
+              }
+              bodyClassName="p-0"
+            >
+              {reminders.length === 0 ? (
+                <p className="px-4 py-3 text-sm text-muted-foreground">
+                  Bekleyen hatırlatma yok. İşlem eklerken "Kontrol hatırlatması" seçerek ya da buradan
+                  ekleyebilirsiniz.
+                </p>
+              ) : (
+                <ul className="divide-y">
+                  {reminders.map((r) => {
+                    const late = r.date < today();
+                    const mine = r.assigneeId === currentUser.id;
+                    return (
+                      <li key={r.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                        <span
+                          className={cn(
+                            "grid h-8 w-8 shrink-0 place-items-center rounded-lg",
+                            late
+                              ? "bg-rose-500/15 text-rose-600 dark:text-rose-400"
+                              : "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+                          )}
+                        >
+                          <Bell className="h-4 w-4" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium">{r.title}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatDate(r.date)} · {relativeDue(r.date)}
+                            {!mine && ` · ${userName(r.assigneeId)}`}
+                          </p>
+                          {r.note && (
+                            <p className="mt-0.5 whitespace-pre-line text-sm">{r.note}</p>
+                          )}
+                        </div>
+                        {(mine || permissions.can("reminders", "edit")) && (
+                          <span className="flex items-center gap-1">
+                            <Button
+                              size="icon-sm"
+                              variant="ghost"
+                              onClick={() => quick.open("reminder", { record: r })}
+                            >
+                              <Pencil />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                patch("reminders", r.id, { status: "Tamamlandı" });
+                                toast.success("Hatırlatma tamamlandı");
+                              }}
+                            >
+                              <CheckCircle2 /> Tamamlandı
+                            </Button>
+                          </span>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </Section>
           )}
           <Section

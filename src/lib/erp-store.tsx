@@ -454,6 +454,9 @@ export function ErpProvider({ children }: { children: ReactNode }) {
 
   /* ───────────── CRUD ───────────── */
 
+  // Kayıtlar sırayla yazılır: aynı anda eklenen borçlu, ona bağlı işlemden önce sunucuya gider
+  const persistQueue = useRef<Promise<void>>(Promise.resolve());
+
   const save = useCallback(
     <K extends CollectionKey>(key: K, data: Draft<K>, opts?: SaveOptions): Collections[K] => {
       if (key === "users" && !data.id) {
@@ -499,7 +502,7 @@ export function ErpProvider({ children }: { children: ReactNode }) {
         return { ...prev, [key]: nextList } as ErpState;
       });
 
-      void (async () => {
+      persistQueue.current = persistQueue.current.then(async () => {
         try {
           await persistSave(key, item);
           if (opts?.notify) {
@@ -514,7 +517,7 @@ export function ErpProvider({ children }: { children: ReactNode }) {
           toast.error(sbError(err));
           void reloadFromServer();
         }
-      })();
+      });
 
       return item;
     },

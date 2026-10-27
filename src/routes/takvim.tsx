@@ -23,7 +23,7 @@ import { ReminderTable } from "@/components/lists/tables";
 import { PlanSheet } from "@/components/lists/PlanSheet";
 import { EmptyState } from "@/components/EmptyState";
 import { cn } from "@/lib/utils";
-import { isEnforcementClosed, type Reminder } from "@/lib/erp-types";
+import { isEnforcementInactive, type Reminder } from "@/lib/erp-types";
 
 export const Route = createFileRoute("/takvim")({
   head: () => ({ meta: [{ title: "Ajanda — Avukat Yönetim Paneli" }] }),
@@ -126,7 +126,7 @@ function Page() {
     if (permissions.can("enforcements")) {
       for (const e of state.enforcements) {
         if (scope === "mine" && !e.responsibleIds.includes(currentUser.id)) continue;
-        if (e.side === "Borçlu" || isEnforcementClosed(e.status)) continue;
+        if (e.side === "Borçlu" || isEnforcementInactive(e.status)) continue;
         const due = seizureDueDate(e, state.settings.seizureValidMonths);
         if (!due) continue;
         out.push({

@@ -1,6 +1,15 @@
 import { cn } from "@/lib/utils";
 
-export type Tone = "neutral" | "blue" | "green" | "amber" | "red" | "violet" | "cyan" | "slate";
+export type Tone =
+  | "neutral"
+  | "blue"
+  | "green"
+  | "amber"
+  | "red"
+  | "violet"
+  | "cyan"
+  | "slate"
+  | "navy";
 
 const toneClass: Record<Tone, string> = {
   neutral: "bg-secondary text-secondary-foreground ring-border",
@@ -15,6 +24,7 @@ const toneClass: Record<Tone, string> = {
   violet:
     "bg-violet-50 text-violet-700 ring-violet-200/80 dark:bg-violet-950/50 dark:text-violet-300 dark:ring-violet-900",
   cyan: "bg-cyan-50 text-cyan-800 ring-cyan-200/80 dark:bg-cyan-950/50 dark:text-cyan-300 dark:ring-cyan-900",
+  navy: "bg-indigo-950 text-indigo-50 ring-indigo-950 dark:bg-indigo-900/70 dark:text-indigo-100 dark:ring-indigo-800",
 };
 
 const dotClass: Record<Tone, string> = {
@@ -26,6 +36,7 @@ const dotClass: Record<Tone, string> = {
   red: "bg-rose-500",
   violet: "bg-violet-500",
   cyan: "bg-cyan-500",
+  navy: "bg-indigo-300",
 };
 
 /** Bilinen durum metinleri için otomatik renk. */
@@ -56,6 +67,7 @@ const STATUS_TONES: Record<string, Tone> = {
   Belgesiz: "amber",
   // icra
   Durdurulmuş: "amber",
+  "İşlem Yapılmayacak": "navy",
   Kapandı: "slate",
   Haciz: "red",
   Satış: "violet",
@@ -118,6 +130,7 @@ export function toneTextClass(t: Tone) {
     red: "text-rose-600 dark:text-rose-400 dark:text-rose-400",
     violet: "text-violet-600 dark:text-violet-400",
     cyan: "text-cyan-600 dark:text-cyan-400",
+    navy: "text-indigo-900 dark:text-indigo-300",
   }[t];
 }
 
@@ -131,6 +144,7 @@ export function toneSoftClass(t: Tone) {
     red: "bg-rose-500/10 text-rose-600 dark:text-rose-400 dark:text-rose-400",
     violet: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
     cyan: "bg-cyan-500/10 text-cyan-700 dark:text-cyan-400",
+    navy: "bg-indigo-950/10 text-indigo-900 dark:bg-indigo-500/15 dark:text-indigo-300",
   }[t];
 }
 
