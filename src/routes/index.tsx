@@ -170,8 +170,6 @@ function FinanceDashboard() {
         <AlertsPanel />
       </div>
 
-      {perm.isAdmin && <VekaletSection />}
-
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         {seeFees && <UpcomingInstallments />}
         <AgendaWidget mineOnly={!perm.can("reminders")} />
@@ -181,6 +179,9 @@ function FinanceDashboard() {
         {seeExpenses && <ExpenseBreakdown />}
         {perm.can("ledger") && <ClientBalances />}
       </div>
+
+      {/* Yalnızca yöneticiye: gösterge panelinin en altında */}
+      {perm.isAdmin && <VekaletSection />}
     </>
   );
 }
