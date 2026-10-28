@@ -9,9 +9,10 @@
  * yönetimi, zamanlama ve arşiv yalnızca Admin'dedir.
  */
 import { useEffect, useMemo, useState } from "react";
-import { Lock, RotateCcw, ShieldCheck, UserRound } from "lucide-react";
+import { Lock, RotateCcw, Save, ShieldCheck, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { useErp } from "@/lib/erp-store";
+import { useConfirm } from "@/components/app/confirm";
 import { Section } from "@/components/app/bits";
 import { Avatar } from "@/components/app/bits";
 import { Button } from "@/components/ui/button";
@@ -95,21 +96,37 @@ function effective(role: Grants, overrides?: Grants): Grants {
 
 export function PermissionsTab() {
   const { state, patch, updateSettings } = useErp();
+  const confirm = useConfirm();
   const lawyers = state.users.filter((u) => u.role === "Avukat");
   const [scope, setScope] = useState<string>("role");
   const user = scope === "role" ? undefined : lawyers.find((u) => u.id === scope);
   const roleGrants = state.settings.rolePermissions;
 
-  const current = useMemo(
+  const saved = useMemo(
     () => effective(roleGrants, user?.permissions),
     [roleGrants, user?.permissions],
   );
+  // Değişiklikler önce taslakta tutulur; "Kaydet"e basılınca yazılır
+  const [draft, setDraft] = useState<Grants | null>(null);
+  const current = draft ?? saved;
+  const pending = draft ? ALL_KEYS.filter((k) => !!draft[k] !== saved[k]).length : 0;
   const diffCount = user ? ALL_KEYS.filter((k) => current[k] !== !!roleGrants[k]).length : 0;
 
-  /** Seçili kapsama (rol ya da kişi) yeni etkin izin haritasını yazar */
-  const save = (next: Grants) => {
+  // Kaydedilmemiş değişiklik varken sayfa kapatılırsa tarayıcı uyarır
+  useEffect(() => {
+    if (!pending) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [pending]);
+
+  const save = (next: Grants) => setDraft(next);
+
+  /** Taslağı seçili kapsama (rol ya da kişi) yazar */
+  const commit = () => {
+    if (!draft) return;
     const clean: Grants = {};
-    for (const k of ALL_KEYS) clean[k] = !!next[k];
+    for (const k of ALL_KEYS) clean[k] = !!draft[k];
     if (!user) {
       updateSettings({ rolePermissions: clean });
     } else {
@@ -120,6 +137,31 @@ export function PermissionsTab() {
         permissions: Object.keys(overrides).length ? overrides : undefined,
       });
     }
+    setDraft(null);
+    toast.success(user ? `${user.name} için izinler kaydedildi` : "Avukat izinleri kaydedildi");
+  };
+
+  const discard = () => {
+    setDraft(null);
+    setSettingsShown(
+      settingsModules.some((m) => m.actions.some((a) => saved[permissionKey(m.key, a)])),
+    );
+  };
+
+  /** Kaydedilmemiş değişiklik varken başka avukata / role geçmeden önce sorar */
+  const changeScope = async (next: string) => {
+    if (next === scope) return;
+    if (
+      pending &&
+      !(await confirm({
+        title: "Kaydedilmemiş değişiklikler var",
+        description: `${pending} izin değişikliği kaydedilmedi. Kaydetmeden geçilirse kaybolur.`,
+        confirmLabel: "Kaydetmeden geç",
+      }))
+    )
+      return;
+    setDraft(null);
+    setScope(next);
   };
 
   const toggle = (mod: PermissionModule, action: PermissionAction, on: boolean) =>
@@ -148,24 +190,28 @@ export function PermissionsTab() {
     for (const m of settingsModules)
       for (const a of m.actions) next[permissionKey(m.key, a)] = false;
     save(next);
-    toast.success("Ayarlar sayfası avukata kapatıldı");
+    toast.info("Ayarlar sayfası kapatılacak; Kaydet'e basın");
   };
 
   return (
     <div className="space-y-4">
       <Section
         title="Avukat izinleri"
-        description="Bir avukatın hangi sayfaları göreceğini ve nelerde işlem yapabileceğini belirleyin. Değişiklik anında geçerli olur."
+        description="Bir avukatın hangi sayfaları göreceğini ve nelerde işlem yapabileceğini belirleyin. Değişiklikler “Kaydet”e basınca geçerli olur."
       >
         <div className="space-y-4">
           <div>
             <p className="mb-2 text-[14px] font-medium">Kimin için?</p>
             <div className="flex flex-wrap gap-2">
-              <ScopeChip active={scope === "role"} onClick={() => setScope("role")}>
+              <ScopeChip active={scope === "role"} onClick={() => void changeScope("role")}>
                 <ShieldCheck className="h-3.5 w-3.5" /> Tüm avukatlar (varsayılan)
               </ScopeChip>
               {lawyers.map((u) => (
-                <ScopeChip key={u.id} active={scope === u.id} onClick={() => setScope(u.id)}>
+                <ScopeChip
+                  key={u.id}
+                  active={scope === u.id}
+                  onClick={() => void changeScope(u.id)}
+                >
                   <Avatar name={u.name} size="xs" />
                   {u.name}
                   {u.permissions && Object.keys(u.permissions).length > 0 && (
@@ -200,7 +246,7 @@ export function PermissionsTab() {
                   title={p.hint}
                   onClick={() => {
                     save(p.build());
-                    toast.success(`"${p.label}" uygulandı`);
+                    toast.info(`"${p.label}" seçildi; Kaydet'e basın`);
                   }}
                 >
                   {p.label}
@@ -211,8 +257,8 @@ export function PermissionsTab() {
                   size="sm"
                   variant="ghost"
                   onClick={() => {
-                    patch("users", user.id, { permissions: undefined });
-                    toast.success("Kişisel istisnalar kaldırıldı");
+                    save(effective(roleGrants));
+                    toast.info("Rolün varsayılanı seçildi; Kaydet'e basın");
                   }}
                 >
                   <RotateCcw /> Rolün varsayılanına dön
@@ -308,6 +354,34 @@ export function PermissionsTab() {
           </span>
         </p>
       </Section>
+
+      <div
+        className={cn(
+          "sticky bottom-3 z-20 flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-card px-4 py-3 shadow-soft",
+          pending ? "border-amber-400/70" : "border-border",
+        )}
+      >
+        <p className="text-sm">
+          {pending ? (
+            <span className="font-medium text-amber-700 dark:text-amber-300">
+              {pending} kaydedilmemiş değişiklik
+              {user ? ` · ${user.name}` : " · Tüm avukatlar"}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">Kaydedilmemiş değişiklik yok</span>
+          )}
+        </p>
+        <div className="flex gap-2">
+          {pending > 0 && (
+            <Button size="sm" variant="ghost" onClick={discard}>
+              <RotateCcw /> Vazgeç
+            </Button>
+          )}
+          <Button size="sm" disabled={!pending} onClick={commit}>
+            <Save /> Kaydet
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
+  AlertTriangle,
   BarChart3,
   Bell,
+  BellRing,
   BookOpenCheck,
   Building2,
   CalendarDays,
@@ -44,10 +46,16 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useErp } from "@/lib/erp-store";
-import { allInstallments, icraDeadlines, promiseStatus, seizureWarning } from "@/lib/finance";
+import {
+  allInstallments,
+  computeAlerts,
+  icraDeadlines,
+  promiseStatus,
+  seizureWarning,
+} from "@/lib/finance";
 import { listIcon } from "@/lib/list-icons";
 import { today } from "@/lib/format";
-import type { Permissions } from "@/lib/erp-types";
+import type { Permissions, User } from "@/lib/erp-types";
 import { cn } from "@/lib/utils";
 
 type Badge = { badge?: number; badgeTone?: "red" | "blue" };
@@ -97,8 +105,8 @@ export function AppSidebar() {
   const { state, currentUser, permissions } = useErp();
 
   const groups = useMemo(
-    () => buildGroups(state, currentUser.id, permissions),
-    [state, currentUser.id, permissions],
+    () => buildGroups(state, currentUser, permissions),
+    [state, currentUser, permissions],
   );
 
   // En uzun eşleşen adres aktif sayılır: /icra/borclu açıkken "Alacaklı olduğumuz" (/icra) yanmaz
@@ -379,9 +387,10 @@ function CompanyListsBranch({
 
 function buildGroups(
   state: ReturnType<typeof useErp>["state"],
-  userId: string,
+  user: User,
   p: Permissions,
 ): Group[] {
+  const userId = user.id;
   const t = today();
   const overdueInst = p.can("fees")
     ? allInstallments(state).filter((r) => r.status === "Gecikmiş").length
@@ -403,6 +412,7 @@ function buildGroups(
       ).length
     : 0;
   const unread = state.notifications.filter((n) => n.userId === userId && !n.read).length;
+  const attention = computeAlerts(state, user, p.can("fees"), p.can("reminders")).length;
 
   const groups: Group[] = [
     {
@@ -410,18 +420,35 @@ function buildGroups(
       items: [
         { title: "Gösterge paneli", url: "/", icon: LayoutDashboard },
         {
-          title: "Ajanda",
-          url: "/takvim",
-          icon: CalendarDays,
-          badge: todayEvents,
-          badgeTone: "blue",
-        },
-        {
-          title: "Bildirimler",
-          url: "/bildirimler",
-          icon: Bell,
-          badge: unread,
+          // Ajanda, bildirimler ve dikkat gerektirenler tek bölümde (accordion)
+          id: "hatirlatmalar",
+          title: "Hatırlatmalar",
+          icon: BellRing,
+          badge: unread + attention,
           badgeTone: "red",
+          children: [
+            {
+              title: "Ajanda",
+              url: "/takvim",
+              icon: CalendarDays,
+              badge: todayEvents,
+              badgeTone: "blue",
+            },
+            {
+              title: "Bildirimler",
+              url: "/bildirimler",
+              icon: Bell,
+              badge: unread,
+              badgeTone: "red",
+            },
+            {
+              title: "Dikkat gerektirenler",
+              url: "/uyarilar",
+              icon: AlertTriangle,
+              badge: attention,
+              badgeTone: "red",
+            },
+          ],
         },
       ],
     },
