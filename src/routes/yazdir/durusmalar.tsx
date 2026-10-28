@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { BRAND } from "@/lib/brand";
 import { downloadHearingsPdf, type HearingPdfDay } from "@/lib/pdf-hearings";
+import { talimatActivity } from "@/lib/uyap";
 
 export const Route = createFileRoute("/yazdir/durusmalar")({ component: Page });
 
@@ -63,9 +64,13 @@ function Page() {
     r.caseNo || state.cases.find((c) => c.id === r.caseId)?.no || "—";
   const partiesOf = (r: Reminder) =>
     r.parties || state.clients.find((c) => c.id === r.clientId)?.name || "—";
-  /** "Ön İnceleme · 2026/276" → "Ön İnceleme"; düz "Duruşma" yazılmaz */
+  /**
+   * "Ön İnceleme · 2026/276" → "Ön İnceleme"; düz "Duruşma" yazılmaz. Talimat dosyası (önceden
+   * aktarılmış kayıtlarda notta "Dosya türü: Talimat Dosyası") "Talimat duruşması" olarak belirtilir.
+   */
   const activityOf = (r: Reminder) => {
     const first = r.title.split(" · ")[0].trim();
+    if (/Dosya türü:.*talimat/i.test(r.note ?? "")) return talimatActivity(first);
     return first && first !== "Duruşma" ? first : undefined;
   };
   const attendeeText = (r: Reminder) =>

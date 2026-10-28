@@ -25,7 +25,14 @@ import { caseCourtLabel } from "@/lib/finance";
 import { fileNoKey, formatDate, normalizeFileNo, round2, today } from "@/lib/format";
 import { newId } from "@/lib/mappers";
 import { excelSerialToISO, type RawCell } from "@/lib/excel-read";
-import { clientPartiesText, matchClients, parseUyapParties, roleLabel } from "@/lib/uyap";
+import {
+  clientPartiesText,
+  isTalimatFile,
+  matchClients,
+  parseUyapParties,
+  roleLabel,
+  talimatActivity,
+} from "@/lib/uyap";
 
 export type ImportKind =
   | "clients"
@@ -974,7 +981,14 @@ function resolveReminder(
   const side = clientPartiesText(ours);
   const title =
     v.title?.trim() ||
-    [activity || type, kase?.no ?? caseRaw, side].filter(Boolean).join(" · ");
+    // Talimat dosyası keşif / ön inceleme gibi başlıkta belirtilir: "Talimat duruşması · 2026/220"
+    [
+      isTalimatFile(v.fileType) ? talimatActivity(activity || type) : activity || type,
+      kase?.no ?? caseRaw,
+      side,
+    ]
+      .filter(Boolean)
+      .join(" · ");
   const note = [
     v.note?.trim(),
     v.fileType?.trim() && `Dosya türü: ${v.fileType.trim()}`,

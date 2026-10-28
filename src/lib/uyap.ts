@@ -77,6 +77,16 @@ export function parseUyapParties(cell: string): UyapParty[] {
   return out;
 }
 
+/** UYAP "Dosya Türü" talimat dosyası mı ("Talimat Dosyası") */
+export const isTalimatFile = (fileType?: string) => /talimat/i.test(fileType ?? "");
+
+/** Talimat dosyasında işlem adı: "Duruşma" → "Talimat duruşması", "Keşif" → "Keşif (talimat)" */
+export function talimatActivity(activity: string) {
+  const a = activity.trim() || "Duruşma";
+  if (/talimat/i.test(a)) return a;
+  return a.toLocaleLowerCase("tr") === "duruşma" ? "Talimat duruşması" : `${a} (talimat)`;
+}
+
 /** "DAHİLİ DAVALI" → "Dahili davalı" */
 export function roleLabel(role: string) {
   const low = role.toLocaleLowerCase("tr");
