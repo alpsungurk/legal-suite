@@ -8,6 +8,7 @@ import {
   Gavel,
   Landmark,
   LayoutDashboard,
+  Lock,
   PiggyBank,
   Receipt,
   Scale,
@@ -42,6 +43,7 @@ export const NAV_PAGES: NavPage[] = [
     allow: (p) => p.can("expenses") || p.can("expenses", "create"),
   },
   { title: "Tahsilatlar", url: "/tahsilatlar", icon: Wallet, allow: (p) => p.can("fees") },
+  { title: "Vekalet ücreti", url: "/vekalet", icon: Lock, allow: (p) => p.isAdmin },
   { title: "Cari hesap", url: "/cari-hesap", icon: BookOpenCheck, allow: (p) => p.can("ledger") },
   { title: "Banka & Kasa", url: "/banka-kasa", icon: Landmark, allow: (p) => p.can("accounts") },
   {

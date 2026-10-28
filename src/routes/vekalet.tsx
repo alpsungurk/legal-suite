@@ -1,4 +1,4 @@
-/** Vekalet ücreti: yalnızca yöneticinin gördüğü ücret planları (menüde yok; gösterge panelinden açılır) */
+/** Vekalet ücreti: yalnızca yöneticinin gördüğü ücret planları (menüde Finans altında, yalnızca yöneticiye) */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { FeesWorkspace, validateFeesSearch } from "@/components/fees/FeesWorkspace";
 

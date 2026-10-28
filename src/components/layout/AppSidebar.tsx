@@ -14,6 +14,7 @@ import {
   Gavel,
   Landmark,
   LayoutDashboard,
+  Lock,
   Receipt,
   Scale,
   Timer,
@@ -21,6 +22,7 @@ import {
   Search,
   Settings,
   Shield,
+  Trash2,
   UserX,
   Users,
   Wallet,
@@ -28,6 +30,7 @@ import {
 } from "lucide-react";
 import { BrandImg, FirmMark } from "@/components/app/Brand";
 import { BRAND } from "@/lib/brand";
+import { canUseTrash } from "@/lib/trash";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import {
@@ -447,9 +450,10 @@ function buildGroups(
 ): Group[] {
   const userId = user.id;
   const t = today();
-  const overdueInst = p.can("fees")
-    ? allInstallments(state).filter((r) => r.status === "Gecikmiş").length
-    : 0;
+  const overdue = allInstallments(state).filter((r) => r.status === "Gecikmiş");
+  // Vekalet (yalnızca yöneticiye özel) taksitleri kendi menüsünde sayılır
+  const overdueInst = p.can("fees") ? overdue.filter((r) => !r.plan.adminOnly).length : 0;
+  const overdueVekalet = p.isAdmin ? overdue.filter((r) => r.plan.adminOnly).length : 0;
   const todayEvents = state.reminders.filter(
     (r) =>
       r.status === "Bekliyor" && r.date === t && (p.can("reminders") || r.assigneeId === userId),
@@ -545,6 +549,14 @@ function buildGroups(
       badge: overdueInst,
       badgeTone: "red",
     });
+  if (p.isAdmin)
+    finance.push({
+      title: "Vekalet ücreti",
+      url: "/vekalet",
+      icon: Lock,
+      badge: overdueVekalet,
+      badgeTone: "red",
+    });
   if (p.can("ledger"))
     finance.push({ title: "Cari hesap", url: "/cari-hesap", icon: BookOpenCheck });
   if (p.can("accounts"))
@@ -591,6 +603,7 @@ function buildGroups(
 
   const admin: Item[] = [];
   if (p.can("reports")) admin.push({ title: "Raporlar", url: "/raporlar", icon: BarChart3 });
+  if (canUseTrash(p)) admin.push({ title: "Çöp kutusu", url: "/cop-kutusu", icon: Trash2 });
   if (p.canOpenSettings) admin.push({ title: "Ayarlar", url: "/ayarlar", icon: Settings });
   if (admin.length) groups.push({ label: "Yönetim", items: admin });
 
