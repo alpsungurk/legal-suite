@@ -24,6 +24,7 @@ import { Route as TahsilatlarRouteImport } from './routes/tahsilatlar'
 import { Route as TaksitlerRouteImport } from './routes/taksitler'
 import { Route as TakvimRouteImport } from './routes/takvim'
 import { Route as UyarilarRouteImport } from './routes/uyarilar'
+import { Route as VekaletRouteImport } from './routes/vekalet'
 import { Route as BorclularIndexRouteImport } from './routes/borclular/index'
 import { Route as BorclularIdRouteImport } from './routes/borclular/$id'
 import { Route as DosyalarIndexRouteImport } from './routes/dosyalar/index'
@@ -113,6 +114,11 @@ const TakvimRoute = TakvimRouteImport.update({
 const UyarilarRoute = UyarilarRouteImport.update({
   id: '/uyarilar',
   path: '/uyarilar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VekaletRoute = VekaletRouteImport.update({
+  id: '/vekalet',
+  path: '/vekalet',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BorclularIndexRoute = BorclularIndexRouteImport.update({
@@ -207,6 +213,7 @@ export interface FileRoutesByFullPath {
   '/taksitler': typeof TaksitlerRoute
   '/takvim': typeof TakvimRoute
   '/uyarilar': typeof UyarilarRoute
+  '/vekalet': typeof VekaletRoute
   '/borclular/$id': typeof BorclularIdRoute
   '/dosyalar/$id': typeof DosyalarIdRoute
   '/icra/$id': typeof IcraIdRoute
@@ -239,6 +246,7 @@ export interface FileRoutesByTo {
   '/taksitler': typeof TaksitlerRoute
   '/takvim': typeof TakvimRoute
   '/uyarilar': typeof UyarilarRoute
+  '/vekalet': typeof VekaletRoute
   '/borclular/$id': typeof BorclularIdRoute
   '/dosyalar/$id': typeof DosyalarIdRoute
   '/icra/$id': typeof IcraIdRoute
@@ -272,6 +280,7 @@ export interface FileRoutesById {
   '/taksitler': typeof TaksitlerRoute
   '/takvim': typeof TakvimRoute
   '/uyarilar': typeof UyarilarRoute
+  '/vekalet': typeof VekaletRoute
   '/borclular/$id': typeof BorclularIdRoute
   '/dosyalar/$id': typeof DosyalarIdRoute
   '/icra/$id': typeof IcraIdRoute
@@ -306,6 +315,7 @@ export interface FileRouteTypes {
     | '/taksitler'
     | '/takvim'
     | '/uyarilar'
+    | '/vekalet'
     | '/borclular/$id'
     | '/dosyalar/$id'
     | '/icra/$id'
@@ -338,6 +348,7 @@ export interface FileRouteTypes {
     | '/taksitler'
     | '/takvim'
     | '/uyarilar'
+    | '/vekalet'
     | '/borclular/$id'
     | '/dosyalar/$id'
     | '/icra/$id'
@@ -370,6 +381,7 @@ export interface FileRouteTypes {
     | '/taksitler'
     | '/takvim'
     | '/uyarilar'
+    | '/vekalet'
     | '/borclular/$id'
     | '/dosyalar/$id'
     | '/icra/$id'
@@ -403,6 +415,7 @@ export interface RootRouteChildren {
   TaksitlerRoute: typeof TaksitlerRoute
   TakvimRoute: typeof TakvimRoute
   UyarilarRoute: typeof UyarilarRoute
+  VekaletRoute: typeof VekaletRoute
   BorclularIdRoute: typeof BorclularIdRoute
   DosyalarIdRoute: typeof DosyalarIdRoute
   IcraIdRoute: typeof IcraIdRoute
@@ -525,6 +538,13 @@ declare module '@tanstack/react-router' {
       path: '/uyarilar'
       fullPath: '/uyarilar'
       preLoaderRoute: typeof UyarilarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/vekalet': {
+      id: '/vekalet'
+      path: '/vekalet'
+      fullPath: '/vekalet'
+      preLoaderRoute: typeof VekaletRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/borclular/': {
@@ -651,6 +671,7 @@ const rootRouteChildren: RootRouteChildren = {
   TaksitlerRoute: TaksitlerRoute,
   TakvimRoute: TakvimRoute,
   UyarilarRoute: UyarilarRoute,
+  VekaletRoute: VekaletRoute,
   BorclularIdRoute: BorclularIdRoute,
   DosyalarIdRoute: DosyalarIdRoute,
   IcraIdRoute: IcraIdRoute,

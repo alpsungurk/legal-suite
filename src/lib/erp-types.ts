@@ -192,6 +192,8 @@ export type FeePlan = BaseEntity & {
   period?: string;
   cancelled: boolean;
   note?: string;
+  /** Vekalet ücreti bölümü: yalnızca yönetici görür (veritabanında da gizli) */
+  adminOnly?: boolean;
 };
 
 export type Account = BaseEntity & {

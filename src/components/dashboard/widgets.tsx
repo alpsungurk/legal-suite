@@ -303,22 +303,25 @@ export function AlertsPanel({ limit = 7 }: { limit?: number }) {
 
 /* ───────────── Yaklaşan taksitler ───────────── */
 
-export function UpcomingInstallments() {
+/** adminOnly: Vekalet ücreti (yalnızca yöneticinin gördüğü) planlarının taksitleri */
+export function UpcomingInstallments({ adminOnly = false }: { adminOnly?: boolean }) {
   const { state } = useErp();
   const quick = useQuick();
   const horizon = addDays(today(), 14);
   const rows = allInstallments(state)
-    .filter((r) => r.status !== "Ödendi" && r.inst.dueDate <= horizon)
+    .filter(
+      (r) => !!r.plan.adminOnly === adminOnly && r.status !== "Ödendi" && r.inst.dueDate <= horizon,
+    )
     .slice(0, 7);
   const total = sumBy(rows, (r) => r.remaining);
   const clientName = (id: string) => state.clients.find((c) => c.id === id)?.name ?? "—";
   return (
     <Section
-      title="Tahsil edilecekler"
+      title={adminOnly ? "Vekalet: tahsil edilecekler" : "Tahsil edilecekler"}
       description={`Geciken ve 14 gün içinde vadesi gelen · ${formatMoney(total)}`}
       actions={
         <Button variant="ghost" size="sm" asChild>
-          <Link to="/tahsilatlar">
+          <Link to={adminOnly ? "/vekalet" : "/tahsilatlar"}>
             Tümü <ArrowRight />
           </Link>
         </Button>

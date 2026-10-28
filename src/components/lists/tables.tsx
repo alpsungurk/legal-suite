@@ -8,6 +8,8 @@ import {
   Download,
   Eye,
   HandCoins,
+  Lock,
+  LockOpen,
   Paperclip,
   Pencil,
   RotateCcw,
@@ -372,7 +374,7 @@ export function PlanTable({
   hide?: Hide;
   onOpen?: (p: FeePlan) => void;
 }) {
-  const { state, permissions, remove, patch } = useErp();
+  const { state, permissions, patch, patchMany } = useErp();
   const n = useNames();
   const quick = useQuick();
   const trash = useTrashDelete();
@@ -512,10 +514,48 @@ export function PlanTable({
       initialSort={{ id: "next" }}
       exportName="Tahsilat planları"
       onRowClick={(r) => onOpen?.(r.plan)}
-      selectable={permissions.can("fees", "delete")}
-      bulkActions={(sel, clear) => (
-        <BulkTrash entity="fee_plans" ids={sel.map((r) => r.plan.id)} onDone={clear} />
-      )}
+      selectable={permissions.can("fees", "delete") || permissions.isAdmin}
+      bulkActions={(sel, clear) => {
+        // Yönetici planları Vekalet (yalnızca yöneticiye görünür) bölümüne taşıyabilir / geri alabilir
+        const toPrivate = sel.filter((r) => !r.plan.adminOnly).map((r) => r.plan.id);
+        const toPublic = sel.filter((r) => r.plan.adminOnly).map((r) => r.plan.id);
+        const move = (ids: string[], adminOnly: boolean) => {
+          patchMany("plans", ids, { adminOnly });
+          toast.success(
+            adminOnly
+              ? `${ids.length} plan Vekalet ücretine taşındı; avukatlar artık göremez`
+              : `${ids.length} plan Tahsilatlar'a taşındı`,
+          );
+          clear();
+        };
+        return (
+          <>
+            {permissions.isAdmin && toPrivate.length > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8"
+                onClick={() => move(toPrivate, true)}
+              >
+                <Lock /> Vekalete taşı ({toPrivate.length})
+              </Button>
+            )}
+            {permissions.isAdmin && toPublic.length > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8"
+                onClick={() => move(toPublic, false)}
+              >
+                <LockOpen /> Tahsilatlar'a taşı ({toPublic.length})
+              </Button>
+            )}
+            {permissions.can("fees", "delete") && (
+              <BulkTrash entity="fee_plans" ids={sel.map((r) => r.plan.id)} onDone={clear} />
+            )}
+          </>
+        );
+      }}
       rowActions={
         permissions.can("fees", "edit")
           ? (r) => (

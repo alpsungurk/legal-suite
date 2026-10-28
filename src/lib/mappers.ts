@@ -773,6 +773,7 @@ export function planFromRow(r: Record<string, unknown>, installments: Installmen
     period: optStr(r.period),
     cancelled: Boolean(r.cancelled),
     note: optStr(r.note),
+    adminOnly: Boolean(r.admin_only),
     installments,
   };
 }
@@ -788,6 +789,7 @@ export function planToRow(p: Partial<FeePlan>) {
   if (p.period !== undefined) row.period = p.period || null;
   if (p.cancelled != null) row.cancelled = p.cancelled;
   if (p.note !== undefined) row.note = p.note || null;
+  if (p.adminOnly != null) row.admin_only = p.adminOnly;
   return row;
 }
 

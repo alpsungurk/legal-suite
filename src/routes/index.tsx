@@ -10,6 +10,7 @@ import {
   AlarmClock,
   PiggyBank,
   ArrowRight,
+  Lock,
 } from "lucide-react";
 import { useErp } from "@/lib/erp-store";
 import { isEnforcementInactive } from "@/lib/erp-types";
@@ -80,7 +81,9 @@ function Dashboard() {
 }
 
 function FinanceDashboard() {
-  const { state, permissions: perm } = useErp();
+  const { state: fullState, permissions: perm } = useErp();
+  // Genel ücret rakamlarına Vekalet (yalnızca yöneticiye özel) planları girmez; ayrı bölümde gösterilir
+  const state = { ...fullState, plans: fullState.plans.filter((p) => !p.adminOnly) };
   const seeFees = perm.can("fees");
   const seeAccounts = perm.can("accounts");
   const seeExpenses = perm.can("expenses");
@@ -167,6 +170,8 @@ function FinanceDashboard() {
         <AlertsPanel />
       </div>
 
+      {perm.isAdmin && <VekaletSection />}
+
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         {seeFees && <UpcomingInstallments />}
         <AgendaWidget mineOnly={!perm.can("reminders")} />
@@ -177,6 +182,58 @@ function FinanceDashboard() {
         {perm.can("ledger") && <ClientBalances />}
       </div>
     </>
+  );
+}
+
+/** Yalnızca yöneticinin gördüğü vekalet ücretleri: özet kartları ve yaklaşan taksitler */
+function VekaletSection() {
+  const { state: fullState } = useErp();
+  const state = { ...fullState, plans: fullState.plans.filter((p) => p.adminOnly) };
+  const t = today();
+  const inst = allInstallments(state).filter((r) => r.status !== "Ödendi");
+  const overdue = inst.filter((r) => r.status === "Gecikmiş");
+  return (
+    <Section
+      title="Vekalet ücretleri"
+      description="Yalnızca yönetici görür; avukatların panelinde ve rakamlarında yer almaz"
+      actions={
+        <Button variant="ghost" size="sm" asChild>
+          <Link to="/vekalet">
+            Vekalet ücretleri <ArrowRight />
+          </Link>
+        </Button>
+      }
+      bodyClassName="space-y-3 p-3"
+    >
+      <StatGrid>
+        <StatTile
+          label="Bu ay tahsil edilen"
+          value={formatMoney(feeIncomeInRange(state, `${t.slice(0, 7)}-01`, t))}
+          icon={Lock}
+          tone="green"
+          hint="Vekalet ücreti"
+          to="/vekalet"
+        />
+        <StatTile
+          label="Bekleyen vekalet"
+          value={formatMoney(sumBy(inst, (r) => r.remaining))}
+          icon={Wallet}
+          tone="blue"
+          hint={`${inst.length} taksit · ${state.plans.length} plan`}
+          to="/vekalet"
+        />
+        <StatTile
+          label="Vadesi geçmiş"
+          value={formatMoney(sumBy(overdue, (r) => r.remaining))}
+          icon={AlarmClock}
+          tone="red"
+          hint={`${overdue.length} taksit`}
+          hintTone={overdue.length ? "red" : undefined}
+          to="/vekalet"
+        />
+      </StatGrid>
+      <UpcomingInstallments adminOnly />
+    </Section>
   );
 }
 

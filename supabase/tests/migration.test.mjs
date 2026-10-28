@@ -949,6 +949,40 @@ await db.exec(`update public.trash set deleted_at = now() - interval '31 days'`)
 const ckRet = await one(`select app.cron_retention() r`);
 ok("çöp: 30 günden eski çöp temizlenir", ckRet.r.trash >= 1 && (await one(`select count(*)::int c from public.trash`)).c === 0, JSON.stringify(ckRet.r));
 
+// ── Admin'e özel vekalet ücreti
+let vkErr = null;
+try { const sql = readFileSync(fileURLToPath(new URL("../migrations/20261029140000_vekalet_ozel.sql", import.meta.url)), "utf8"); await db.exec(sql); await db.exec(sql); } catch (e) { vkErr = e; }
+ok("vekalet migration'ı çalıştı (iki kez)", !vkErr, vkErr ? vkErr.message : "");
+await setAs(S, { "fees.view": true, "fees.create": true, "fees.edit": true, "ledger.view": true });
+const sCli = async () => Number((await asUser(S, () => one(`select balance from public.v_client_balances where client_id=$1`, [client2]))).balance);
+const aCli = async () => Number((await asUser(A, () => one(`select balance from public.v_client_balances where client_id=$1`, [client2]))).balance);
+const vkSBefore = await sCli(), vkABefore = await aCli();
+const vkPlan = await ins(`insert into public.fee_plans (title, client_id, total, admin_only) values ('Özel vekalet',$1,5000,true)`, [client2]);
+const vkInst = await ins(`insert into public.installments (plan_id, position, due_date, amount) values ($1,1,current_date - 2,5000)`, [vkPlan]);
+await asUser(A, () => q(`select public.record_installment_payment($1,$2,1000,current_date,'Nakit',$3,null)`, [vkPlan, vkInst, kasa]));
+ok("vekalet: yönetici planı, taksiti ve tahsilatı görür",
+  (await asUser(A, () => q(`select 1 from public.fee_plans where id=$1`, [vkPlan]))).length === 1
+  && (await asUser(A, () => q(`select 1 from public.installment_payments p join public.installments i on i.id=p.installment_id where i.plan_id=$1`, [vkPlan]))).length === 1);
+ok("vekalet: tahsilat izinli avukat bile planı, taksiti, tahsilatı göremez",
+  (await asUser(S, () => q(`select 1 from public.fee_plans where id=$1`, [vkPlan]))).length === 0
+  && (await asUser(S, () => q(`select 1 from public.installments where plan_id=$1`, [vkPlan]))).length === 0
+  && (await asUser(S, () => q(`select 1 from public.installment_payments where installment_id=$1`, [vkInst]))).length === 0);
+ok("vekalet: avukat tahsilat giremez", await fails(() => asUser(S, () => q(`select public.record_installment_payment($1,$2,10,current_date,'Nakit',null,null)`, [vkPlan, vkInst])), /bulunamadı/));
+ok("vekalet: avukat admin'e özel plan açamaz",
+  await fails(() => asUser(S, () => q(`insert into public.fee_plans (title, client_id, total, admin_only) values ('x',$1,1,true)`, [client2]))));
+const sPlan = await asUser(S, async () => (await one(`insert into public.fee_plans (title, client_id, total) values ('Normal',$1,100) returning id`, [client2])).id);
+ok("vekalet: avukat kendi planını admin'e özel yapamaz",
+  await fails(() => asUser(S, () => q(`update public.fee_plans set admin_only = true where id=$1`, [sPlan]))));
+const vkS = await sCli(), vkA = await aCli();
+ok("vekalet: avukatın gördüğü cari bakiyede vekalet yok, yöneticininkinde var",
+  vkS - vkSBefore === 100 && vkA - vkABefore === 100 + 4000, `avukat ${vkSBefore}→${vkS} · yönetici ${vkABefore}→${vkA}`);
+await db.exec(`delete from public.notifications`);
+await one(`select app.cron_notifications()`);
+ok("vekalet: geciken taksit bildirimi yalnızca yöneticiye, /vekalet bağlantısıyla",
+  (await q(`select user_id, link from public.notifications where dedupe_key = $1`, [`inst-overdue:${vkInst}`])).every((n) => n.user_id === A && n.link === "/vekalet")
+  && (await q(`select 1 from public.notifications where dedupe_key = $1`, [`inst-overdue:${vkInst}`])).length === 1);
+await setAs(S, {});
+
 console.log(R.join("\n"));
 console.log(`\nPASS: ${R.filter((x) => x.startsWith("PASS")).length}  FAIL: ${R.filter((x) => x.startsWith("FAIL")).length}`);
 process.exit(R.some((x) => x.startsWith("FAIL")) ? 1 : 0);

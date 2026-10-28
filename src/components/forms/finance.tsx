@@ -382,6 +382,8 @@ export function PlanForm({ open, onOpenChange, record, preset, onSaved }: FormPr
   ];
 
   const initialRows: Row[] = record?.installments.map((i) => ({ ...i })) ?? [];
+  // Vekalet bölümünden açılan plan yalnızca yöneticiye görünür
+  const adminOnly = record?.adminOnly ?? Boolean(preset?.adminOnly);
   const base: FormValues = {
     kind: o.feeKinds.includes("Vekalet ücreti") ? "Vekalet ücreti" : o.feeKinds[0],
     title: o.feeKinds.includes("Vekalet ücreti") ? "Vekalet ücreti" : o.feeKinds[0],
@@ -413,7 +415,15 @@ export function PlanForm({ open, onOpenChange, record, preset, onSaved }: FormPr
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={editing ? "Tahsilat planını düzenle" : "Yeni tahsilat planı"}
+      title={
+        adminOnly
+          ? editing
+            ? "Vekalet ücretini düzenle"
+            : "Yeni vekalet ücreti"
+          : editing
+            ? "Tahsilat planını düzenle"
+            : "Yeni tahsilat planı"
+      }
       description="Ücreti tek seferde ya da taksitle planlayın; tablo üzerinden vade ve tutarları değiştirebilirsiniz."
       fields={fields}
       initial={initial}
@@ -477,6 +487,7 @@ export function PlanForm({ open, onOpenChange, record, preset, onSaved }: FormPr
           period: record?.period,
           cancelled: record?.cancelled ?? false,
           note: v.note || undefined,
+          adminOnly,
         });
         toast.success(editing ? "Plan güncellendi" : "Tahsilat planı oluşturuldu");
         onSaved?.(item);
