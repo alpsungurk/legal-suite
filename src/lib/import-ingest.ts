@@ -62,6 +62,7 @@ export async function ingest(source: File | Workbook, spec: ImportSpec, sheetNam
   const unknown: string[] = [];
   const unknownCols: Array<{ index: number; header: string }> = [];
   const used = new Set<string>();
+  const ignored = new Set((spec.ignoreHeaders ?? []).map(headerKey));
   // 1) Birebir başlık  2) Takma ad (birebir eşleşen sütun öncelikli)
   header.forEach((cell, index) => {
     const text = String(cell ?? "").trim();
@@ -76,7 +77,7 @@ export async function ingest(source: File | Workbook, spec: ImportSpec, sheetNam
     const text = String(cell ?? "").trim();
     if (!text) return;
     const hk = headerKey(text);
-    if (exactOf.has(hk)) return;
+    if (exactOf.has(hk) || ignored.has(hk)) return;
     const key = aliasOf.get(hk);
     if (key && !used.has(key)) {
       mapping.push({ index, key });

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { CalendarDays, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, FileSpreadsheet, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { useErp } from "@/lib/erp-store";
 import { allInstallments, seizureDueDate } from "@/lib/finance";
@@ -177,9 +177,17 @@ function Page() {
         description="Duruşmalar, süreler, görevler, taksit vadeleri, ödeme sözleri ve haciz düşme tarihleri"
         icon={CalendarDays}
         actions={
-          <Button onClick={() => quick.open("reminder", { preset: { date: selected } })}>
-            <Plus /> Yeni kayıt
-          </Button>
+          <>
+            {/* Duruşma listesi Excel'den tek seferde (tek sorguda) aktarılır */}
+            {permissions.can("reminders", "create") && (
+              <Button variant="outline" onClick={() => quick.open("import", { kind: "reminders" })}>
+                <FileSpreadsheet /> Excel ile aktar
+              </Button>
+            )}
+            <Button onClick={() => quick.open("reminder", { preset: { date: selected } })}>
+              <Plus /> Yeni kayıt
+            </Button>
+          </>
         }
       />
       <div className="flex flex-wrap items-center gap-2">

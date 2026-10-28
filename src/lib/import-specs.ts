@@ -25,11 +25,19 @@ import { caseCourtLabel } from "@/lib/finance";
 import { fileNoKey, formatDate, normalizeFileNo, round2, today } from "@/lib/format";
 import { newId } from "@/lib/mappers";
 import { excelSerialToISO, type RawCell } from "@/lib/excel-read";
+import { matchClients, parseUyapParties, roleLabel } from "@/lib/uyap";
 
 export type ImportKind =
-  "clients" | "cases" | "expenses" | "debtors" | "banks" | "enforcements" | "enforcementsOwed";
+  | "clients"
+  | "cases"
+  | "expenses"
+  | "reminders"
+  | "debtors"
+  | "banks"
+  | "enforcements"
+  | "enforcementsOwed";
 
-export type ColumnType = "text" | "money" | "date" | "enum" | "lookup" | "multi";
+export type ColumnType = "text" | "money" | "date" | "time" | "enum" | "lookup" | "multi";
 
 export type ImportColumn = {
   key: string;
@@ -82,6 +90,8 @@ export type ImportSpec = {
   updatable?: boolean;
   check: (v: RowValues, ctx: ImportContext) => RowCheck;
   build: (rows: RowValues[], ctx: ImportContext) => ImportBatch;
+  /** Bilgi taşımayan sütunlar (UYAP'ın "Görüntüle", "Takvime Ekle" düğmeleri): nota eklenmez */
+  ignoreHeaders?: string[];
   /** Hazır şablon dosyası: verilirse "Şablon" düğmesi bu dosyayı olduğu gibi indirir (public/ altında) */
   templateFile?: { url: string; filename: string };
 };
@@ -149,6 +159,16 @@ export function parseDateText(input: string): string | null {
   if (date.getUTCFullYear() !== y || date.getUTCMonth() !== m - 1 || date.getUTCDate() !== d)
     return null;
   return date.toISOString().slice(0, 10);
+}
+
+/** "10:30", "10.30", "9:05", "02.11.2026 10:30" → "10:30"; geçersizse null */
+export function parseTimeText(input: string): string | null {
+  const m = input.trim().match(/(?:^|\s)(\d{1,2})[:.,](\d{2})(?::\d{2})?$/);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h > 23 || min > 59) return null;
+  return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
 }
 
 /** Metindeki GG.AA.YYYY tarihlerinin en yenisi (son haciz listesi hücreleri için) */
@@ -238,7 +258,21 @@ export function cellToText(
   if (typeof cell === "boolean") return cell ? "Evet" : "Hayır";
   if (type === "date") {
     const iso = typeof cell === "number" ? excelSerialToISO(cell, date1904) : parseDateText(cell);
-    return iso ? formatDate(iso) : String(cell).trim();
+    if (!iso) return String(cell).trim();
+    // Hücrede saat de varsa korunur ("02.11.2026 09:45"); tarih çözücüler saati yok sayar
+    const time =
+      typeof cell === "number"
+        ? cell % 1 > 0.0001 && cellToText(cell, "time", date1904)
+        : parseTimeText(cell);
+    return time ? `${formatDate(iso)} ${time}` : formatDate(iso);
+  }
+  // Excel saati günün kesri olarak tutar (0,4375 = 10:30)
+  if (type === "time") {
+    if (typeof cell === "number") {
+      const mins = Math.round((((cell % 1) + 1) % 1) * 1440) % 1440;
+      return `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
+    }
+    return parseTimeText(cell) ?? cell.trim();
   }
   if (typeof cell === "number")
     return type === "money" ? amountText.format(round2(cell)) : String(round2(cell));
@@ -856,6 +890,247 @@ const expenses: ImportSpec = {
       };
     });
     return { expenses: out };
+  },
+};
+
+/* ───────────── Ajanda (duruşma listesi) ───────────── */
+
+type ReminderResolved = {
+  date: string;
+  time?: string;
+  type: string;
+  title: string;
+  caseId?: string;
+  clientId?: string;
+  assigneeId: string;
+  note?: string;
+};
+
+/**
+ * Ajanda satırı. UYAP "Duruşma Sorgulama" çıktısı doğrudan okunur: Birim, Dosya No, Dosya Türü,
+ * Duruşma Tarihi (saatli), Taraf Bilgisi, İşlem, Sonuç. Taraflardan müvekkil listesindekiler
+ * bulunur; başlıkta müvekkilin adı ve dosyadaki sıfatı (davacı, davalı, sanık…) görünür.
+ */
+function resolveReminder(
+  v: RowValues,
+  ctx: ImportContext,
+  errors: Errors,
+  warnings: string[] = [],
+): ReminderResolved {
+  const s = ctx.state;
+  const types = s.settings.reminderTypes;
+  const d = date(v, "date", errors, { required: true });
+
+  // UYAP'ın "İşlem"i (Duruşma, Keşif, Ön İnceleme…) türlerde yoksa Duruşma sayılır, adı başlıkta kalır
+  const activity = v.type?.trim() ?? "";
+  const keşif = types.find((t) => norm(t) === "keşif");
+  const type =
+    (activity && matchOption(activity, types)) ||
+    (keşif && /keşif/i.test(activity) ? keşif : undefined) ||
+    (types.includes("Duruşma") ? "Duruşma" : types[0]);
+
+  // Saat ayrı sütunda ya da tarih hücresinde ("02.11.2026 10:30") olabilir
+  const rawTime = v.time?.trim() ?? "";
+  let time = rawTime ? (parseTimeText(rawTime) ?? undefined) : undefined;
+  if (rawTime && !time) errors.time = "Saat SS:DD biçiminde olmalı (ör. 10:30)";
+  if (!rawTime && v.date?.trim()) time = parseTimeText(v.date) ?? undefined;
+
+  // Dava dosyası: sistemde varsa bağlanır (UYAP'ta "2026/220", sistemde "2026/220 E." olabilir)
+  const caseRaw = firstPart(v.case?.trim() ?? "");
+  const court = v.location?.trim() ?? "";
+  const byNo = caseRaw
+    ? s.cases.filter(
+        (c) =>
+          fileNoKey(c.no) === fileNoKey(caseRaw) &&
+          (!court || !c.court || norm(c.court) === norm(court)),
+      )
+    : [];
+  const kase = byNo.length === 1 ? byNo[0] : undefined;
+
+  // Müvekkil: Müvekkil sütunu > taraflardan eşleşen > bağlı dava dosyasının müvekkili
+  const parties = parseUyapParties(v.parties ?? "");
+  const ours = matchClients(parties, s.clients);
+  const cl = v.client?.trim() ? findClient(s, v.client) : {};
+  if (cl.error) warnings.push(`Müvekkil "${v.client?.trim()}" bulunamadı; bağlanmadan eklenir`);
+  if (parties.length && !ours.length && !cl.client && !kase)
+    warnings.push("Taraflarda müvekkil listesindeki kimse bulunamadı");
+  const clientId = cl.client?.id ?? ours[0]?.client.id ?? kase?.clientId;
+
+  let assigneeId = ctx.user.id;
+  if (v.assignee?.trim()) {
+    const u = findUsers(s, v.assignee);
+    if (u.missing.length) errors.assignee = `Kullanıcı bulunamadı: ${u.missing.join(", ")}`;
+    else if (u.ids[0]) assigneeId = u.ids[0];
+  }
+
+  const side = ours.map((o) => `${o.client.name} (${roleLabel(o.role)})`).join(", ");
+  const title =
+    v.title?.trim() ||
+    [activity || type, kase?.no ?? caseRaw, side].filter(Boolean).join(" · ");
+  const note = [
+    v.note?.trim(),
+    v.fileType?.trim() && `Dosya türü: ${v.fileType.trim()}`,
+    v.result?.trim() && `Sonuç: ${v.result.trim()}`,
+    v.judgeLeave?.trim() && v.judgeLeave.trim() !== "-" && `İzinli hakim: ${v.judgeLeave.trim()}`,
+    parties.length &&
+      `Taraflar:\n${parties.map((p) => `- ${p.name} (${roleLabel(p.role)})`).join("\n")}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  return {
+    date: d,
+    time,
+    type,
+    title,
+    caseId: kase?.id,
+    clientId,
+    assigneeId,
+    note: note || undefined,
+  };
+}
+
+const reminders: ImportSpec = {
+  kind: "reminders",
+  title: "Ajanda (duruşma listesi)",
+  noun: "ajanda kaydı",
+  description:
+    "UYAP Duruşma Sorgulama çıktısını olduğu gibi yükleyin; taraflardan müvekkilleriniz ve sıfatları bulunur.",
+  allowed: (p) => p.can("reminders", "create"),
+  softDuplicates: true,
+  ignoreHeaders: ["Dosya Görüntüle", "Takvime Ekle", "Sık Kullanılanlar", "E-Duruşma Talebi"],
+  columns: [
+    {
+      key: "date",
+      header: "Tarih",
+      required: true,
+      type: "date",
+      hint: "GG.AA.YYYY (saat de yazılabilir: 02.11.2026 10:30)",
+      example: "02.11.2026",
+      aliases: ["Duruşma tarihi", "Gün"],
+    },
+    {
+      key: "time",
+      header: "Saat",
+      type: "time",
+      hint: "SS:DD",
+      example: "10:30",
+      aliases: ["Duruşma saati"],
+    },
+    {
+      key: "type",
+      header: "Tür",
+      type: "enum",
+      options: (c) => c.state.settings.reminderTypes,
+      creatable: true,
+      hint: "Duruşma, Keşif… Listede olmayan (ör. Ön İnceleme) Duruşma olarak eklenir, adı başlıkta kalır",
+      example: "Duruşma",
+      aliases: ["Ajanda türü", "İşlem"],
+    },
+    {
+      key: "case",
+      header: "Dosya no",
+      type: "lookup",
+      options: lists.cases,
+      creatable: true,
+      hint: "Sistemdeki dava dosyası (yoksa dosya no başlığa yazılır)",
+      example: "2026/101 E.",
+      width: 28,
+      aliases: ["Dosya", "Esas no", "Esas"],
+    },
+    {
+      key: "location",
+      header: "Mahkeme / Yer",
+      hint: "Mahkeme, salon ya da adres",
+      example: "İstanbul 3. Asliye Hukuk",
+      width: 28,
+      aliases: ["Birim", "Mahkeme", "Yer", "Salon", "Adres"],
+    },
+    {
+      key: "parties",
+      header: "Taraf Bilgisi",
+      hint: "UYAP biçimi: AD SOYAD - DAVACI AD SOYAD - DAVALI … Müvekkilleriniz bulunur",
+      example: "AYŞE DEMİR - DAVACI ALİ KAYA - DAVALI",
+      width: 40,
+      aliases: ["Taraflar", "Taraf"],
+    },
+    {
+      key: "fileType",
+      header: "Dosya Türü",
+      hint: "Notta görünür",
+      example: "Hukuk Dava Dosyası",
+      aliases: ["Dosya Turu"],
+    },
+    { key: "result", header: "Sonuç", hint: "Notta görünür", example: "Günü Verildi" },
+    { key: "judgeLeave", header: "İzinli Hakim", hint: "Notta görünür (“-” ise yazılmaz)" },
+    {
+      key: "title",
+      header: "Başlık",
+      hint: "Boşsa işlem, dosya no ve müvekkil (sıfatıyla) yazılır",
+      example: "Ön inceleme duruşması",
+      width: 28,
+      aliases: ["Konu", "Açıklama"],
+    },
+    {
+      key: "client",
+      header: "Müvekkil",
+      type: "lookup",
+      options: lists.clients,
+      creatable: true,
+      hint: "Boşsa taraflardan ya da dava dosyasından bulunur",
+      width: 24,
+    },
+    {
+      key: "assignee",
+      header: "Sorumlu",
+      type: "lookup",
+      options: lists.lawyers,
+      hint: "Boşsa aktaran kişi",
+      aliases: ["Avukat", "Sorumlu avukat"],
+    },
+    { key: "note", header: "Not", hint: "Serbest not", width: 28 },
+  ],
+  check(v, ctx) {
+    const errors: Errors = {};
+    const warnings: string[] = [];
+    const r = resolveReminder(v, ctx, errors, warnings);
+    if (!r.title.trim()) errors.title = "Başlık ya da dosya no girin";
+    // Aynı gün ve saatte aynı başlık ya da aynı yer + dosya no: UYAP listesi yeniden yüklenince
+    // (arada müvekkil eklenip başlık değişse de) duruşma ikinci kez eklenmez
+    const caseNo = firstPart(v.case?.trim() ?? "");
+    const dup = ctx.state.reminders.find(
+      (x) =>
+        x.date === r.date &&
+        (x.time ?? "") === (r.time ?? "") &&
+        x.status !== "İptal" &&
+        (norm(x.title) === norm(r.title) ||
+          (!!caseNo &&
+            norm(x.location) === norm(v.location) &&
+            x.title.split("·").some((part) => fileNoKey(part) === fileNoKey(caseNo)))),
+    );
+    return {
+      errors,
+      warnings,
+      existing: dup ? "Aynı gün, saat ve başlıkla ajanda kaydı zaten var" : undefined,
+      key: [r.date, r.time ?? "", norm(v.location), caseNo ? norm(caseNo) : norm(r.title)].join("|"),
+    };
+  },
+  build(rows, ctx) {
+    const out: Draft<"reminders">[] = rows.map((v) => {
+      const r = resolveReminder(v, ctx, {});
+      return {
+        title: r.title,
+        type: r.type,
+        date: r.date,
+        time: r.time,
+        location: opt(v.location),
+        caseId: r.caseId,
+        clientId: r.clientId,
+        assigneeId: r.assigneeId,
+        status: "Bekliyor",
+        note: r.note,
+      };
+    });
+    return { reminders: out };
   },
 };
 
@@ -1486,6 +1761,7 @@ export const IMPORT_SPECS: Record<ImportKind, ImportSpec> = {
   clients,
   cases,
   expenses,
+  reminders,
   debtors,
   banks,
   enforcements,
@@ -1496,6 +1772,7 @@ export const IMPORT_ORDER: ImportKind[] = [
   "clients",
   "cases",
   "expenses",
+  "reminders",
   "debtors",
   "banks",
   "enforcements",

@@ -194,7 +194,7 @@ export function PermissionsTab() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className={cn("space-y-4", pending > 0 && "pb-20")}>
       <Section
         title="Avukat izinleri"
         description="Bir avukatın hangi sayfaları göreceğini ve nelerde işlem yapabileceğini belirleyin. Değişiklikler “Kaydet”e basınca geçerli olur."
@@ -355,33 +355,23 @@ export function PermissionsTab() {
         </p>
       </Section>
 
-      <div
-        className={cn(
-          "sticky bottom-3 z-20 flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-card px-4 py-3 shadow-soft",
-          pending ? "border-amber-400/70" : "border-border",
-        )}
-      >
-        <p className="text-sm">
-          {pending ? (
-            <span className="font-medium text-amber-700 dark:text-amber-300">
-              {pending} kaydedilmemiş değişiklik
-              {user ? ` · ${user.name}` : " · Tüm avukatlar"}
-            </span>
-          ) : (
-            <span className="text-muted-foreground">Kaydedilmemiş değişiklik yok</span>
-          )}
-        </p>
-        <div className="flex gap-2">
-          {pending > 0 && (
+      {/* Değişiklik yapılınca ekranın altında sabit kaydet çubuğu çıkar */}
+      {pending > 0 && (
+        <div className="fixed bottom-4 left-1/2 z-40 flex w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 animate-fade-up flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-400/70 bg-card px-4 py-3 shadow-lg">
+          <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
+            {pending} kaydedilmemiş değişiklik
+            {user ? ` · ${user.name}` : " · Tüm avukatlar"}
+          </p>
+          <div className="flex gap-2">
             <Button size="sm" variant="ghost" onClick={discard}>
               <RotateCcw /> Vazgeç
             </Button>
-          )}
-          <Button size="sm" disabled={!pending} onClick={commit}>
-            <Save /> Kaydet
-          </Button>
+            <Button size="sm" onClick={commit}>
+              <Save /> Kaydet
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

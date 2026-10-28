@@ -477,7 +477,8 @@ export function ImportDialog({
       (batch.enforcements?.length ?? 0) +
       (batch.cases?.length ?? 0) +
       (batch.expenses?.length ?? 0) +
-      (batch.banks?.length ?? 0);
+      (batch.banks?.length ?? 0) +
+      (batch.reminders?.length ?? 0);
     setBusy(true);
     setProgress({ done: 0, total });
     try {

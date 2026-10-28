@@ -768,6 +768,26 @@ ok("kilitli: dosya durumları, aylık ücret, İnfaz geri gelir",
 ok("kilitli: süre hesabındaki işlem türleri silinemez",
   lk.t.length === 11 && lk.t.includes("Ödeme emri tebliği") && lk.t.includes("89/3 haciz ihbarnamesi") && lk.t.includes("Diğer"), JSON.stringify(lk.t));
 
+// ── Toplu aktarım: Ajanda (duruşma listesi) tek RPC'de
+let ajErr = null;
+try { const sql = readFileSync(fileURLToPath(new URL("../migrations/20261028120000_import_batch_ajanda.sql", import.meta.url)), "utf8"); await db.exec(sql); await db.exec(sql); } catch (e) { ajErr = e; }
+ok("import_batch ajanda migration'ı çalıştı (iki kez)", !ajErr, ajErr ? ajErr.message : "");
+const ajRows = Array.from({ length: 3 }, (_, i) => ({
+  id: `aaaaaaaa-bbbb-cccc-eeee-00000000000${i + 1}`, title: `Duruşma · 2026/${i + 1} E.`, type: "Duruşma",
+  date: "2026-11-02", time: `1${i}:30`, location: "İstanbul 3. Asliye Hukuk", assignee_id: U, status: "Bekliyor",
+}));
+const ajRes = await asUser(A, async () => (await one(`select public.import_batch($1::jsonb) r`, [JSON.stringify({ reminders: ajRows })])).r);
+ok("import_batch ajanda: 3 duruşma tek çağrıda eklendi, sorumluya atandı", ajRes.reminders === 3 && ajRes.total === 3
+  && (await one(`select count(*)::int c from public.reminders where title like 'Duruşma · 2026/%' and assignee_id='${U}' and time is not null`)).c === 3, JSON.stringify(ajRes));
+ok("import_batch ajanda: başka büronun kullanıcısına atanamaz", await fails(() => asUser(A, () => q(
+  `select public.import_batch($1::jsonb)`, [JSON.stringify({ reminders: [{ ...ajRows[0], id: "aaaaaaaa-bbbb-cccc-eeee-000000000099", assignee_id: B }] })],
+)), /foreign key|violates/i));
+await setAs(U, { "reminders.create": false });
+ok("import_batch ajanda: izinsiz kullanıcı aktaramaz", await fails(() => asUser(U, () => q(
+  `select public.import_batch($1::jsonb)`, [JSON.stringify({ reminders: [{ ...ajRows[0], id: "aaaaaaaa-bbbb-cccc-eeee-000000000098" }] })],
+)), /yetkiniz yok|42501/i));
+await setAs(U, {});
+
 console.log(R.join("\n"));
 console.log(`\nPASS: ${R.filter((x) => x.startsWith("PASS")).length}  FAIL: ${R.filter((x) => x.startsWith("FAIL")).length}`);
 process.exit(R.some((x) => x.startsWith("FAIL")) ? 1 : 0);

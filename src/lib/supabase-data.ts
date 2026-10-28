@@ -487,6 +487,7 @@ const IMPORT_BATCH_KEYS = [
   "cases",
   "expenses",
   "enforcements",
+  "reminders",
 ] as const;
 
 type ImportBatchKey = (typeof IMPORT_BATCH_KEYS)[number];

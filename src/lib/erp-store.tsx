@@ -1056,7 +1056,15 @@ export function ErpProvider({ children }: { children: ReactNode }) {
     ) => {
       const firmId = stateRef.current.firmId;
       const now = new Date().toISOString();
-      const keys = ["clients", "debtors", "banks", "cases", "expenses", "enforcements"] as const;
+      const keys = [
+        "clients",
+        "debtors",
+        "banks",
+        "cases",
+        "expenses",
+        "enforcements",
+        "reminders",
+      ] as const;
       const prepared: Partial<{ [K in (typeof keys)[number]]: Collections[K][] }> = {};
       let total = 0;
       for (const key of keys) {
