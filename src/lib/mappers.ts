@@ -706,6 +706,8 @@ export function expenseFromRow(
     chargeTo: (r.charge_to as Expense["chargeTo"]) || "Müvekkil",
     paidBy: (r.paid_by as Expense["paidBy"]) || "Büro",
     accountId: optStr(r.account_id),
+    reimbursedOn: r.reimbursed_on ? dateOnly(r.reimbursed_on as string) : undefined,
+    reimbursedAccountId: optStr(r.reimbursed_account_id),
     receipts,
     note: optStr(r.note),
     createdBy: String(r.created_by ?? ""),
@@ -724,6 +726,9 @@ export function expenseToRow(e: Partial<Expense>) {
   if (e.chargeTo != null) row.charge_to = e.chargeTo;
   if (e.paidBy != null) row.paid_by = e.paidBy;
   if (e.accountId !== undefined) row.account_id = e.accountId || null;
+  if (e.reimbursedOn !== undefined) row.reimbursed_on = e.reimbursedOn || null;
+  if (e.reimbursedAccountId !== undefined)
+    row.reimbursed_account_id = e.reimbursedAccountId || null;
   if (e.note !== undefined) row.note = e.note || null;
   return row;
 }

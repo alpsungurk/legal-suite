@@ -13,7 +13,13 @@ import {
 } from "lucide-react";
 import { useErp } from "@/lib/erp-store";
 import { isEnforcementInactive } from "@/lib/erp-types";
-import { accountBalances, allInstallments, clientFinance, feeIncomeInRange } from "@/lib/finance";
+import {
+  accountBalances,
+  allInstallments,
+  clientFinance,
+  expenseNetCost,
+  feeIncomeInRange,
+} from "@/lib/finance";
 import { addDays, formatDateLong, formatMoney, sumBy, today } from "@/lib/format";
 import { StatGrid, StatTile } from "@/components/app/StatTile";
 import { PageShell, Section, Money, ProgressBar } from "@/components/app/bits";
@@ -99,9 +105,10 @@ function FinanceDashboard() {
     accountBalances(state).filter((b) => b.account.active),
     (b) => b.balance,
   );
+  // Müvekkilin geri ödediği masraf büroya maliyet değildir
   const monthExpense = sumBy(
     state.expenses.filter((e) => e.date >= monthStart),
-    (e) => e.amount,
+    expenseNetCost,
   );
 
   return (

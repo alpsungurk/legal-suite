@@ -180,6 +180,19 @@ export function isClientCharged(e: Expense) {
   return e.chargeTo === "Müvekkil" && e.paidBy === "Büro";
 }
 
+/** Müvekkile yansıyan ve müvekkilin henüz geri ödemediği masraf */
+export function isOutstandingCharge(e: Expense) {
+  return isClientCharged(e) && !e.reimbursedOn;
+}
+
+/** Büronun cebinden çıkan net tutar: müvekkilin geri ödediği masraf 0 sayılır */
+export function expenseNetCost(e: Expense) {
+  return isClientCharged(e) && e.reimbursedOn ? 0 : e.amount;
+}
+
+/** İade kaydının cari / kasa satırlarındaki kimliği (masrafın kendi satırıyla çakışmasın) */
+export const REIMBURSE_SUFFIX = ":iade";
+
 /** Büronun müvekkil adına ödediği (müvekkile yansıyan) masraflar */
 export function chargedExpenses(state: ErpState, clientId: string, caseId?: string) {
   return sumBy(
@@ -200,6 +213,7 @@ export type LedgerEntry = {
   date: ISODate;
   kind:
     | "Masraf"
+    | "Masraf iadesi"
     | "Ücret tahakkuku"
     | "Ücret tahsilatı"
     | "İcra tahsilatı"
@@ -232,6 +246,16 @@ export function clientLedger(
       debit: e.amount,
       credit: 0,
     });
+    if (e.reimbursedOn)
+      raw.push({
+        id: e.id + REIMBURSE_SUFFIX,
+        date: e.reimbursedOn,
+        kind: "Masraf iadesi",
+        description: `Müvekkil ödedi · ${e.type} · ${e.title}`,
+        caseId: e.caseId,
+        debit: 0,
+        credit: e.amount,
+      });
   }
   for (const p of state.plans.filter((p) => owns(p) && !p.cancelled)) {
     raw.push({
@@ -369,6 +393,18 @@ export function accountLedger(state: ErpState, accountId: string) {
       description: `${e.type} · ${e.title}`,
       source: "Masraf",
       amount: -e.amount,
+      clientId: recordClientId(state, e),
+    });
+  }
+  for (const e of state.expenses.filter(
+    (e) => isClientCharged(e) && e.reimbursedOn && e.reimbursedAccountId === accountId,
+  )) {
+    raw.push({
+      id: e.id + REIMBURSE_SUFFIX,
+      date: e.reimbursedOn!,
+      description: `Masraf iadesi · ${e.type} · ${e.title}`,
+      source: "Masraf",
+      amount: e.amount,
       clientId: recordClientId(state, e),
     });
   }

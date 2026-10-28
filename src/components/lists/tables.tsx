@@ -22,8 +22,10 @@ import {
   caseLabel,
   clientLedger,
   installmentStatus,
+  isOutstandingCharge,
   planSummary,
   recordClientId,
+  REIMBURSE_SUFFIX,
   type LedgerEntry,
 } from "@/lib/finance";
 import { formatBytes, formatDate, relativeDue, today } from "@/lib/format";
@@ -53,8 +55,12 @@ function useNames() {
 
 /* ───────────── Masraflar ───────────── */
 
-/** Müvekkil kendisi ödediyse ya da büro bir hesaptan ödediyse "Ödendi". */
+/**
+ * Müvekkil kendisi ödediyse ya da büro bir hesaptan ödediyse "Ödendi"; büronun ödediği dosya
+ * masrafını müvekkil sonradan geri ödediyse "Müvekkilden alındı".
+ */
 function expensePaidLabel(e: Expense) {
+  if (e.reimbursedOn) return "Müvekkilden alındı";
   return e.paidBy === "Müvekkil" || e.accountId ? "Ödendi" : "Bekliyor";
 }
 
@@ -69,12 +75,29 @@ export function ExpenseTable({
   exportName?: string;
   toolbar?: React.ReactNode;
 }) {
-  const { state, permissions, remove, removeMany, currentUser } = useErp();
+  const { state, permissions, remove, removeMany, patchMany, currentUser } = useErp();
   const n = useNames();
   const quick = useQuick();
   const confirm = useConfirm();
   const canEdit = (e: Expense) =>
     permissions.can("expenses", "edit") || e.createdBy === currentUser.id;
+  const undoReimburse = async (list: Expense[]) => {
+    if (
+      !(await confirm({
+        title: "Müvekkil ödemesi geri alınsın mı?",
+        description: `${list.length} masraf yeniden "müvekkilden alınacak" görünür; cari ve hesap girişi geri alınır.`,
+        confirmLabel: "Geri al",
+      }))
+    )
+      return false;
+    patchMany(
+      "expenses",
+      list.map((e) => e.id),
+      { reimbursedOn: "", reimbursedAccountId: "" },
+    );
+    toast.success("Müvekkil ödemesi geri alındı");
+    return true;
+  };
 
   const columns: Column<Expense>[] = [
     {
@@ -150,7 +173,15 @@ export function ExpenseTable({
       id: "status",
       header: "Durum",
       export: (e) => expensePaidLabel(e),
-      cell: (e) => <StatusBadge status={expensePaidLabel(e)} />,
+      cell: (e) => (
+        <span
+          title={
+            e.reimbursedOn ? `Müvekkil ${formatDate(e.reimbursedOn)} tarihinde ödedi` : undefined
+          }
+        >
+          <StatusBadge status={expensePaidLabel(e)} tone={e.reimbursedOn ? "green" : undefined} />
+        </span>
+      ),
     },
     {
       id: "receipt",
@@ -204,21 +235,49 @@ export function ExpenseTable({
       exportName={exportName}
       toolbar={toolbar}
       onRowClick={(e) => quick.open("expense", { record: e })}
-      selectable={permissions.can("expenses", "delete")}
-      bulkActions={(sel, clear) => (
-        <DropdownLikeButton
-          onClick={async () => {
-            if (await confirm({ title: `${sel.length} masraf silinsin mi?` })) {
-              removeMany(
-                "expenses",
-                sel.map((s) => s.id),
-              );
-              clear();
-              toast.success("Masraflar silindi");
-            }
-          }}
-        />
-      )}
+      selectable={permissions.can("expenses", "delete") || permissions.can("expenses", "edit")}
+      bulkActions={(sel, clear) => {
+        const open = sel.filter(isOutstandingCharge);
+        const back = sel.filter((e) => e.reimbursedOn);
+        return (
+          <>
+            {permissions.can("expenses", "edit") && open.length > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8"
+                onClick={() => quick.open("reimburse", { expenses: open, onSaved: clear })}
+              >
+                <HandCoins /> Müvekkil ödedi ({open.length})
+              </Button>
+            )}
+            {permissions.can("expenses", "edit") && back.length > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8"
+                onClick={async () => (await undoReimburse(back)) && clear()}
+              >
+                <Undo2 /> Ödemeyi geri al ({back.length})
+              </Button>
+            )}
+            {permissions.can("expenses", "delete") && (
+              <DropdownLikeButton
+                onClick={async () => {
+                  if (await confirm({ title: `${sel.length} masraf silinsin mi?` })) {
+                    removeMany(
+                      "expenses",
+                      sel.map((s) => s.id),
+                    );
+                    clear();
+                    toast.success("Masraflar silindi");
+                  }
+                }}
+              />
+            )}
+          </>
+        );
+      }}
       footer={(visible) => (
         <tr>
           <td colSpan={99} className="px-4 py-3 text-right">
@@ -244,6 +303,16 @@ export function ExpenseTable({
             >
               <RotateCcw /> Kopyala (tekrarla)
             </DropdownMenuItem>
+            {isOutstandingCharge(e) && (
+              <DropdownMenuItem onClick={() => quick.open("reimburse", { expenses: [e] })}>
+                <HandCoins /> Müvekkil ödedi
+              </DropdownMenuItem>
+            )}
+            {e.reimbursedOn && (
+              <DropdownMenuItem onClick={() => undoReimburse([e])}>
+                <Undo2 /> Müvekkil ödemesini geri al
+              </DropdownMenuItem>
+            )}
             {(permissions.can("expenses", "delete") || e.createdBy === currentUser.id) && (
               <>
                 <DropdownMenuSeparator />
@@ -1008,6 +1077,8 @@ export function LedgerTable({
         const x = state.expenses.find((r) => r.id === e.id);
         return !!x && (permissions.can("expenses", "delete") || x.createdBy === currentUser.id);
       }
+      case "Masraf iadesi":
+        return permissions.can("expenses", "edit");
       case "Ücret tahakkuku":
         return permissions.can("fees", "delete");
       case "Ücret tahsilatı":
@@ -1024,7 +1095,7 @@ export function LedgerTable({
     if (e.kind === "İcra tahsilatı") {
       const c = state.collections.find((x) => x.id === e.id);
       if (c) navigate({ to: "/icra/$id", params: { id: c.enforcementId } });
-    } else if (e.kind === "Masraf") navigate({ to: "/masraflar" });
+    } else if (e.kind === "Masraf" || e.kind === "Masraf iadesi") navigate({ to: "/masraflar" });
     else if (e.kind === "Müvekkile aktarım") navigate({ to: "/banka-kasa" });
     else if (e.kind === "Ücret tahakkuku" || e.kind === "Ücret tahsilatı") navigate({ to: "/tahsilatlar" });
   };
@@ -1051,6 +1122,8 @@ export function LedgerTable({
           <span className="block">
             {e.kind === "Masraf"
               ? "Masraf kaydı makbuzlarıyla silinir; kasadan çıkış da geri alınır."
+              : e.kind === "Masraf iadesi"
+                ? "Müvekkilin ödemesi geri alınır; masraf yeniden müvekkilden alınacak görünür."
               : e.kind === "Ücret tahsilatı"
                 ? "Tahsilat geri alınır; taksit yeniden ödenmemiş görünür, kasa girişi de silinir."
                 : e.kind === "İcra tahsilatı"
@@ -1067,6 +1140,12 @@ export function LedgerTable({
     switch (e.kind) {
       case "Masraf":
         remove("expenses", e.id);
+        break;
+      case "Masraf iadesi":
+        patch("expenses", e.id.slice(0, -REIMBURSE_SUFFIX.length), {
+          reimbursedOn: "",
+          reimbursedAccountId: "",
+        });
         break;
       case "Ücret tahakkuku":
         remove("plans", e.id, { reload: true });

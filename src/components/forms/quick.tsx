@@ -9,6 +9,7 @@ import {
   ExpenseForm,
   PaymentForm,
   PlanForm,
+  ReimburseForm,
   TransferForm,
   TxForm,
 } from "@/components/forms/finance";
@@ -54,6 +55,7 @@ type Kinds = {
   case: Spec<CaseFile>;
   user: Spec<User>;
   expense: Spec<Expense>;
+  reimburse: { expenses: Expense[]; onSaved?: () => void };
   plan: Spec<FeePlan>;
   payment: { plan: FeePlan; installmentId?: string };
   account: Spec<Account>;
@@ -101,6 +103,7 @@ export function QuickActionsProvider({ children }: { children: ReactNode }) {
       {active?.kind === "case" && <CaseForm key={seq} {...common} {...active.props} />}
       {active?.kind === "user" && <UserForm key={seq} {...common} {...active.props} />}
       {active?.kind === "expense" && <ExpenseForm key={seq} {...common} {...active.props} />}
+      {active?.kind === "reimburse" && <ReimburseForm key={seq} {...common} {...active.props} />}
       {active?.kind === "plan" && <PlanForm key={seq} {...common} {...active.props} />}
       {active?.kind === "payment" && <PaymentForm key={seq} {...common} {...active.props} />}
       {active?.kind === "account" && <AccountForm key={seq} {...common} {...active.props} />}

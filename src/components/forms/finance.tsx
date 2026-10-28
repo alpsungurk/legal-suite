@@ -175,6 +175,8 @@ export function ExpenseForm({ open, onOpenChange, record, preset, onSaved }: For
             enforcementId: isClient && refKind === "enf" ? refId : undefined,
             clientId: isClient ? v.clientId || undefined : undefined,
             accountId: paidBy === "Büro" ? v.accountId || undefined : undefined,
+            // Büro ödemediyse ya da büro gideriyse "müvekkil geri ödedi" bilgisi anlamsızdır
+            ...(isClient && paidBy === "Büro" ? {} : { reimbursedOn: "", reimbursedAccountId: "" }),
             receipts: v.receipts ?? [],
             note: v.note || undefined,
             createdBy: record?.createdBy ?? currentUser.id,
@@ -208,6 +210,58 @@ export function ExpenseForm({ open, onOpenChange, record, preset, onSaved }: For
         </div>
       )}
     </FormDialog>
+  );
+}
+
+/* ───────────── Masraf iadesi ───────────── */
+
+/**
+ * Büronun müvekkil adına ödediği masrafları müvekkil geri ödedi: tarih ve paranın girdiği hesap
+ * yazılır; tutar cariye alacak, hesaba giriş olur ve "müvekkilden alınacak" toplamından düşer.
+ */
+export function ReimburseForm({
+  open,
+  onOpenChange,
+  expenses,
+  onSaved,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  expenses: Expense[];
+  onSaved?: () => void;
+}) {
+  const { patchMany, state } = useErp();
+  const o = useOptions();
+  const total = sum(expenses.map((e) => e.amount));
+  return (
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Müvekkil ödedi"
+      description={`${expenses.length} masraf · ${formatMoney(total)} müvekkilin carisine alacak yazılır`}
+      submitLabel="Kaydet"
+      fields={[
+        { name: "date", label: "Ödeme tarihi", type: "date", required: true },
+        {
+          name: "accountId",
+          label: "Paranın girdiği hesap",
+          type: "combobox",
+          options: o.accounts,
+          allowClear: true,
+          placeholder: "Hesaba girmediyse boş bırakın",
+        },
+      ]}
+      initial={{ date: today(), accountId: defaultIncomeAccountId(state) }}
+      onSubmit={(v) => {
+        patchMany(
+          "expenses",
+          expenses.map((e) => e.id),
+          { reimbursedOn: v.date, reimbursedAccountId: v.accountId || "" },
+        );
+        toast.success(`${expenses.length} masraf müvekkilden alındı olarak işaretlendi`);
+        onSaved?.();
+      }}
+    />
   );
 }
 

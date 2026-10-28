@@ -2,6 +2,7 @@ import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { FileSpreadsheet, FileWarning, Plus, Receipt, Building2, Users } from "lucide-react";
 import { useErp } from "@/lib/erp-store";
+import { expenseNetCost, isOutstandingCharge } from "@/lib/finance";
 import { formatMoney, sumBy, today } from "@/lib/format";
 import { PageHeader } from "@/components/app/PageHeader";
 import { PageShell } from "@/components/app/bits";
@@ -31,6 +32,12 @@ function Page() {
   );
   const monthStart = `${today().slice(0, 7)}-01`;
   const month = visible.filter((e) => e.date >= monthStart);
+  // Büronun ödediği masrafı müvekkil geri ödeyince "Bu ay" ve "Müvekkile yansıyan" toplamından düşer
+  const monthReimbursed = sumBy(
+    month.filter((e) => e.reimbursedOn),
+    (e) => e.amount,
+  );
+  const outstanding = visible.filter(isOutstandingCharge);
   const undocumented = visible.filter((e) => !e.receipts.length);
 
   return (
@@ -55,22 +62,21 @@ function Page() {
       <StatGrid>
         <StatTile
           label="Bu ay"
-          value={formatMoney(sumBy(month, (e) => e.amount))}
+          value={formatMoney(sumBy(month, expenseNetCost))}
           icon={Receipt}
           tone="amber"
-          hint={`${month.length} kalem`}
+          hint={
+            monthReimbursed
+              ? `${month.length} kalem · ${formatMoney(monthReimbursed)} müvekkilden alındı`
+              : `${month.length} kalem`
+          }
         />
         <StatTile
           label="Müvekkile yansıyan"
-          value={formatMoney(
-            sumBy(
-              visible.filter((e) => e.chargeTo === "Müvekkil"),
-              (e) => e.amount,
-            ),
-          )}
+          value={formatMoney(sumBy(outstanding, (e) => e.amount))}
           icon={Users}
           tone="blue"
-          hint="Müvekkilin carisine yazılan"
+          hint={`Müvekkilden alınacak · ${outstanding.length} kalem`}
         />
         <StatTile
           label="Büro giderleri"

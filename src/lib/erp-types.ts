@@ -143,6 +143,10 @@ export type Expense = BaseEntity & {
   /** Parayı kim ödedi. Müvekkil kendi ödediyse büro kasasından çıkış olmaz. */
   paidBy: "Büro" | "Müvekkil";
   accountId?: string;
+  /** Büronun ödediği masrafı müvekkil sonradan ödediyse tarihi (cariye alacak yazılır) */
+  reimbursedOn?: ISODate;
+  /** İade edilen paranın girdiği hesap */
+  reimbursedAccountId?: string;
   receipts: AttachmentRef[];
   note?: string;
   createdBy: string;

@@ -864,6 +864,28 @@ ok("dosya aktarımı: aynı dosya yeniden yüklenince satır yazılmaz", String(
 await asUser(A, () => one(`select public.import_batch($1::jsonb) r`, [JSON.stringify({ cases: [{ ...sameCase, status: "Kapalı" }] })]));
 ok("dosya aktarımı: değişen durum yazılır", (await one(`select status from public.cases where id=$1`, [dlCase])).status === "Kapalı");
 
+// ── Masraf iadesi: müvekkil, büronun ödediği masrafı sonradan öder
+let miErr = null;
+try { const sql = readFileSync(fileURLToPath(new URL("../migrations/20261029120000_masraf_iadesi.sql", import.meta.url)), "utf8"); await db.exec(sql); await db.exec(sql); } catch (e) { miErr = e; }
+ok("masraf iadesi migration'ı çalıştı (iki kez)", !miErr, miErr ? miErr.message : "");
+const balOf = async () => ({
+  cli: Number((await asUser(A, () => one(`select balance from public.v_client_balances where client_id=$1`, [client2]))).balance),
+  kasa: Number((await asUser(A, () => one(`select balance from public.v_account_balances where id=$1`, [kasa]))).balance),
+});
+const miExp = await asUser(A, async () => (await one(`insert into public.expenses (title,type,amount,client_id,charge_to,paid_by,account_id) values ('Tebligat','Tebligat',400,$1,'Müvekkil','Büro',$2) returning id`, [client2, kasa])).id);
+const miBefore = await balOf();
+await asUser(A, () => q(`update public.expenses set reimbursed_on = current_date, reimbursed_account_id = $2 where id=$1`, [miExp, kasa]));
+const miAfter = await balOf();
+ok("masraf iadesi: cari borcu düşer, kasaya girer",
+  Math.abs(miBefore.cli - miAfter.cli - 400) < 0.005 && Math.abs(miAfter.kasa - miBefore.kasa - 400) < 0.005, `${JSON.stringify(miBefore)} → ${JSON.stringify(miAfter)}`);
+await asUser(A, () => q(`update public.expenses set reimbursed_on = null, reimbursed_account_id = null where id=$1`, [miExp]));
+ok("masraf iadesi geri alınınca bakiyeler eski haline döner", JSON.stringify(await balOf()) === JSON.stringify(miBefore));
+const miCase = await kc("2026/MI1");
+await asUser(A, () => q(`insert into public.expenses (title,type,amount,case_id,charge_to,paid_by,account_id,reimbursed_on,reimbursed_account_id) values ('Harç','Harç',250,$1,'Müvekkil','Büro',$2,current_date,$2)`, [miCase, kasa]));
+const miPre = await balOf();
+await asUser(A, () => one(`select public.close_case('${miCase}') r`));
+ok("masraf iadesi: dosya kapatınca cari ve kasa bakiyesi aynı kalır", JSON.stringify(await balOf()) === JSON.stringify(miPre), `${JSON.stringify(miPre)} → ${JSON.stringify(await balOf())}`);
+
 console.log(R.join("\n"));
 console.log(`\nPASS: ${R.filter((x) => x.startsWith("PASS")).length}  FAIL: ${R.filter((x) => x.startsWith("FAIL")).length}`);
 process.exit(R.some((x) => x.startsWith("FAIL")) ? 1 : 0);
