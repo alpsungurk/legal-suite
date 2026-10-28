@@ -301,6 +301,7 @@ function FieldBlock({
           options={options}
           placeholder={f.placeholder}
           invalid={invalid}
+          creatable={f.creatable}
         />
       );
       break;

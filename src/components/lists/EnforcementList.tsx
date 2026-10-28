@@ -122,7 +122,11 @@ export function EnforcementList({
       header: owed ? "Borçlu (müvekkil) → Alacaklı" : "Alacaklı (müvekkil) → Borçlu",
       sort: (r) => clientName(r.e.clientId),
       cell: (r) => (
-        <div className="min-w-0 text-sm">
+        // Sabit genişlik: uzun ad kesilir (tamamı üzerine gelince görünür), sıralamada sütunlar kaymaz
+        <div
+          className="w-[200px] min-w-0 text-sm xl:w-[240px]"
+          title={`${clientName(r.e.clientId)} → ${partyNames(r.e).join(", ")}`}
+        >
           <p className="truncate font-medium">{clientName(r.e.clientId)}</p>
           <p className="truncate text-xs text-muted-foreground">→ {partyNames(r.e).join(", ")}</p>
         </div>
@@ -133,7 +137,7 @@ export function EnforcementList({
       header: "Birim / Dosya no",
       sort: (r) => r.e.no,
       cell: (r) => (
-        <div className="min-w-0">
+        <div className="w-[170px] min-w-0" title={r.e.office}>
           <p className="font-semibold">{r.e.no}</p>
           <p className="truncate text-xs text-muted-foreground">{r.e.office}</p>
         </div>

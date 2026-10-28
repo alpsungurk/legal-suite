@@ -60,6 +60,24 @@ import type { FormProps } from "@/components/forms/core";
 const isBankGarnishment = (type?: string) =>
   !!type && (BANK_GARNISHMENT_EVENT_TYPES as readonly string[]).includes(type);
 
+/**
+ * Formda elle yazılan borçlu / karşı taraf adı: aynı adlı kart varsa o kullanılır, yoksa açılır.
+ * A.Ş., Ltd., Şti. gibi ekler varsa kart kurumsal açılır.
+ */
+function ensureDebtor(
+  debtors: Debtor[],
+  save: ReturnType<typeof useErp>["save"],
+  name: string,
+): Debtor {
+  const key = name.trim().toLocaleLowerCase("tr");
+  const existing = debtors.find((d) => d.name.trim().toLocaleLowerCase("tr") === key);
+  if (existing) return existing;
+  return save("debtors", {
+    name: name.trim(),
+    kind: /\b(a\.?ş|ltd|şti|şirket|tic|san|koop)\b/i.test(name) ? "Kurumsal" : "Bireysel",
+  });
+}
+
 /** İşlem formundaki "Kontrol hatırlatması": değer gün sayısı ya da "custom" */
 const REMIND_OPTIONS: Option[] = [
   { value: "0", label: "Hatırlatma yok" },
@@ -470,7 +488,8 @@ export function EnforcementForm({
           type: "multiselect",
           options: o.debtors,
           required: true,
-          hint: "Kartı yoksa önce Borçlular sayfasından ekleyin",
+          creatable: true,
+          hint: "Listede yoksa adını yazıp ekleyin; kaydedince kartı açılır",
         },
         {
           name: "principal",
@@ -537,6 +556,20 @@ export function EnforcementForm({
         const closed = v.status === CLOSED_ENFORCEMENT_STATUS;
         if (closed && v.closeReason) rememberOption("enforcementCloseReasons", v.closeReason);
         if (v.details) rememberOption("claimTypes", v.details);
+        // Elle yazılan adlar (kayıtlı kart id'si olmayanlar) karta dönüştürülür
+        const known = new Set(state.debtors.map((d) => d.id));
+        const added: string[] = [];
+        const debtorIds = [
+          ...new Set(
+            (v.debtorIds as string[]).map((x) => {
+              if (known.has(x)) return x;
+              const d = ensureDebtor(state.debtors, save, x);
+              if (!known.has(d.id)) added.push(d.name);
+              return d.id;
+            }),
+          ),
+        ];
+        if (added.length) toast.info(`Yeni kart açıldı: ${added.join(", ")}`);
         const item = save("enforcements", {
           id: record?.id,
           side: owed(v) ? "Borçlu" : "Alacaklı",
@@ -548,7 +581,7 @@ export function EnforcementForm({
           closeReason: closed ? String(v.closeReason ?? "").trim() : "",
           procedure: v.procedure || "",
           clientId: v.clientId,
-          debtorIds: v.debtorIds,
+          debtorIds,
           principal: round2(Number(v.principal) || 0),
           interest: 0,
           costs: 0,
@@ -716,18 +749,9 @@ export function EnforcementEventForm({
         // Yazılan yeni ad: aynı adlı kart varsa o kullanılır, yoksa açılır; dosyanın borçlularına eklenir
         let debtorId = String(v.debtorId ?? "").trim();
         if (ef && debtorId && !parties.some((p) => p.value === debtorId)) {
-          const key = debtorId.toLocaleLowerCase("tr");
-          const existing = state.debtors.find(
-            (d) => d.id === debtorId || d.name.trim().toLocaleLowerCase("tr") === key,
-          );
           const debtor =
-            existing ??
-            save("debtors", {
-              name: debtorId,
-              kind: /\b(a\.?ş|ltd|şti|şirket|tic|san|koop)\b/i.test(debtorId)
-                ? "Kurumsal"
-                : "Bireysel",
-            });
+            state.debtors.find((d) => d.id === debtorId) ??
+            ensureDebtor(state.debtors, save, debtorId);
           debtorId = debtor.id;
           if (!ef.debtorIds.includes(debtorId)) {
             patch("enforcements", ef.id, { debtorIds: [...ef.debtorIds, debtorId] });
