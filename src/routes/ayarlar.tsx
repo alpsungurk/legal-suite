@@ -1096,12 +1096,14 @@ function BackupTab() {
     ["Tahsilat planı", state.plans.length],
     ["İcra dosyası", state.enforcements.length],
     ["Belge", state.documents.length],
+    ["Kalan ödeme", state.paymentLedger.length],
+    ["Banka / kasa hesabı", state.accounts.length],
   ];
   return (
     <div className="space-y-4">
       <Section
         title="Veri durumu"
-        description="Veriler şu an bu tarayıcıda saklanıyor. Düzenli yedek almanız önerilir."
+        description="Veriler Supabase üzerinde tutulur. Düzenli yedek alıp bilgisayarınıza kaydetmeniz önerilir."
       >
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {counts.map(([label, n]) => (
@@ -1115,7 +1117,10 @@ function BackupTab() {
           Veriler Supabase üzerinde tutulur; ekler Storage kovasında saklanır.
         </p>
       </Section>
-      <Section title="Yedek al / geri yükle">
+      <Section
+        title="Yedek al / geri yükle"
+        description="Yedek tek bir .zip dosyasıdır: tüm kayıtlar, çöp kutusu ve makbuz / belgeler. Tarihli saklayın."
+      >
         <div className="flex flex-wrap gap-2">
           <Button
             loading={busy}
@@ -1123,7 +1128,10 @@ function BackupTab() {
               setBusy(true);
               try {
                 const r = await exportBackup(state);
-                toast.success(`Yedek indirildi (${r.attachments} ek dahil)`);
+                toast.success(
+                  `Yedek indirildi (${r.attachments} ek, ${r.trash} çöp kutusu kaydı dahil)`,
+                );
+                if (r.trashError) toast.warning("Çöp kutusu yedeğe alınamadı: " + r.trashError);
                 if (r.missing) toast.warning(`${r.missing} ek indirilemedi`);
               } catch (e) {
                 toast.error((e as Error).message);
@@ -1165,6 +1173,12 @@ function BackupTab() {
             }}
           />
         </div>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Zip içinde: <b>state.json</b> (kalan ödemeler dahil tüm kayıtlar), <b>trash.json</b> (çöp
+          kutusu), <b>attachments/</b> (makbuz ve belgeler), <b>OKU-BENI.txt</b>. Yedekten geri
+          yükleme otomatik değildir; veri kaybında Supabase panelindeki yedekler (Database →
+          Backups) ya da destek kullanılır.
+        </p>
       </Section>
       {permissions.manageSettings && <ArchiveSection />}
       {permissions.manageSettings && <ErrorTrackingSection />}

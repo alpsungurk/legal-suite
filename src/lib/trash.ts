@@ -147,6 +147,13 @@ export async function trashPurge(id: string) {
   if (error) throw error;
 }
 
+/** Yedek için: çöp kutusunun tamamı, geri yükleme verisi (payload) dahil */
+export async function listTrashFull(): Promise<Array<Record<string, unknown>>> {
+  const { data, error } = await supabase.from("trash").select("*").order("deleted_at");
+  if (error) throw error;
+  return (data ?? []) as Array<Record<string, unknown>>;
+}
+
 export async function listTrash(): Promise<TrashItem[]> {
   const { data, error } = await supabase
     .from("trash")
