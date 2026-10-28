@@ -227,7 +227,16 @@ function Page() {
               {
                 id: "src",
                 label: "Kaynak",
-                options: ["Açılış", "Masraf", "Tahsilat", "İcra", "Virman", "Aktarım", "Diğer"],
+                options: [
+                  "Açılış",
+                  "Masraf",
+                  "Tahsilat",
+                  "İcra",
+                  "Virman",
+                  "Aktarım",
+                  "Kalan ödeme",
+                  "Diğer",
+                ],
                 get: (e) => e.source,
               },
             ]}

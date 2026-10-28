@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { useConfirm } from "@/components/app/confirm";
 import { TrashDetails } from "@/components/app/TrashDetails";
 import { useErp } from "@/lib/erp-store";
+import { formatMoney } from "@/lib/format";
 import type { ContactLog, Debtor, EnforcementFile, PaymentPromise } from "@/lib/erp-types";
 import {
   describeCounts,
@@ -62,9 +63,17 @@ export function useTrashDelete() {
             </span>
           )}
           <TrashDetails money={preview.money} items={preview.items} />
+          {preview.keep && preview.keep.amount > 0 && (
+            <span className="block rounded-md bg-emerald-500/10 px-3 py-2 text-emerald-800 dark:text-emerald-300">
+              <b>{formatMoney(preview.keep.amount)}</b> tutarındaki ödeme ({preview.keep.count}{" "}
+              kayıt) <b>Çöp kutusu → Kalan ödemeler</b>'de saklanır; kasa / banka bakiyesi değişmez.
+            </span>
+          )}
           {preview.balances && (
             <span className="block">
-              Kasa / banka ve müvekkil cari bakiyeleri buna göre değişir.
+              {preview.keep && preview.keep.amount > 0
+                ? "Diğer kasa / banka hareketleri ve müvekkil cari bakiyeleri buna göre değişir."
+                : "Kasa / banka ve müvekkil cari bakiyeleri buna göre değişir."}
             </span>
           )}
           <span className="block">

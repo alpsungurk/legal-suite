@@ -139,6 +139,7 @@ export function emptyState(): ErpState {
     contacts: [],
     events: [],
     banks: [],
+    paymentLedger: [],
     salaryGarnishments: [],
     documents: [],
     notifications: [],

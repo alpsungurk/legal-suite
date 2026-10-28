@@ -235,6 +235,7 @@ const COLLECTION_KEYS: CollectionKey[] = [
   "contacts",
   "events",
   "banks",
+  "paymentLedger",
   "salaryGarnishments",
   "documents",
   "notifications",

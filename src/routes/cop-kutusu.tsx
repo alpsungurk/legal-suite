@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Trash2, Undo2 } from "lucide-react";
+import { Trash2, Undo2, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { useErp } from "@/lib/erp-store";
 import { formatDateTime } from "@/lib/format";
@@ -29,6 +29,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { describeMoney, TrashDetails } from "@/components/app/TrashDetails";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PaymentLedgerTable } from "@/components/lists/PaymentLedgerTable";
 
 export const Route = createFileRoute("/cop-kutusu")({
   head: () => ({ meta: [{ title: "Çöp Kutusu — Avukat Yönetim Paneli" }] }),
@@ -43,7 +45,7 @@ function daysLeft(deletedAt: string) {
   return Math.max(TRASH_DAYS - passed, 0);
 }
 
-function Page() {
+function TrashTab() {
   const { state, permissions, reloadFromServer } = useErp();
   const confirm = useConfirm();
   const [rows, setRows] = useState<TrashItem[]>([]);
@@ -171,12 +173,7 @@ function Page() {
   ];
 
   return (
-    <PageShell>
-      <PageHeader
-        title="Çöp Kutusu"
-        description={`Silinen kayıtlar bağlılarıyla birlikte ${TRASH_DAYS} gün saklanır; geri yüklenebilir, sonra kalıcı silinir`}
-        icon={Trash2}
-      />
+    <>
       <DataTable
         rows={rows}
         columns={columns}
@@ -282,6 +279,42 @@ function Page() {
           </div>
         </DialogContent>
       </Dialog>
+    </>
+  );
+}
+
+function Page() {
+  const { permissions } = useErp();
+  const [tab, setTab] = useState("silinenler");
+  // Kalan ödemeler kasa / banka bakiyesiyle ilgilidir: hesap görme izni olanlara
+  const seeLedger = permissions.can("accounts");
+  return (
+    <PageShell>
+      <PageHeader
+        title="Çöp Kutusu"
+        description={`Silinen kayıtlar bağlılarıyla birlikte ${TRASH_DAYS} gün saklanır; geri yüklenebilir, sonra kalıcı silinir. Silinen kayıtlardaki ödemeler "Kalan ödemeler"de kalır`}
+        icon={Trash2}
+      />
+      {seeLedger ? (
+        <Tabs value={tab} onValueChange={setTab}>
+          <TabsList className="h-10 w-max">
+            <TabsTrigger value="silinenler">
+              <Trash2 className="mr-1.5 h-4 w-4" /> Silinenler
+            </TabsTrigger>
+            <TabsTrigger value="kalan">
+              <Wallet className="mr-1.5 h-4 w-4" /> Kalan ödemeler
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="silinenler" className="mt-4">
+            <TrashTab />
+          </TabsContent>
+          <TabsContent value="kalan" className="mt-4">
+            <PaymentLedgerTable />
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <TrashTab />
+      )}
     </PageShell>
   );
 }

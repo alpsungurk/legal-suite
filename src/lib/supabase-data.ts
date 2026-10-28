@@ -42,6 +42,7 @@ import {
   notificationFromRow,
   notificationToRow,
   paymentFromRow,
+  paymentLedgerFromRow,
   planFromRow,
   planToRow,
   profileToRow,
@@ -114,6 +115,7 @@ export async function loadFullState(): Promise<LoadResult | null> {
     banksRes,
     salaryRes,
     salaryEntriesRes,
+    ledgerRes,
   ] = await Promise.all([
     supabase.from("organizations").select("*").eq("id", orgId).single(),
     supabase.from("org_settings").select("*").eq("org_id", orgId).maybeSingle(),
@@ -156,7 +158,14 @@ export async function loadFullState(): Promise<LoadResult | null> {
     supabase.from("banks").select("*").eq("org_id", orgId).order("name"),
     supabase.from("salary_garnishments").select("*").eq("org_id", orgId).order("employee_name"),
     supabase.from("salary_garnishment_entries").select("*").eq("org_id", orgId).order("position"),
+    // Migration uygulanmadıysa tablo yoktur: hata yükü durdurmaz, defter boş gelir
+    supabase
+      .from("payment_ledger")
+      .select("*")
+      .eq("org_id", orgId)
+      .order("date", { ascending: false }),
   ]);
+  if (ledgerRes.error) console.warn("Kalan ödemeler yüklenemedi:", ledgerRes.error.message);
   if (eventsRes.error) console.warn("İcra işlem geçmişi yüklenemedi:", eventsRes.error.message);
   if (banksRes.error) console.warn("Banka listesi yüklenemedi:", banksRes.error.message);
   if (salaryRes.error) console.warn("Maaş haczi sıraları yüklenemedi:", salaryRes.error.message);
@@ -266,6 +275,9 @@ export async function loadFullState(): Promise<LoadResult | null> {
     banks: banksRes.error
       ? []
       : (banksRes.data ?? []).map((r) => bankFromRow(r as Record<string, unknown>)),
+    paymentLedger: ledgerRes.error
+      ? []
+      : (ledgerRes.data ?? []).map((r) => paymentLedgerFromRow(r as Record<string, unknown>)),
     salaryGarnishments: (() => {
       if (salaryRes.error || salaryEntriesRes.error) return [];
       const byQueue = new Map<string, ReturnType<typeof salaryEntryFromRow>[]>();
@@ -332,6 +344,7 @@ const TABLE: Partial<Record<CollectionKey, string>> = {
   contacts: "contact_logs",
   events: "enforcement_events",
   banks: "banks",
+  paymentLedger: "payment_ledger",
   salaryGarnishments: "salary_garnishments",
   expenses: "expenses",
   reminders: "reminders",

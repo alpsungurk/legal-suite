@@ -890,6 +890,9 @@ ok("masraf iadesi: dosya kapatınca cari ve kasa bakiyesi aynı kalır", JSON.st
 let ckErr = null;
 try { const sql = readFileSync(fileURLToPath(new URL("../migrations/20261029130000_cop_kutusu.sql", import.meta.url)), "utf8"); await db.exec(sql); await db.exec(sql); } catch (e) { ckErr = e; }
 ok("çöp kutusu migration'ı çalıştı (iki kez)", !ckErr, ckErr ? ckErr.message : "");
+let klErr = null;
+try { const sql = readFileSync(fileURLToPath(new URL("../migrations/20261029150000_kalan_odemeler.sql", import.meta.url)), "utf8"); await db.exec(sql); await db.exec(sql); } catch (e) { klErr = e; }
+ok("kalan ödemeler migration'ı çalıştı (iki kez)", !klErr, klErr ? klErr.message : "");
 const ins = (sql, p = []) => asUser(A, async () => (await one(`${sql} returning id`, p)).id);
 const tcCli = await ins(`insert into public.clients (name) values ('Çöp Müvekkil')`);
 const tcCase = await ins(`insert into public.cases (no, title, client_id) values ('2026/ÇK1','Çöp dosya',$1)`, [tcCli]);
@@ -955,6 +958,43 @@ await asUser(A, () => q(`select public.trash_delete('reminders', array(select id
 await db.exec(`update public.trash set deleted_at = now() - interval '31 days'`);
 const ckRet = await one(`select app.cron_retention() r`);
 ok("çöp: 30 günden eski çöp temizlenir", ckRet.r.trash >= 1 && (await one(`select count(*)::int c from public.trash`)).c === 0, JSON.stringify(ckRet.r));
+
+// ── Kalan ödemeler: silinen kayıttaki ödeme kalıcı defterde, kasa bakiyesi bozulmaz
+const klCli = await ins(`insert into public.clients (name) values ('Kalan Müvekkil')`);
+const klPlan = await ins(`insert into public.fee_plans (title, client_id, total) values ('Vekalet',$1,500)`, [klCli]);
+const klInst = await ins(`insert into public.installments (plan_id, position, due_date, amount) values ($1,1,current_date,500)`, [klPlan]);
+await ins(`insert into public.installment_payments (installment_id, amount, method, account_id) values ($1,100,'Nakit',$2)`, [klInst, kasa]);
+const klEnf = await ins(`insert into public.enforcements (no, office, client_id) values ('2026/KL E.','Ankara 3. İcra',$1)`, [klCli]);
+await ins(`insert into public.collections (enforcement_id, debtor_id, amount, account_id) values ($1,$2,70,$3)`, [klEnf, tcDeb, kasa]);
+await ins(`insert into public.collections (enforcement_id, debtor_id, amount, account_id, transferred_to_client) values ($1,$2,30,$3,true)`, [klEnf, tcDeb, kasa]);
+// Müvekkile aktarılan tahsilatın kasadan çıkışı (müvekkille birlikte silinir; tahsilat deftere alınmaz)
+await ins(`insert into public.account_transactions (account_id, amount, category, client_id) values ($1,-30,'Müvekkile aktarım',$2)`, [kasa, klCli]);
+const kasaNow = async () => Number((await asUser(A, () => one(`select balance from public.v_account_balances where id=$1`, [kasa]))).balance);
+const klKasa = await kasaNow();
+const klPv = await asUser(A, async () => (await one(`select public.trash_preview('clients', array[$1]::uuid[]) p`, [klCli])).p);
+ok("kalan ödeme: önizleme saklanacak ödemeyi söyler (aktarılmış tahsilat sayılmaz)", klPv.keep.count === 2 && Number(klPv.keep.amount) === 170, JSON.stringify(klPv.keep));
+await asUser(A, () => q(`select public.trash_delete('clients', array[$1]::uuid[])`, [klCli]));
+const klRows = await q(`select * from public.payment_ledger where client_name='Kalan Müvekkil' order by amount`);
+ok("kalan ödeme: ödemeler deftere yazıldı", klRows.length === 2 && Number(klRows[0].amount) === 70 && Number(klRows[1].amount) === 100
+  && klRows.some((r) => r.kind === "Ücret tahsilatı") && klRows.some((r) => r.kind === "İcra tahsilatı") && klRows.every((r) => r.source === "Silinen: Kalan Müvekkil" && r.trash_id), JSON.stringify(klRows.map((r) => [r.kind, r.amount])));
+ok("kalan ödeme: kasa bakiyesi silinince değişmez", (await kasaNow()) === klKasa, `${klKasa} → ${await kasaNow()}`);
+const klTrash = (await one(`select id from public.trash where label='Kalan Müvekkil'`)).id;
+await asUser(A, () => q(`select public.trash_restore($1)`, [klTrash]));
+ok("kalan ödeme: geri yüklenince defterden kalkar, kasa bakiyesi aynı (çift sayılmaz)",
+  (await q(`select 1 from public.payment_ledger where client_name='Kalan Müvekkil'`)).length === 0 && (await kasaNow()) === klKasa, String(await kasaNow()));
+await asUser(A, () => q(`select public.trash_delete('clients', array[$1]::uuid[])`, [klCli]));
+const klTrash2 = (await one(`select id from public.trash where label='Kalan Müvekkil'`)).id;
+await asUser(A, () => q(`select public.trash_purge($1)`, [klTrash2]));
+ok("kalan ödeme: çöp kalıcı silinse de ödemeler defterde kalır", (await q(`select 1 from public.payment_ledger where client_name='Kalan Müvekkil' and trash_id is null`)).length === 2 && (await kasaNow()) === klKasa);
+await setAs(S, { "accounts.view": false, "fees.view": true });
+ok("kalan ödeme: hesap görme izni olmayan avukat defteri göremez", (await asUser(S, () => q(`select 1 from public.payment_ledger`))).length === 0);
+ok("kalan ödeme: başka büro göremez", (await asUser(B, () => q(`select 1 from public.payment_ledger`))).length === 0);
+await setAs(S, { "accounts.view": true });
+ok("kalan ödeme: silme izni olmayan silemez", (await asUser(S, () => q(`delete from public.payment_ledger where client_name='Kalan Müvekkil' returning id`))).length === 0);
+await setAs(S, { "accounts.view": true, "accounts.delete": true });
+const klDel = await asUser(S, () => q(`delete from public.payment_ledger where client_name='Kalan Müvekkil' and amount=70 returning id`));
+ok("kalan ödeme: silme izinli tek satırı siler, kasa o kadar düşer", klDel.length === 1 && (await kasaNow()) === klKasa - 70, String(await kasaNow()));
+await setAs(S, {});
 
 // ── Admin'e özel vekalet ücreti
 let vkErr = null;

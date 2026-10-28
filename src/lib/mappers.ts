@@ -9,6 +9,7 @@ import type {
   AppNotification,
   AttachmentRef,
   Bank,
+  PaymentLedgerEntry,
   SalaryGarnishment,
   SalaryGarnishmentEntry,
   CaseFile,
@@ -378,6 +379,24 @@ export function bankFromRow(r: Record<string, unknown>): Bank {
     updatedAt: iso(r.updated_at as string),
     name: String(r.name ?? ""),
     active: r.active !== false,
+  };
+}
+
+/** Kalan ödemeler (silinen kayıtlardaki ödemeler); satırları yalnızca sunucu yazar */
+export function paymentLedgerFromRow(r: Record<string, unknown>): PaymentLedgerEntry {
+  return {
+    id: String(r.id),
+    firmId: String(r.org_id),
+    createdAt: iso(r.created_at as string),
+    updatedAt: iso(r.created_at as string),
+    date: dateOnly(r.date as string),
+    amount: num(r.amount),
+    method: optStr(r.method),
+    accountId: optStr(r.account_id),
+    clientName: String(r.client_name ?? ""),
+    source: String(r.source ?? ""),
+    kind: String(r.kind ?? ""),
+    trashId: optStr(r.trash_id),
   };
 }
 

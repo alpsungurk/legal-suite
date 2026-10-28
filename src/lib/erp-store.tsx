@@ -160,6 +160,10 @@ const ENTITY: { [K in CollectionKey]: EntityMeta } = {
     describe: (e: Collections["events"]) => `${e.type} · ${e.date}`,
   },
   banks: { label: "Banka", describe: (b: Collections["banks"]) => b.name },
+  paymentLedger: {
+    label: "Kalan ödeme",
+    describe: (l: Collections["paymentLedger"]) => `${l.clientName} · ${money(l.amount)}`,
+  },
   salaryGarnishments: {
     label: "Maaş haczi sırası",
     describe: (q: Collections["salaryGarnishments"]) => q.employeeName,

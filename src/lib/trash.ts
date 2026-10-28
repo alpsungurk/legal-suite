@@ -88,6 +88,8 @@ export type TrashPreview = {
   found: number;
   /** Eksik "sil" izni olan modül; null ise silinebilir */
   missing: string | null;
+  /** Bize ödenmiş, silinirken "Kalan ödemeler" defterine alınacak para (kasa bakiyesi değişmez) */
+  keep?: { count: number; amount: number };
   /** Kasa / cari bakiyesini değiştiren kayıtlar da gidiyor */
   balances: boolean;
 };

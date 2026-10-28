@@ -212,6 +212,23 @@ export type Bank = BaseEntity & {
   active: boolean;
 };
 
+/**
+ * Kalan ödeme: müvekkil / dosya silinince, silinen kayıttaki bize ödenmiş para kalıcı bir deftere
+ * yazılır (kasa / banka bakiyesine dahildir). Satırlar yalnızca sunucuda oluşur; kullanıcı siler.
+ */
+export type PaymentLedgerEntry = BaseEntity & {
+  date: ISODate;
+  amount: number;
+  method?: string;
+  accountId?: string;
+  clientName: string;
+  /** Ör. "Silinen: Kaya Holding" */
+  source: string;
+  /** Ücret tahsilatı | İcra tahsilatı | Masraf iadesi */
+  kind: string;
+  trashId?: string;
+};
+
 /** Maaş haczi sırasındaki tek icra dosyası (tutar tutulmaz) */
 export type SalaryGarnishmentEntry = {
   id: string;
@@ -761,6 +778,7 @@ export type Collections = {
   contacts: ContactLog;
   events: EnforcementEvent;
   banks: Bank;
+  paymentLedger: PaymentLedgerEntry;
   salaryGarnishments: SalaryGarnishment;
   documents: DocumentFile;
   notifications: AppNotification;

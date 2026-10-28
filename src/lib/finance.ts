@@ -367,7 +367,7 @@ export type AccountEntry = {
   id: string;
   date: ISODate;
   description: string;
-  source: "Açılış" | "Masraf" | "Tahsilat" | "İcra" | "Virman" | "Diğer" | "Aktarım";
+  source: "Açılış" | "Masraf" | "Tahsilat" | "İcra" | "Virman" | "Diğer" | "Aktarım" | "Kalan ödeme";
   amount: number;
   balance: number;
   clientId?: string;
@@ -431,6 +431,16 @@ export function accountLedger(state: ErpState, accountId: string) {
       source: "İcra",
       amount: c.amount,
       clientId: ef?.clientId,
+    });
+  }
+  // Silinen kayıtlardan kalan ödemeler: hesabın bakiyesine dahil
+  for (const l of state.paymentLedger.filter((l) => l.accountId === accountId)) {
+    raw.push({
+      id: l.id,
+      date: l.date,
+      description: `Kalan ödeme · ${l.clientName || l.source} · ${l.kind}`,
+      source: "Kalan ödeme",
+      amount: l.amount,
     });
   }
   for (const t of state.transactions.filter((t) => t.accountId === accountId)) {
