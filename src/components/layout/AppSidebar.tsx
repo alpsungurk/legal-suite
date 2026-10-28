@@ -478,6 +478,18 @@ function buildGroups(
       label: "Genel",
       items: [
         { title: "Gösterge paneli", url: "/", icon: LayoutDashboard },
+        // Yalnızca yönetici: gösterge panelinin hemen altında
+        ...(p.isAdmin
+          ? [
+              {
+                title: "Vekalet ücreti",
+                url: "/vekalet",
+                icon: Lock,
+                badge: overdueVekalet,
+                badgeTone: "red" as const,
+              },
+            ]
+          : []),
         {
           // Ajanda, bildirimler ve dikkat gerektirenler tek bölümde (accordion)
           id: "hatirlatmalar",
@@ -547,14 +559,6 @@ function buildGroups(
       url: "/tahsilatlar",
       icon: Wallet,
       badge: overdueInst,
-      badgeTone: "red",
-    });
-  if (p.isAdmin)
-    finance.push({
-      title: "Vekalet ücreti",
-      url: "/vekalet",
-      icon: Lock,
-      badge: overdueVekalet,
       badgeTone: "red",
     });
   if (p.can("ledger"))

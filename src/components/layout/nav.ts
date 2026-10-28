@@ -32,6 +32,7 @@ export type NavPage = {
 
 export const NAV_PAGES: NavPage[] = [
   { title: "Gösterge paneli", url: "/", icon: LayoutDashboard },
+  { title: "Vekalet ücreti", url: "/vekalet", icon: Lock, allow: (p) => p.isAdmin },
   { title: "Ajanda", url: "/takvim", icon: CalendarDays },
   { title: "Müvekkiller", url: "/muvekkiller", icon: Users, allow: (p) => p.can("clients") },
   { title: "Dosyalar", url: "/dosyalar", icon: FolderKanban, allow: (p) => p.can("cases") },
@@ -43,7 +44,6 @@ export const NAV_PAGES: NavPage[] = [
     allow: (p) => p.can("expenses") || p.can("expenses", "create"),
   },
   { title: "Tahsilatlar", url: "/tahsilatlar", icon: Wallet, allow: (p) => p.can("fees") },
-  { title: "Vekalet ücreti", url: "/vekalet", icon: Lock, allow: (p) => p.isAdmin },
   { title: "Cari hesap", url: "/cari-hesap", icon: BookOpenCheck, allow: (p) => p.can("ledger") },
   { title: "Banka & Kasa", url: "/banka-kasa", icon: Landmark, allow: (p) => p.can("accounts") },
   {
