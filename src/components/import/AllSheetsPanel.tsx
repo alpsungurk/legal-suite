@@ -186,11 +186,8 @@ export function AllSheetsPanel({
                               <Combobox
                                 value={r.plan.company || undefined}
                                 onChange={(v) => onChangePlan(index, "sirket", v)}
-                                options={[
-                                  ...new Set([...(r.plan.candidates ?? []), ...clientNames]),
-                                ].map((n) => ({ value: n, label: n }))}
-                                placeholder="Müvekkil şirketi seçin"
-                                creatable
+                                options={clientNames.map((n) => ({ value: n, label: n }))}
+                                placeholder="Kayıtlı müvekkil şirketi seçin"
                                 invalid={!!r.plan.pending}
                               />
                             </div>

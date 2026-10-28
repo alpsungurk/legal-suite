@@ -514,13 +514,8 @@ export function ImportDialog({
         enforcementCloseReasons: enfs.map((e) => e.closeReason),
       });
       const extraParties = isIcra ? (batch.debtors?.length ?? 0) : 0;
-      const extraClients = isIcra ? (batch.clients?.length ?? 0) : 0;
       toast.success(
-        [
-          `${saved} kayıt aktarıldı`,
-          extraClients ? `${extraClients} yeni müvekkil` : "",
-          extraParties ? `${extraParties} yeni karşı taraf kartı` : "",
-        ]
+        [`${saved} kayıt aktarıldı`, extraParties ? `${extraParties} yeni karşı taraf kartı` : ""]
           .filter(Boolean)
           .join(" · "),
       );
@@ -831,7 +826,6 @@ export function ImportDialog({
                           .filter((c) => c.status !== "Pasif")
                           .map((c) => ({ value: c.name, label: c.name }))}
                         placeholder="Şirket seçin — boşsa hücredeki ad kullanılır"
-                        creatable
                         allowClear
                       />
                     </div>

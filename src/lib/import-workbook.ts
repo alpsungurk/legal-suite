@@ -202,8 +202,8 @@ function companyCandidates(rows: Row[]): string[] {
 }
 
 /**
- * Sayfa adından şirketin tam unvanı: adı içeren kayıtlı müvekkil, yoksa sayfada adı içeren en sık isim.
- * Kanıt yoksa undefined döner (sayfa adı müvekkil adı diye uydurulmaz).
+ * Sayfa adından şirketin tam unvanı: yalnızca adı içeren kayıtlı müvekkil (müvekkil aktarımda açılmaz).
+ * Birden çok kayıtlıysa sayfada en sık geçen seçilir. Kanıt yoksa undefined döner, kullanıcıya sorulur.
  */
 export function resolveCompany(
   sheetName: string,
@@ -213,15 +213,16 @@ export function resolveCompany(
   const t = norm(sheetName);
   if (t.length < 3) return undefined;
   const registered = state.clients.filter((c) => norm(c.name).includes(t));
-  if (registered.length === 1) return registered[0].name;
+  if (registered.length <= 1) return registered[0]?.name;
   const counts = new Map<string, number>();
   for (const r of rows)
     for (const cell of [r.values.client, r.values.debtors]) {
       const v = singleName(cell);
-      if (v && norm(v).includes(t)) counts.set(v, (counts.get(v) ?? 0) + 1);
+      const hit = v && registered.find((c) => norm(c.name) === norm(v));
+      if (hit) counts.set(hit.name, (counts.get(hit.name) ?? 0) + 1);
     }
   const best = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
-  return best?.[0] ?? registered[0]?.name;
+  return best?.[0] ?? registered[0].name;
 }
 
 /** Her sayfayı doğrular ve oluşturulacak / güncellenecek kayıtları üretir. */

@@ -860,9 +860,8 @@ const cases: ImportSpec = {
       key: "client",
       header: "Müvekkil",
       type: "lookup",
-      creatable: true,
       options: lists.clients,
-      hint: "Kayıtlı değilse kartı açılır. Birden çok isim varsa ilki müvekkil, diğerleri nota",
+      hint: "Müvekkiller'de kayıtlı olmalı. Birden çok isim varsa ilki müvekkil, diğerleri nota",
       width: 26,
       aliases: ["Müvekkil adı", "Taraf"],
     },
@@ -969,12 +968,10 @@ const cases: ImportSpec = {
     if (!r.court && !r.esasNo && !v.title?.trim()) errors.court = "Mahkeme ve esas no girin";
     if (!r.esasNo && !r.clientName && !v.no?.trim())
       warnings.push("Esas no ve müvekkil yok: yeniden yüklemede tanınamaz, tekrar eklenir");
+    // Müvekkil aktarımda açılmaz; önce Müvekkiller'den eklenir
     if (!r.clientName) warnings.push("Müvekkil yok");
-    else if (!clientByName(ctx.state, r.clientName)) {
-      if (ctx.permissions.can("clients", "create"))
-        warnings.push(`Yeni müvekkil kartı açılacak: ${r.clientName}`);
-      else errors.client = "Müvekkil kayıtlı değil (müvekkil ekleme yetkiniz yok)";
-    }
+    else if (!clientByName(ctx.state, r.clientName))
+      errors.client = `Müvekkil kayıtlı değil: ${r.clientName}. Önce Müvekkiller'den ekleyin`;
     if (v.type?.trim()) enumOf(v, "type", ctx.state.settings.caseTypes, errors, r.type);
     date(v, "openingDate", errors);
     money(v, "agreedFee", errors);
@@ -1000,23 +997,7 @@ const cases: ImportSpec = {
   build(rows, ctx) {
     const s = ctx.state;
     const auto = nextCaseNumbers(s.cases, rows.filter((v) => !v.no?.trim()).length);
-    const newClients = new Map<string, Draft<"clients"> & { id: string }>();
-    const clientId = (name?: string) => {
-      if (!name) return undefined;
-      const found = clientByName(s, name);
-      if (found) return found.id;
-      const k = norm(name);
-      if (!newClients.has(k))
-        newClients.set(k, {
-          id: newId(),
-          name: name.trim(),
-          kind: guessKind(name),
-          email: "",
-          phone: "",
-          status: "Aktif",
-        });
-      return newClients.get(k)!.id;
-    };
+    const clientId = (name?: string) => (name ? clientByName(s, name)?.id : undefined);
     const out: Draft<"cases">[] = rows.map((v) => {
       const r = resolveCase(v, ctx);
       return {
@@ -1039,7 +1020,7 @@ const cases: ImportSpec = {
         note: r.note,
       };
     });
-    return { cases: out, clients: [...newClients.values()] };
+    return { cases: out };
   },
   /**
    * Kayıtlı dosyada Excel'de değişen bilgiler: durum, vekalet ücreti durumu, karşı taraf; not
@@ -1076,10 +1057,8 @@ const cases: ImportSpec = {
       changes.push({ label: "Karşı taraf", from: target.opposingParty || "—", to: d.opposingParty });
       merged.opposingParty = d.opposingParty;
     }
-    const clients = (built.clients ?? []).filter((c) => c.id === d.clientId);
     if (!target.clientId && d.clientId) {
-      const name =
-        clients[0]?.name ?? ctx.state.clients.find((c) => c.id === d.clientId)?.name ?? "";
+      const name = ctx.state.clients.find((c) => c.id === d.clientId)?.name ?? "";
       changes.push({ label: "Müvekkil eklenir", from: "", to: name });
       merged.clientId = d.clientId;
     }
@@ -1095,10 +1074,7 @@ const cases: ImportSpec = {
     return {
       changes,
       blocked: changes.length > 0 && !ctx.permissions.can("cases", "edit"),
-      batch: {
-        cases: [merged],
-        ...(merged.clientId && !target.clientId && clients.length ? { clients } : {}),
-      },
+      batch: { cases: [merged] },
     };
   },
 };
@@ -1879,11 +1855,10 @@ function enforcementSpec(side: EnforcementSide): ImportSpec {
     header: owed ? "Borçlu (müvekkil)" : "Alacaklı (müvekkil)",
     required: true,
     type: "lookup",
-    creatable: true,
     options: lists.clients,
     hint: owed
-      ? "Müvekkil adı (borçlu olan müvekkilimiz). Kayıtlı değilse oluşturulur."
-      : "Müvekkil adı veya TC / vergi no. Parantezdeki şirket / ilk isim müvekkil olur; şirket sayfasında üstten seçilir.",
+      ? "Müvekkil adı (borçlu olan müvekkilimiz). Müvekkiller'de kayıtlı olmalı."
+      : "Müvekkil adı veya TC / vergi no; Müvekkiller'de kayıtlı olmalı. Parantezdeki şirket / ilk isim müvekkil olur; şirket sayfasında üstten seçilir.",
     example: owed ? "Kaya Holding A.Ş." : "Mehmet Yılmaz",
     width: 26,
     aliases: owed
@@ -2102,12 +2077,13 @@ function enforcementSpec(side: EnforcementSide): ImportSpec {
       if (!clientRaw && !company) {
         errors.client = owed ? "Müvekkil (borçlu) boş; adını yazın" : "Zorunlu alan";
       } else if (clientRaw) {
+        // Müvekkil aktarımda açılmaz; önce Müvekkiller'den eklenir
         const r = findClient(s, clientRaw);
         clientId = r.client?.id;
-        if (!r.client) {
-          if (/birden fazla/.test(r.error ?? "")) errors.client = r.error!;
-          else warnings.push(`Yeni müvekkil oluşturulacak: ${clientRaw}`);
-        }
+        if (!r.client)
+          errors.client = /birden fazla/.test(r.error ?? "")
+            ? r.error!
+            : `Müvekkil kayıtlı değil: ${clientRaw}. Önce Müvekkiller'den ekleyin`;
       }
 
       const partyCell = rowOwed && company ? (v.client ?? "") : (v.debtors ?? "");
@@ -2168,22 +2144,8 @@ function enforcementSpec(side: EnforcementSide): ImportSpec {
     build(rows, ctx) {
       const s = ctx.state;
       const company = ctx.companyClient?.trim() || "";
-      const newClients = new Map<string, Draft<"clients"> & { id: string }>();
-      const clientId = (value: string) => {
-        const found = findClient(s, value).client;
-        if (found) return found.id;
-        const k = norm(value);
-        if (!newClients.has(k))
-          newClients.set(k, {
-            id: newId(),
-            name: value.trim(),
-            kind: guessKind(value),
-            email: "",
-            phone: "",
-            status: "Aktif",
-          });
-        return newClients.get(k)!.id;
-      };
+      // Kayıtlı olmayan müvekkilli satır check'te hatalıdır, buraya gelmez
+      const clientId = (value: string) => findClient(s, value).client?.id ?? "";
       const newParties = new Map<string, Draft<"debtors"> & { id: string }>();
       const partyId = (name: string) => {
         const existing = findDebtor(s, name);
@@ -2216,8 +2178,8 @@ function enforcementSpec(side: EnforcementSide): ImportSpec {
             !nameMentions(v.client ?? "", company));
         const parsed = parseClientCell(v.client ?? "", company || undefined);
         const clientName = rowOwed
-          ? company || v.client?.trim() || "Belirtilmedi"
-          : parsed.clientName || v.client?.trim() || company || "Belirtilmedi";
+          ? company || v.client?.trim() || ""
+          : parsed.clientName || v.client?.trim() || company;
         const partyNames = splitNames(rowOwed && company ? (v.client ?? "") : (v.debtors ?? ""));
         const seizureRaw = v.lastSeizureDate?.trim() ?? "";
         const seizureIso = parseDateText(seizureRaw) ?? latestDateIn(seizureRaw) ?? "";
@@ -2265,12 +2227,8 @@ function enforcementSpec(side: EnforcementSide): ImportSpec {
           note,
         };
       });
-      // Sıra önemli: önce müvekkiller ve karşı taraflar, sonra onlara bağlı dosyalar
-      return {
-        clients: [...newClients.values()],
-        debtors: [...newParties.values()],
-        enforcements: out,
-      };
+      // Sıra önemli: önce karşı taraflar, sonra onlara bağlı dosyalar
+      return { debtors: [...newParties.values()], enforcements: out };
     },
   };
 }
