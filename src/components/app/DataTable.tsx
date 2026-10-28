@@ -109,7 +109,7 @@ export function DataTable<T>({
   exportName,
   exportColumns,
   empty,
-  pageSize = 25,
+  pageSize: pageSizeProp = 10,
   initialSort,
   mobileCard,
   footer,
@@ -124,8 +124,11 @@ export function DataTable<T>({
     initialSort ? { id: initialSort.id, desc: !!initialSort.desc } : null,
   );
   const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(pageSizeProp);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showFilters, setShowFilters] = useState(false);
+
+  useEffect(() => setPageSize(pageSizeProp), [pageSizeProp]);
 
   const activeFilterCount =
     Object.values(filterValues).filter((v) => v && v !== "__all").length + (from || to ? 1 : 0);
@@ -165,11 +168,15 @@ export function DataTable<T>({
     return out;
   }, [rows, query, searchText, filters, filterValues, dateRange, from, to, sort, columns]);
 
-  useEffect(() => setPage(0), [query, filterValues, from, to]);
+  useEffect(() => setPage(0), [query, filterValues, from, to, pageSize]);
 
-  const pageCount = Math.max(1, Math.ceil(visible.length / pageSize));
+  const effectiveSize = pageSize <= 0 ? Math.max(visible.length, 1) : pageSize;
+  const pageCount = Math.max(1, Math.ceil(visible.length / effectiveSize));
   const safePage = Math.min(page, pageCount - 1);
-  const pageRows = visible.slice(safePage * pageSize, safePage * pageSize + pageSize);
+  const pageRows = visible.slice(
+    safePage * effectiveSize,
+    safePage * effectiveSize + effectiveSize,
+  );
 
   const selectedRows = useMemo(
     () => rows.filter((r) => selected.has(getId(r))),
@@ -530,36 +537,57 @@ export function DataTable<T>({
         </div>
       )}
 
-      {/* Sayfalama */}
-      {visible.length > pageSize && (
-        <div className="flex items-center justify-between gap-2 border-t border-border/60 px-4 py-2.5 text-xs text-muted-foreground">
-          <span>
-            {safePage * pageSize + 1}–{Math.min((safePage + 1) * pageSize, visible.length)} /{" "}
-            {visible.length}
-          </span>
-          <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              disabled={safePage === 0}
-              onClick={() => setPage(safePage - 1)}
-              aria-label="Önceki sayfa"
-            >
-              <ChevronLeft />
-            </Button>
-            <span className="px-2 font-medium text-foreground">
-              {safePage + 1} / {pageCount}
+      {/* Sayfalama + sayfada kaç kayıt */}
+      {visible.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-4 py-2.5 text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-3">
+            <span>
+              {visible.length === 0
+                ? "0 kayıt"
+                : `${safePage * effectiveSize + 1}–${Math.min((safePage + 1) * effectiveSize, visible.length)} / ${visible.length}`}
             </span>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              disabled={safePage >= pageCount - 1}
-              onClick={() => setPage(safePage + 1)}
-              aria-label="Sonraki sayfa"
-            >
-              <ChevronRight />
-            </Button>
+            <label className="flex items-center gap-1.5">
+              <span className="whitespace-nowrap">Sayfada</span>
+              <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
+                <SelectTrigger className="h-8 w-[4.5rem]" aria-label="Sayfada kayıt sayısı">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[10, 25, 50, 100].map((n) => (
+                    <SelectItem key={n} value={String(n)}>
+                      {n}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="0">Tümü</SelectItem>
+                </SelectContent>
+              </Select>
+            </label>
           </div>
+          {pageCount > 1 && (
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                disabled={safePage === 0}
+                onClick={() => setPage(safePage - 1)}
+                aria-label="Önceki sayfa"
+              >
+                <ChevronLeft />
+              </Button>
+              <span className="px-2 font-medium text-foreground">
+                {safePage + 1} / {pageCount}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                disabled={safePage >= pageCount - 1}
+                onClick={() => setPage(safePage + 1)}
+                aria-label="Sonraki sayfa"
+              >
+                <ChevronRight />
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>

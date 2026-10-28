@@ -31,6 +31,7 @@ import {
   type PaymentPromise,
   type Reminder,
   type AttachmentRef,
+  isHearingType,
 } from "@/lib/erp-types";
 import {
   addDays,
@@ -59,6 +60,42 @@ import type { FormProps } from "@/components/forms/core";
 
 const isBankGarnishment = (type?: string) =>
   !!type && (BANK_GARNISHMENT_EVENT_TYPES as readonly string[]).includes(type);
+
+/**
+ * Formda elle yazılan borçlu / karşı taraf adı: aynı adlı kart varsa o kullanılır, yoksa açılır.
+ * A.Ş., Ltd., Şti. gibi ekler varsa kart kurumsal açılır.
+ */
+function ensureDebtor(
+  debtors: Debtor[],
+  save: ReturnType<typeof useErp>["save"],
+  name: string,
+): Debtor {
+  const key = name.trim().toLocaleLowerCase("tr");
+  const existing = debtors.find((d) => d.name.trim().toLocaleLowerCase("tr") === key);
+  if (existing) return existing;
+  return save("debtors", {
+    name: name.trim(),
+    kind: /\b(a\.?ş|ltd|şti|şirket|tic|san|koop)\b/i.test(name) ? "Kurumsal" : "Bireysel",
+  });
+}
+
+/** İşlem formundaki "Kontrol hatırlatması": değer gün sayısı ya da "custom" */
+const REMIND_OPTIONS: Option[] = [
+  { value: "0", label: "Hatırlatma yok" },
+  { value: "3", label: "3 gün sonra" },
+  { value: "7", label: "1 hafta sonra" },
+  { value: "14", label: "2 hafta sonra" },
+  { value: "30", label: "1 ay sonra" },
+  { value: "custom", label: "Tarih seçeyim" },
+];
+/** Hatırlatma günü; geçmiş tarihli işlemde bugünden sayılır */
+function remindDateOf(v: FormValues): string | undefined {
+  if (v.remindIn === "custom") return v.remindDate || undefined;
+  const days = Number(v.remindIn);
+  if (!days) return undefined;
+  const base = v.date && v.date > today() ? v.date : today();
+  return addDays(base, days);
+}
 
 function bankDeadlineHint(type: string, date: string, days: number) {
   const when = formatDate(addDays(date, days + 1));
@@ -210,14 +247,19 @@ function BankAnswersEditor({
 /* ───────────── Ajanda ───────────── */
 
 export function ReminderForm({ open, onOpenChange, record, preset, onSaved }: FormProps<Reminder>) {
-  const { save, state, currentUser } = useErp();
+  const { save, state, currentUser, rememberOption } = useErp();
   const o = useOptions();
+  const ef = state.enforcements.find(
+    (e) => e.id === (record?.enforcementId ?? preset?.enforcementId),
+  );
   return (
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={record ? "Etkinliği düzenle" : "Yeni ajanda kaydı"}
-      description="Duruşma, süre, toplantı veya görev"
+      title={record ? "Etkinliği düzenle" : ef ? "Hatırlatma ekle" : "Yeni ajanda kaydı"}
+      description={
+        ef ? `İcra dosyası ${ef.no} · ${ef.office}` : "Duruşma, süre, toplantı veya görev"
+      }
       wide
       fields={[
         { name: "type", label: "Tür", type: "select", options: o.reminderTypes, required: true },
@@ -247,12 +289,54 @@ export function ReminderForm({ open, onOpenChange, record, preset, onSaved }: Fo
         },
         {
           name: "assigneeId",
-          label: "Sorumlu",
+          label: (v) => (isHearingType(v.type) ? "Katılacak avukat" : "Sorumlu"),
           type: "combobox",
           options: o.staff,
           required: true,
         },
-        { name: "location", label: "Yer", placeholder: "Örn. Çağlayan Adliyesi B Blok" },
+        // Duruşmada mahkeme listeden seçilir ya da yazılır (yeni mahkeme Ayarlar listesine eklenir)
+        {
+          name: "location",
+          label: "Mahkeme",
+          type: "combobox",
+          options: o.courts,
+          creatable: true,
+          allowClear: true,
+          placeholder: "Listeden seçin veya yazın",
+          visible: (v) => isHearingType(v.type),
+        },
+        {
+          name: "location",
+          label: "Yer",
+          placeholder: "Örn. Çağlayan Adliyesi B Blok",
+          visible: (v) => !isHearingType(v.type),
+        },
+        // Duruşma listesinde ayrı sütunlar: dosya no, müvekkil ve sıfatı, mazeret
+        {
+          name: "caseNo",
+          label: "Dosya no",
+          placeholder: "Örn. 2026/220",
+          section: "Duruşma bilgileri",
+          visible: (v) => isHearingType(v.type),
+        },
+        {
+          name: "parties",
+          label: "Müvekkil ve sıfatı",
+          placeholder: "Örn. Birgül Aktay (Davacı)",
+          visible: (v) => isHearingType(v.type),
+        },
+        // Katılım: boşsa avukat katılır; Ayarlar'daki seçenekler (Mazeret, Tevkil…) ya da yazılan
+        {
+          name: "excuse",
+          label: "Katılım (mazeret, tevkil…)",
+          type: "combobox",
+          options: state.settings.hearingAttendance ?? [],
+          creatable: true,
+          allowClear: true,
+          placeholder: "Boşsa avukat katılacak",
+          span: 2,
+          visible: (v) => isHearingType(v.type),
+        },
         {
           name: "status",
           label: "Durum",
@@ -271,6 +355,7 @@ export function ReminderForm({ open, onOpenChange, record, preset, onSaved }: Fo
         ...record,
       }}
       onSubmit={(v) => {
+        if (isHearingType(v.type)) rememberOption("courts", v.location);
         const assigneeChanged = !record || record.assigneeId !== v.assigneeId;
         const item = save(
           "reminders",
@@ -287,6 +372,14 @@ export function ReminderForm({ open, onOpenChange, record, preset, onSaved }: Fo
             assigneeId: v.assigneeId,
             status: v.status ?? "Bekliyor",
             note: v.note || undefined,
+            // Duruşmada boşaltılan alan "" ile silinir; diğer türlerde bu alanlara dokunulmaz
+            ...(isHearingType(v.type)
+              ? {
+                  caseNo: v.caseNo?.trim() ?? "",
+                  parties: v.parties?.trim() ?? "",
+                  excuse: v.excuse?.trim() ?? "",
+                }
+              : {}),
           },
           assigneeChanged
             ? {
@@ -447,7 +540,8 @@ export function EnforcementForm({
           type: "multiselect",
           options: o.debtors,
           required: true,
-          hint: "Kartı yoksa önce Borçlular sayfasından ekleyin",
+          creatable: true,
+          hint: "Listede yoksa adını yazıp ekleyin; kaydedince kartı açılır",
         },
         {
           name: "principal",
@@ -514,6 +608,20 @@ export function EnforcementForm({
         const closed = v.status === CLOSED_ENFORCEMENT_STATUS;
         if (closed && v.closeReason) rememberOption("enforcementCloseReasons", v.closeReason);
         if (v.details) rememberOption("claimTypes", v.details);
+        // Elle yazılan adlar (kayıtlı kart id'si olmayanlar) karta dönüştürülür
+        const known = new Set(state.debtors.map((d) => d.id));
+        const added: string[] = [];
+        const debtorIds = [
+          ...new Set(
+            (v.debtorIds as string[]).map((x) => {
+              if (known.has(x)) return x;
+              const d = ensureDebtor(state.debtors, save, x);
+              if (!known.has(d.id)) added.push(d.name);
+              return d.id;
+            }),
+          ),
+        ];
+        if (added.length) toast.info(`Yeni kart açıldı: ${added.join(", ")}`);
         const item = save("enforcements", {
           id: record?.id,
           side: owed(v) ? "Borçlu" : "Alacaklı",
@@ -525,7 +633,7 @@ export function EnforcementForm({
           closeReason: closed ? String(v.closeReason ?? "").trim() : "",
           procedure: v.procedure || "",
           clientId: v.clientId,
-          debtorIds: v.debtorIds,
+          debtorIds,
           principal: round2(Number(v.principal) || 0),
           interest: 0,
           costs: 0,
@@ -551,13 +659,16 @@ export function EnforcementEventForm({
   preset,
   onSaved,
 }: FormProps<EnforcementEvent>) {
-  const { save, patch, state } = useErp();
+  const { save, patch, state, currentUser, permissions } = useErp();
   const o = useOptions();
   const enfId = record?.enforcementId ?? preset?.enforcementId;
   const ef = state.enforcements.find((e) => e.id === enfId);
   const parties = state.debtors
     .filter((d) => ef?.debtorIds.includes(d.id))
     .map((d) => ({ value: d.id, label: d.name }));
+  // Listede olmayan borçlu (ör. maaş haczinde işveren) yazılıp dosyaya eklenebilir
+  const canAddParty = permissions.can("enforcements", "edit");
+  const canRemind = permissions.can("reminders", "create");
   const s = state.settings;
   /** İşlemin doğuracağı süre (talimattaki kurallar) */
   const deadlineHint = (v: FormValues) => {
@@ -623,6 +734,11 @@ export function EnforcementEventForm({
           options: parties,
           allowClear: true,
           placeholder: "Tümü",
+          creatable: canAddParty,
+          hint: (v) =>
+            canAddParty && v.debtorId && !parties.some((p) => p.value === v.debtorId)
+              ? "Kaydedince dosyanın borçlularına eklenir"
+              : undefined,
         },
         {
           name: "result",
@@ -634,8 +750,29 @@ export function EnforcementEventForm({
         { name: "amount", label: "Tutar (varsa)", type: "money" },
         ...inquiryFields,
         { name: "note", label: "Not", type: "textarea" },
+        ...(canRemind
+          ? [
+              {
+                name: "remindIn",
+                label: "Kontrol hatırlatması",
+                type: "select" as const,
+                options: REMIND_OPTIONS,
+                hint: (v: FormValues) => {
+                  const d = remindDateOf(v);
+                  return d ? `${formatDate(d)} günü size hatırlatılır (Ajanda)` : undefined;
+                },
+              },
+              {
+                name: "remindDate",
+                label: "Hatırlatma tarihi",
+                type: "date" as const,
+                visible: (v: FormValues) => v.remindIn === "custom",
+              },
+            ]
+          : []),
       ]}
       initial={{
+        remindIn: "0",
         date: today(),
         ...preset,
         ...record,
@@ -648,15 +785,32 @@ export function EnforcementEventForm({
         inquiryBanks: inquiryBankNames,
         banks: normalizeBankAnswers(record?.data?.banks ?? []),
       }}
-      validate={(v) =>
-        isBankGarnishment(String(v.type)) &&
-        (v.banks as BankAnswer[]).some((b) => !b.name.trim())
-          ? { type: "Banka adı boş bırakılamaz" }
-          : undefined
-      }
+      validate={(v): Record<string, string> | undefined => {
+        if (
+          isBankGarnishment(String(v.type)) &&
+          (v.banks as BankAnswer[]).some((b) => !b.name.trim())
+        )
+          return { type: "Banka adı boş bırakılamaz" };
+        if (v.remindIn === "custom" && !v.remindDate)
+          return { remindDate: "Hatırlatma tarihini seçin" };
+        return undefined;
+      }}
       onSubmit={(v) => {
         if (!enfId) return false;
         const type = String(v.type).trim();
+        // Yazılan yeni ad: aynı adlı kart varsa o kullanılır, yoksa açılır; dosyanın borçlularına eklenir
+        let debtorId = String(v.debtorId ?? "").trim();
+        if (ef && debtorId && !parties.some((p) => p.value === debtorId)) {
+          const debtor =
+            state.debtors.find((d) => d.id === debtorId) ??
+            ensureDebtor(state.debtors, save, debtorId);
+          debtorId = debtor.id;
+          if (!ef.debtorIds.includes(debtorId)) {
+            patch("enforcements", ef.id, { debtorIds: [...ef.debtorIds, debtorId] });
+            const where = ef.side === "Borçlu" ? "karşı tarafına" : "borçlularına";
+            toast.info(`${debtor.name} dosyanın ${where} eklendi`);
+          }
+        }
         // Ek bilgiler (sorgu sonuçları, bankalar) data'da; "tamamlandı" işareti korunur
         const data: EventData = { doneAt: record?.data?.doneAt };
         if (type === EVENT_TYPE_INQUIRY) {
@@ -690,7 +844,7 @@ export function EnforcementEventForm({
           enforcementId: enfId,
           date: v.date,
           type,
-          debtorId: v.debtorId || "",
+          debtorId,
           inquiryType: type === EVENT_TYPE_INQUIRY ? record?.inquiryType || "" : "",
           seizureType: type === EVENT_TYPE_SEIZURE ? v.seizureType || "" : "",
           result: type === EVENT_TYPE_INQUIRY || isBankGarnishment(type) ? "" : v.result || "",
@@ -698,6 +852,22 @@ export function EnforcementEventForm({
           amount: Number(v.amount) > 0 ? round2(Number(v.amount)) : undefined,
           note: v.note?.trim() || "",
         });
+        // İşlemden sonra kendine kontrol hatırlatması (Ajanda'ya dosyaya bağlı kayıt)
+        const remindOn = canRemind ? remindDateOf(v) : undefined;
+        if (ef && remindOn) {
+          save("reminders", {
+            title: `${ef.no} · ${type} kontrolü`,
+            type: o.reminderTypes.includes("Diğer") ? "Diğer" : o.reminderTypes[0],
+            date: remindOn,
+            caseId: ef.caseId || undefined,
+            clientId: ef.clientId || undefined,
+            enforcementId: ef.id,
+            assigneeId: currentUser.id,
+            status: "Bekliyor",
+            note: v.note?.trim() || undefined,
+          });
+          toast.info(`${formatDate(remindOn)} için hatırlatma eklendi`);
+        }
         // Haciz kaydı dosyanın son haciz tarihini ileri taşır (geri almaz)
         if (
           ef &&

@@ -69,9 +69,30 @@ export type ClosedCasesSummary = {
 };
 
 /** Varsayılan dosya durumları; Ayarlar > Kategoriler'den değiştirilebilir. */
-export const CASE_STATUSES = ["Açık", "Derdest", "Karar", "Kanun yolu", "Kapalı"];
-/** "Kapalı" dosya kapatmayı tetikler, "Açık" yeni dosyanın varsayılanıdır: silinemez */
-export const LOCKED_CASE_STATUSES = ["Açık", "Kapalı"];
+export const CASE_STATUSES = [
+  "Açık",
+  "Derdest",
+  "Karar",
+  "Kanun yolu",
+  "İstinafta",
+  "Temyizde",
+  "Kapalı",
+];
+/**
+ * Silinemez: "Kapalı" dosya kapatmayı tetikler, "Açık" yeni dosyanın varsayılanıdır,
+ * "Derdest", "Kanun yolu", "İstinafta" ve "Temyizde" Dosyalar sayfasındaki kartlarda sayılır.
+ * Sunucuda da kilitli (app.keep_locked_settings).
+ */
+export const LOCKED_CASE_STATUSES = [
+  "Açık",
+  "Derdest",
+  "Kanun yolu",
+  "İstinafta",
+  "Temyizde",
+  "Kapalı",
+];
+/** Kanun yolundaki dosya durumları (Dosyalar → "Kanun yolunda" kartı) */
+export const APPEAL_CASE_STATUSES = ["Kanun yolu", "İstinafta", "Temyizde"];
 export type CaseStatus = string;
 
 export type CaseFile = BaseEntity & {
@@ -88,6 +109,8 @@ export type CaseFile = BaseEntity & {
   closingDate?: ISODate;
   /** Anlaşılan vekalet ücreti (bilgi amaçlı) */
   agreedFee?: number;
+  /** Vekalet ücreti durumu: alındı, icrada, istendi… (Ayarlar → Kategoriler) */
+  feeStatus?: string;
   note?: string;
 };
 
@@ -183,6 +206,31 @@ export type Bank = BaseEntity & {
   active: boolean;
 };
 
+/** Maaş haczi sırasındaki tek icra dosyası (tutar tutulmaz) */
+export type SalaryGarnishmentEntry = {
+  id: string;
+  office: string;
+  fileNo: string;
+  /** Tebliğ tarihi — varsayılan sıralama buna göre */
+  notifiedAt?: ISODate;
+  note?: string;
+  position: number;
+};
+
+/** İşveren (müvekkil) + çalışan başına maaş haczi sırası */
+export type SalaryGarnishment = BaseEntity & {
+  clientId: string;
+  employeeName: string;
+  /** 1–31; doluysa o gün kesinti hatırlatması */
+  payday?: number;
+  status: "Devam ediyor" | "İşten ayrıldı";
+  /** Ödeme günü hatırlatması bunlara; boşsa yöneticilere gider */
+  responsibleIds: string[];
+  leftAt?: ISODate;
+  note?: string;
+  entries: SalaryGarnishmentEntry[];
+};
+
 /** Banka/kasa üzerinde elle girilen hareket (virman, diğer gelir/gider). */
 export type AccountTx = BaseEntity & {
   accountId: string;
@@ -206,10 +254,30 @@ export type Reminder = BaseEntity & {
   caseId?: string;
   clientId?: string;
   enforcementId?: string;
+  /** Duruşmada: katılacak avukat */
   assigneeId: string;
   status: "Bekliyor" | "Tamamlandı" | "İptal";
   note?: string;
+  /** Duruşma: dosya numarası (dava dosyası sistemde olmasa da) */
+  caseNo?: string;
+  /** Duruşma: müvekkil(ler) ve dosyadaki sıfatı, ör. "Birgül Aktay (Davacı)" */
+  parties?: string;
+  /** Duruşma: mazeret; doluysa katılınmayacak */
+  excuse?: string;
 };
+
+/** Duruşma listesine giren ajanda türleri: dosya no, müvekkil / sıfat, katılacak avukat, mazeret */
+export const HEARING_REMINDER_TYPES = ["Duruşma", "Keşif"];
+export const isHearingType = (type?: string) => !!type && HEARING_REMINDER_TYPES.includes(type);
+/**
+ * Duruşmada "Katılacak avukat" yerine seçilebilen seçenekler (Ayarlar → Kategoriler).
+ * "Mazeret" ile başlayanlar katılınmayacak sayılır (listede kırmızı).
+ */
+export const DEFAULT_HEARING_ATTENDANCE = ["Mazeret", "Mazeret (hakim yokluğu)"];
+export const LOCKED_HEARING_ATTENDANCE = ["Mazeret"];
+export const isExcuseOption = (option?: string) => !!option && /^mazeret/i.test(option.trim());
+/** Silinemez ajanda türleri: duruşma listesi + hatırlatma / aktarımda yedek tür ("Diğer") */
+export const LOCKED_REMINDER_TYPES = [...HEARING_REMINDER_TYPES, "Diğer"];
 
 /* ───────────────────────── İcra ───────────────────────── */
 
@@ -228,6 +296,7 @@ export const ENFORCEMENT_STATUSES = [
   "Açık",
   "Durdurulmuş",
   "Kapalı",
+  "İşlem Yapılmayacak",
   "Derdest",
   "Haciz",
   "Satış",
@@ -236,17 +305,29 @@ export const ENFORCEMENT_STATUSES = [
   "Kapandı",
 ];
 /** Büronun ana durumları ve otomatik "tahsil edildi" durumu: silinemez */
-export const LOCKED_ENFORCEMENT_STATUSES = ["Açık", "Durdurulmuş", "Kapalı", "Tahsil edildi"];
+export const LOCKED_ENFORCEMENT_STATUSES = [
+  "Açık",
+  "Durdurulmuş",
+  "Kapalı",
+  "İşlem Yapılmayacak",
+  "Tahsil edildi",
+];
 /** Bu durumlardaki dosya kapanmış sayılır ("Kapandı" eski kayıtlar için) */
 export const CLOSED_ENFORCEMENT_STATUSES = ["Kapalı", "Kapandı", "Tahsil edildi"];
 export const DEFAULT_ENFORCEMENT_STATUS = "Açık";
 export const STOPPED_ENFORCEMENT_STATUS = "Durdurulmuş";
 export const CLOSED_ENFORCEMENT_STATUS = "Kapalı";
+/** Büronun Excel'de koyu lacivert boyadığı dosyalar: kapanmaz ama süre / hatırlatma üretmez */
+export const NO_ACTION_ENFORCEMENT_STATUS = "İşlem Yapılmayacak";
 /**
  * Büronun listesindeki biçim: "Açık", "Açık (Durdurulmuş : Takibe İtiraz)", "Kapalı (İnfaz)".
  * Excel'e bu biçimde yazılır, içe aktarımda da bu biçim çözülür.
  */
-export function enforcementStatusLabel(e: { status: string; stopReason?: string; closeReason?: string }) {
+export function enforcementStatusLabel(e: {
+  status: string;
+  stopReason?: string;
+  closeReason?: string;
+}) {
   if (e.status === STOPPED_ENFORCEMENT_STATUS)
     return e.stopReason ? `Açık (Durdurulmuş : ${e.stopReason})` : "Açık (Durdurulmuş)";
   if (e.status === CLOSED_ENFORCEMENT_STATUS && e.closeReason) return `Kapalı (${e.closeReason})`;
@@ -266,13 +347,18 @@ export function parseEnforcementStatus(raw: string): {
   const low = (x: string) => x.toLocaleLowerCase("tr");
   const stop = /^durdurulmu[şs]\s*:?\s*(.*)$/i.exec(inner);
   if (stop || low(head).startsWith("durdurulmu"))
-    return { status: STOPPED_ENFORCEMENT_STATUS, stopReason: (stop ? stop[1] : inner).trim() || undefined };
+    return {
+      status: STOPPED_ENFORCEMENT_STATUS,
+      stopReason: (stop ? stop[1] : inner).trim() || undefined,
+    };
   if (low(head).startsWith("kapal"))
     return { status: CLOSED_ENFORCEMENT_STATUS, closeReason: inner || undefined };
   return { status: head || s };
 }
-export const isEnforcementClosed = (status: string) =>
-  CLOSED_ENFORCEMENT_STATUSES.includes(status);
+export const isEnforcementClosed = (status: string) => CLOSED_ENFORCEMENT_STATUSES.includes(status);
+/** Kapalı ya da "İşlem Yapılmayacak": süre, haciz uyarısı ve takipteki alacak hesabına girmez */
+export const isEnforcementInactive = (status: string) =>
+  isEnforcementClosed(status) || status === NO_ACTION_ENFORCEMENT_STATUS;
 export type EnforcementStatus = string;
 
 /** Alacaklı olduğumuz (müvekkil alacaklı) / borçlu olduğumuz (müvekkil borçlu) takip */
@@ -295,6 +381,8 @@ export const DEFAULT_CLOSE_REASONS = [
   "İnfaz",
   "Haricen Tahsil",
 ];
+/** Silinemez kapanış sebepleri (sunucuda da kilitli: app.keep_locked_settings) */
+export const LOCKED_CLOSE_REASONS = ["İnfaz"];
 /** Takip bilgileri için hazır seçenekler; listede olmayan elle yazılabilir */
 export const DEFAULT_CLAIM_TYPES = [
   "Araç Mahrumiyet Bedeli Alacağı",
@@ -406,7 +494,11 @@ export type InquiryResult = {
   mosip?: "Aktif" | "Pasif";
   firma?: number;
 };
-export const INQUIRY_FIELDS: Array<{ key: keyof InquiryResult; label: string; kind: "count" | "status" | "text" }> = [
+export const INQUIRY_FIELDS: Array<{
+  key: keyof InquiryResult;
+  label: string;
+  kind: "count" | "status" | "text";
+}> = [
   { key: "arac", label: "Araç", kind: "count" },
   { key: "tasinmaz", label: "Taşınmaz", kind: "count" },
   { key: "icra", label: "Alacaklı olduğu icra dosyası", kind: "count" },
@@ -440,7 +532,10 @@ export function normalizeBankAnswers(raw: unknown): BankAnswer[] {
             const amount = (a as BankAnswerItem).amount;
             answers.push({
               type,
-              amount: typeof amount === "number" && Number.isFinite(amount) && amount > 0 ? amount : undefined,
+              amount:
+                typeof amount === "number" && Number.isFinite(amount) && amount > 0
+                  ? amount
+                  : undefined,
             });
           }
         }
@@ -580,17 +675,6 @@ export type AppNotification = BaseEntity & {
   link?: string;
 };
 
-export type FieldChange = { field: string; before: string; after: string };
-
-export type ActivityLog = BaseEntity & {
-  actorId: string;
-  action: "Ekleme" | "Güncelleme" | "Silme" | "İşlem";
-  entity: string;
-  entityId?: string;
-  detail: string;
-  changes?: FieldChange[];
-};
-
 export type FirmProfile = {
   name: string;
   legalName: string;
@@ -636,6 +720,10 @@ export type Settings = {
   enforcementCloseReasons: string[];
   claimTypes: string[];
   bankAnswerTypes: string[];
+  /** Duruşma listesinde avukatların yanında seçilen katılım seçenekleri (Mazeret, Tevkil…) */
+  hearingAttendance: string[];
+  /** Dava dosyalarında vekalet ücreti durumu seçenekleri */
+  caseFeeStatuses: string[];
   /** Takip şekilleri ve süre kuralları */
   procedures: Procedure[];
   /** 89/1→89/2→89/3 ve 89/3→kesinleşme cevap süresi (gün); hatırlatma ertesi gün */
@@ -667,9 +755,9 @@ export type Collections = {
   contacts: ContactLog;
   events: EnforcementEvent;
   banks: Bank;
+  salaryGarnishments: SalaryGarnishment;
   documents: DocumentFile;
   notifications: AppNotification;
-  activities: ActivityLog;
 };
 
 export type CollectionKey = keyof Collections;
@@ -704,7 +792,55 @@ export type ErpState = {
 
 export const STATE_VERSION = 3;
 
-export const DEFAULT_CASE_TYPES = ["Dava", "İcra", "Danışmanlık", "Arabuluculuk", "Ceza"];
+export const DEFAULT_CASE_TYPES = [
+  "Hukuk",
+  "Ceza",
+  "İdare",
+  "Dava",
+  "İcra",
+  "Danışmanlık",
+  "Arabuluculuk",
+];
+/** Dosyalar sayfasındaki sekmeler: silinemez (sunucuda da kilitli) */
+export const LOCKED_CASE_TYPES = ["Hukuk", "Ceza", "İdare"];
+
+/** Yan menüdeki ayrı dosya listeleri. tur, Dosyalar sayfasının ?tur= adresiyle aynıdır. */
+export const CASE_LISTS: {
+  tur: (typeof LOCKED_CASE_TYPES)[number];
+  label: string;
+  description: string;
+}[] = [
+  {
+    tur: "Hukuk",
+    label: "Hukuk dosya listesi",
+    description: "Hukuk mahkemelerindeki dosyalar",
+  },
+  {
+    tur: "Ceza",
+    label: "Ceza dosya listesi",
+    description: "Ceza mahkemelerindeki dosyalar",
+  },
+  {
+    tur: "İdare",
+    label: "İdare dosya listesi",
+    description: "İdare ve vergi mahkemelerindeki dosyalar",
+  },
+];
+
+export const OTHER_CASE_LIST = {
+  tur: "diger",
+  label: "Diğer dosyalar",
+  description: "Danışmanlık, arabuluculuk ve benzeri işler",
+};
+/** Vekalet ücreti durumu için hazır seçenekler (büro düzenler) */
+export const DEFAULT_CASE_FEE_STATUSES = [
+  "Vekalet ücreti alındı",
+  "Vekalet ücreti icrada",
+  "Vekalet ücreti istendi",
+  "Vekalet ücreti yok",
+  "CMK vekalet ücreti alınacak",
+  "CMK",
+];
 export const DEFAULT_EXPENSE_TYPES = [
   "Harç",
   "Bilirkişi",
@@ -760,7 +896,6 @@ export type PermissionModuleKey =
   | "ledger"
   | "accounts"
   | "reports"
-  | "activity"
   | "statements"
   | "settings_firm"
   | "settings_categories"
@@ -877,14 +1012,6 @@ export const PERMISSION_MODULES: PermissionModule[] = [
     menu: "Raporlar",
   },
   {
-    key: "activity",
-    label: "Aktivite geçmişi",
-    hint: "Kimin neyi değiştirdiği",
-    actions: ["view"],
-    coupled: true,
-    menu: "Aktivite geçmişi",
-  },
-  {
     key: "statements",
     label: "Ekstre ve döküm yazdırma",
     hint: "Müvekkil ekstresi ve dosya masraf dökümünü yazdırır / PDF alır (ekstre için Cari hesap, döküm için Masraflar görme izni de gerekir)",
@@ -957,9 +1084,9 @@ export const PERMISSION_MODULES: PermissionModule[] = [
 ];
 
 /** Ayarlar bölümü izinleri; "Tam yetki" gibi hazır ayarlarda ayrıca ele alınır */
-export const SETTINGS_PERMISSION_KEYS = PERMISSION_MODULES.filter((m) => m.group === "settings").map(
-  (m) => m.key,
-);
+export const SETTINGS_PERMISSION_KEYS = PERMISSION_MODULES.filter(
+  (m) => m.group === "settings",
+).map((m) => m.key);
 
 export type PermissionKey = `${PermissionModuleKey}.${PermissionAction}`;
 

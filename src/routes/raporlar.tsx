@@ -7,9 +7,11 @@ import {
   Percent,
   PiggyBank,
   Printer,
+  Receipt,
   Target,
   TrendingDown,
   TrendingUp,
+  Users,
 } from "lucide-react";
 import { useErp } from "@/lib/erp-store";
 import {
@@ -329,12 +331,14 @@ function Page() {
           value={formatMoney(data.income)}
           icon={TrendingUp}
           tone="green"
+          hint="Dönemde alınan ücret ödemeleri ve diğer gelirler"
         />
         <StatTile
           label="Büro gideri"
           value={formatMoney(data.officeExp)}
           icon={TrendingDown}
           tone="amber"
+          hint="Büro masrafları ve diğer giderler"
         />
         <StatTile
           label="Net"
@@ -346,6 +350,7 @@ function Page() {
         <StatTile
           label="Müvekkil masrafları"
           value={formatMoney(data.clientExp)}
+          icon={Receipt}
           tone="violet"
           hint="Müvekkile yansıtılan (gelir değil)"
         />
@@ -375,7 +380,9 @@ function Page() {
         <StatTile
           label="Aktif müvekkil"
           value={state.clients.filter((c) => c.status === "Aktif").length}
+          icon={Users}
           tone="slate"
+          hint={`Toplam ${state.clients.length} müvekkil kartı`}
         />
       </StatGrid>
 

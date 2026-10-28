@@ -26,7 +26,6 @@ import {
   parseISODate,
   relativeDue,
   sumBy,
-  timeAgo,
   today,
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -536,54 +535,3 @@ export function ExpenseBreakdown() {
   );
 }
 
-/* ───────────── Son hareketler ───────────── */
-
-export function RecentActivity({ limit = 6 }: { limit?: number }) {
-  const { state } = useErp();
-  const items = state.activities.slice(0, limit);
-  const actor = (id: string) => state.users.find((u) => u.id === id)?.name ?? "Sistem";
-  return (
-    <Section
-      title="Son hareketler"
-      actions={
-        <Button variant="ghost" size="sm" asChild>
-          <Link to="/aktivite">
-            Tümü <ArrowRight />
-          </Link>
-        </Button>
-      }
-      className="h-full"
-    >
-      {items.length === 0 ? (
-        <EmptyState icon={Clock} title="Henüz hareket yok" compact />
-      ) : (
-        <ol className="relative space-y-4 before:absolute before:bottom-2 before:left-[15px] before:top-2 before:w-px before:bg-border">
-          {items.map((a) => (
-            <li key={a.id} className="relative flex gap-3 animate-fade-up">
-              <Avatar name={actor(a.actorId)} size="sm" className="relative ring-4 ring-card" />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm">
-                  <span className="font-medium">{actor(a.actorId)}</span>{" "}
-                  <span className="text-muted-foreground">
-                    {a.entity.toLocaleLowerCase("tr")}{" "}
-                    {a.action === "Ekleme"
-                      ? "ekledi"
-                      : a.action === "Güncelleme"
-                        ? "güncelledi"
-                        : a.action === "Silme"
-                          ? "sildi"
-                          : "işlemi yaptı"}
-                  </span>
-                </p>
-                <p className="truncate text-xs text-muted-foreground">{a.detail}</p>
-              </div>
-              <span className="shrink-0 text-[12.5px] text-muted-foreground">
-                {timeAgo(a.createdAt)}
-              </span>
-            </li>
-          ))}
-        </ol>
-      )}
-    </Section>
-  );
-}

@@ -493,20 +493,20 @@
       border-color 420ms ease,
       background-color 420ms ease;
   }
-  .stat-card:hover {
+  .stat-card-link:hover {
     transform: translate3d(0, -4px, 0);
     box-shadow: var(--shadow-card);
     border-color: color-mix(in oklch, var(--primary) 14%, var(--border));
     background-color: color-mix(in oklch, var(--secondary) 35%, var(--card));
   }
-  .stat-card:active {
+  .stat-card-link:active {
     transform: translate3d(0, -1px, 0) scale(0.995);
     transition-duration: 160ms;
   }
   .stat-card .stat-card-icon {
     transition: transform 420ms var(--ease-out-expo);
   }
-  .stat-card:hover .stat-card-icon {
+  .stat-card-link:hover .stat-card-icon {
     transform: scale(1.08);
   }
 

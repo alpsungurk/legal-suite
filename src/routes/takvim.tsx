@@ -1,6 +1,13 @@
 import { useMemo, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { CalendarDays, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import {
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  FileSpreadsheet,
+  Plus,
+  Printer,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useErp } from "@/lib/erp-store";
 import { allInstallments, seizureDueDate } from "@/lib/finance";
@@ -23,7 +30,7 @@ import { ReminderTable } from "@/components/lists/tables";
 import { PlanSheet } from "@/components/lists/PlanSheet";
 import { EmptyState } from "@/components/EmptyState";
 import { cn } from "@/lib/utils";
-import { isEnforcementClosed, type Reminder } from "@/lib/erp-types";
+import { isEnforcementInactive, type Reminder } from "@/lib/erp-types";
 
 export const Route = createFileRoute("/takvim")({
   head: () => ({ meta: [{ title: "Ajanda — Avukat Yönetim Paneli" }] }),
@@ -126,7 +133,7 @@ function Page() {
     if (permissions.can("enforcements")) {
       for (const e of state.enforcements) {
         if (scope === "mine" && !e.responsibleIds.includes(currentUser.id)) continue;
-        if (e.side === "Borçlu" || isEnforcementClosed(e.status)) continue;
+        if (e.side === "Borçlu" || isEnforcementInactive(e.status)) continue;
         const due = seizureDueDate(e, state.settings.seizureValidMonths);
         if (!due) continue;
         out.push({
@@ -177,9 +184,23 @@ function Page() {
         description="Duruşmalar, süreler, görevler, taksit vadeleri, ödeme sözleri ve haciz düşme tarihleri"
         icon={CalendarDays}
         actions={
-          <Button onClick={() => quick.open("reminder", { preset: { date: selected } })}>
-            <Plus /> Yeni kayıt
-          </Button>
+          <>
+            {/* Duruşma listesi Excel'den tek seferde (tek sorguda) aktarılır */}
+            {permissions.can("reminders", "create") && (
+              <Button variant="outline" onClick={() => quick.open("import", { kind: "reminders" })}>
+                <FileSpreadsheet /> Excel ile aktar
+              </Button>
+            )}
+            {/* Haftalık duruşma listesi: katılacak avukat / mazeret, yazdır ve PDF indir */}
+            <Button variant="outline" asChild>
+              <Link to="/yazdir/durusmalar" target="_blank">
+                <Printer /> Haftalık duruşma listesi
+              </Link>
+            </Button>
+            <Button onClick={() => quick.open("reminder", { preset: { date: selected } })}>
+              <Plus /> Yeni kayıt
+            </Button>
+          </>
         }
       />
       <div className="flex flex-wrap items-center gap-2">

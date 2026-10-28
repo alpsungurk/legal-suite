@@ -80,6 +80,7 @@ function Page() {
               (e) => e.amount,
             ),
           )}
+          hint="Büronun kendi masrafları (müvekkile yansımaz)"
           icon={Building2}
           tone="violet"
         />

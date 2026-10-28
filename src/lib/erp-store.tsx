@@ -11,7 +11,6 @@ import {
 import { toast } from "sonner";
 import { emptyState } from "@/lib/erp-data";
 import {
-  type ActivityLog,
   type AppNotification,
   type CollectionKey,
   type Collections,
@@ -32,9 +31,11 @@ import { setRemember, supabase, supabaseConfigured } from "@/lib/supabase";
 import {
   blankState,
   loadFullState,
+  persistImportBatch,
   persistOrgName,
   persistRemove,
   persistSave,
+  persistSaveMany,
   persistSettings,
 } from "@/lib/supabase-data";
 import type { Organization } from "@/lib/tenants";
@@ -105,7 +106,6 @@ export function uid(_prefix?: string) {
 
 type EntityMeta = {
   label: string;
-  audit: boolean;
   describe: (item: never, s: ErpState) => string;
 };
 
@@ -117,71 +117,62 @@ const debtorName = (s: ErpState, debtorId?: string) =>
 const ENTITY: { [K in CollectionKey]: EntityMeta } = {
   users: {
     label: "Kullanıcı",
-    audit: true,
     describe: (u: Collections["users"]) => `${u.name} (${u.role})`,
   },
-  clients: { label: "Müvekkil", audit: true, describe: (c: Collections["clients"]) => c.name },
+  clients: { label: "Müvekkil", describe: (c: Collections["clients"]) => c.name },
   cases: {
     label: "Dosya",
-    audit: true,
     describe: (c: Collections["cases"]) => caseLabel(c),
   },
   expenses: {
     label: "Masraf",
-    audit: true,
     describe: (e: Collections["expenses"]) => `${e.title} · ${money(e.amount)}`,
   },
   plans: {
     label: "Tahsilat planı",
-    audit: true,
     describe: (p: Collections["plans"], s) =>
       `${p.title} · ${clientName(s, p.clientId)} · ${money(p.total)}`,
   },
-  accounts: { label: "Hesap", audit: true, describe: (a: Collections["accounts"]) => a.name },
+  accounts: { label: "Hesap", describe: (a: Collections["accounts"]) => a.name },
   transactions: {
     label: "Hesap hareketi",
-    audit: true,
     describe: (t: Collections["transactions"]) => `${t.description} · ${money(t.amount)}`,
   },
   reminders: {
     label: "Ajanda",
-    audit: true,
     describe: (r: Collections["reminders"]) => `${r.type} · ${r.title}`,
   },
-  debtors: { label: "Borçlu", audit: true, describe: (d: Collections["debtors"]) => d.name },
+  debtors: { label: "Borçlu", describe: (d: Collections["debtors"]) => d.name },
   enforcements: {
     label: "İcra dosyası",
-    audit: true,
     describe: (e: Collections["enforcements"]) => `${e.no} · ${e.office}`,
   },
   promises: {
     label: "Ödeme sözü",
-    audit: true,
     describe: (p: Collections["promises"]) => `${money(p.amount)} · ${p.dueDate}`,
   },
   collections: {
     label: "İcra tahsilatı",
-    audit: true,
     describe: (c: Collections["collections"]) => money(c.amount),
   },
   events: {
     label: "İcra işlemi",
-    audit: true,
     describe: (e: Collections["events"]) => `${e.type} · ${e.date}`,
   },
-  banks: { label: "Banka", audit: true, describe: (b: Collections["banks"]) => b.name },
+  banks: { label: "Banka", describe: (b: Collections["banks"]) => b.name },
+  salaryGarnishments: {
+    label: "Maaş haczi sırası",
+    describe: (q: Collections["salaryGarnishments"]) => q.employeeName,
+  },
   contacts: {
     label: "Görüşme notu",
-    audit: false,
     describe: (c: Collections["contacts"]) => c.channel,
   },
   documents: {
     label: "Belge",
-    audit: true,
     describe: (d: Collections["documents"]) => d.name,
   },
-  notifications: { label: "Bildirim", audit: false, describe: () => "" },
-  activities: { label: "Aktivite", audit: false, describe: () => "" },
+  notifications: { label: "Bildirim", describe: () => "" },
 };
 
 export function entityLabel(key: CollectionKey) {
@@ -240,8 +231,12 @@ type ErpContextValue = {
   /** reload: veritabanında bağlı kayıtlar da silindiyse (cascade) ekran yeniden yüklenir */
   remove: <K extends CollectionKey>(key: K, id: string, opts?: { reload?: boolean }) => void;
   removeMany: <K extends CollectionKey>(key: K, ids: string[]) => void;
+  /** Aynı değişikliği birden çok kayda uygular; sunucuya tek istekle (toplu upsert) yazılır */
+  patchMany: <K extends CollectionKey>(key: K, ids: string[], changes: Partial<Collections[K]>) => void;
   updateSettings: (patch: Partial<Settings>) => void;
   rememberOption: (key: CategoryKey, value?: string) => void;
+  /** Toplu aktarımda yeni değerleri tek ayar yazımıyla listelere ekler */
+  rememberOptions: (values: Partial<Record<CategoryKey, Array<string | undefined>>>) => void;
   recordInstallmentPayment: (
     planId: string,
     installmentId: string,
@@ -269,7 +264,11 @@ type ErpContextValue = {
     userIds: string[],
     n: { title: string; detail: string; type: string; link?: string },
   ) => void;
-  importRecords: (batch: ImportBatch, label: string) => number;
+  importRecords: (
+    batch: ImportBatch,
+    label: string,
+    onProgress?: (done: number, total: number) => void,
+  ) => Promise<number>;
   replaceState: (next: ErpState) => void;
   resetDemo: () => void;
   reloadFromServer: () => Promise<unknown>;
@@ -354,7 +353,11 @@ export function ErpProvider({ children }: { children: ReactNode }) {
         setMustChangePassword(false);
         setState(emptyState());
         setOrganization({ id: "", name: "", createdAt: "", active: true });
-      } else if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "PASSWORD_RECOVERY") {
+      } else if (
+        event === "SIGNED_IN" ||
+        event === "TOKEN_REFRESHED" ||
+        event === "PASSWORD_RECOVERY"
+      ) {
         try {
           await reloadFromServer();
         } catch (err) {
@@ -432,20 +435,18 @@ export function ErpProvider({ children }: { children: ReactNode }) {
       setState((prev) => ({
         ...prev,
         notifications: [
-          ...rows.map(
-            (r): AppNotification => ({
-              id: r.id,
-              firmId: prev.firmId,
-              createdAt: now,
-              updatedAt: now,
-              userId: r.user_id,
-              title: r.title,
-              detail: r.detail,
-              type: r.type,
-              link: n.link,
-              read: false,
-            }),
-          ),
+          ...rows.map((r): AppNotification => ({
+            id: r.id,
+            firmId: prev.firmId,
+            createdAt: now,
+            updatedAt: now,
+            userId: r.user_id,
+            title: r.title,
+            detail: r.detail,
+            type: r.type,
+            link: n.link,
+            read: false,
+          })),
           ...prev.notifications,
         ].slice(0, 500),
       }));
@@ -455,11 +456,11 @@ export function ErpProvider({ children }: { children: ReactNode }) {
 
   /* ───────────── CRUD ───────────── */
 
+  // Kayıtlar sırayla yazılır: aynı anda eklenen borçlu, ona bağlı işlemden önce sunucuya gider
+  const persistQueue = useRef<Promise<void>>(Promise.resolve());
+
   const save = useCallback(
     <K extends CollectionKey>(key: K, data: Draft<K>, opts?: SaveOptions): Collections[K] => {
-      if (key === "activities") {
-        throw new Error("Aktivite kayıtları sunucu tarafından tutulur");
-      }
       if (key === "users" && !data.id) {
         throw new Error("Yeni kullanıcı davet ile eklenir (Ayarlar → Kullanıcılar)");
       }
@@ -503,7 +504,7 @@ export function ErpProvider({ children }: { children: ReactNode }) {
         return { ...prev, [key]: nextList } as ErpState;
       });
 
-      void (async () => {
+      persistQueue.current = persistQueue.current.then(async () => {
         try {
           await persistSave(key, item);
           if (opts?.notify) {
@@ -518,7 +519,7 @@ export function ErpProvider({ children }: { children: ReactNode }) {
           toast.error(sbError(err));
           void reloadFromServer();
         }
-      })();
+      });
 
       return item;
     },
@@ -541,7 +542,6 @@ export function ErpProvider({ children }: { children: ReactNode }) {
 
   const removeMany = useCallback(
     <K extends CollectionKey>(key: K, ids: string[], opts?: { reload?: boolean }) => {
-      if (key === "activities") return;
       const idSet = new Set(ids);
       setState((prev) => {
         const list = prev[key] as Collections[K][];
@@ -556,6 +556,31 @@ export function ErpProvider({ children }: { children: ReactNode }) {
           void reloadFromServer();
         }
       })();
+    },
+    [reloadFromServer],
+  );
+
+  const patchMany = useCallback(
+    <K extends CollectionKey>(key: K, ids: string[], changes: Partial<Collections[K]>) => {
+      const idSet = new Set(ids);
+      const now = new Date().toISOString();
+      const items = (stateRef.current[key] as Collections[K][])
+        .filter((r) => idSet.has(r.id))
+        .map((r) => ({ ...r, ...changes, updatedAt: now }) as Collections[K]);
+      if (!items.length) return;
+      const byId = new Map(items.map((r) => [r.id, r]));
+      setState((prev) => {
+        const list = prev[key] as Collections[K][];
+        return { ...prev, [key]: list.map((r) => byId.get(r.id) ?? r) } as ErpState;
+      });
+      persistQueue.current = persistQueue.current.then(async () => {
+        try {
+          await persistSaveMany(key, items);
+        } catch (err) {
+          toast.error(sbError(err));
+          void reloadFromServer();
+        }
+      });
     },
     [reloadFromServer],
   );
@@ -599,6 +624,28 @@ export function ErpProvider({ children }: { children: ReactNode }) {
       if (list.some((x) => x.toLocaleLowerCase("tr") === v.toLocaleLowerCase("tr"))) return;
       const next = [...list, v].sort((a, b) => a.localeCompare(b, "tr"));
       updateSettings({ [key]: next } as Partial<Settings>);
+    },
+    [updateSettings, canManageSettings],
+  );
+  const rememberOptions = useCallback(
+    (values: Partial<Record<CategoryKey, Array<string | undefined>>>) => {
+      if (!canManageSettings) return;
+      const patch: Partial<Record<CategoryKey, string[]>> = {};
+      for (const [key, raw] of Object.entries(values) as Array<
+        [CategoryKey, Array<string | undefined>]
+      >) {
+        const list = stateRef.current.settings[key];
+        const known = new Set(list.map((x) => x.toLocaleLowerCase("tr")));
+        const fresh: string[] = [];
+        for (const value of raw) {
+          const v = value?.trim();
+          if (!v || known.has(v.toLocaleLowerCase("tr"))) continue;
+          known.add(v.toLocaleLowerCase("tr"));
+          fresh.push(v);
+        }
+        if (fresh.length) patch[key] = [...list, ...fresh].sort((a, b) => a.localeCompare(b, "tr"));
+      }
+      if (Object.keys(patch).length) updateSettings(patch as Partial<Settings>);
     },
     [updateSettings, canManageSettings],
   );
@@ -1029,35 +1076,71 @@ export function ErpProvider({ children }: { children: ReactNode }) {
   );
 
   const importRecords = useCallback(
-    (batch: ImportBatch, _label: string) => {
-      const keys = Object.keys(batch) as CollectionKey[];
-      let count = 0;
-      void (async () => {
-        try {
-          for (const key of keys) {
-            for (const d of batch[key] ?? []) {
-              const id = d.id ?? newId();
-              const now = new Date().toISOString();
-              const item = {
-                ...d,
-                id,
-                firmId: stateRef.current.firmId,
-                createdAt: now,
-                updatedAt: now,
-              } as Collections[typeof key];
-              await persistSave(key, item);
-              count++;
-            }
+    async (
+      batch: ImportBatch,
+      _label: string,
+      onProgress?: (done: number, total: number) => void,
+    ) => {
+      const firmId = stateRef.current.firmId;
+      const now = new Date().toISOString();
+      const keys = [
+        "clients",
+        "debtors",
+        "banks",
+        "cases",
+        "expenses",
+        "enforcements",
+        "reminders",
+      ] as const;
+      const prepared: Partial<{ [K in (typeof keys)[number]]: Collections[K][] }> = {};
+      let total = 0;
+      for (const key of keys) {
+        const drafts = batch[key] ?? [];
+        if (!drafts.length) continue;
+        prepared[key] = drafts.map((d) => {
+          const id = d.id ?? newId();
+          const item = {
+            ...d,
+            id,
+            firmId,
+            createdAt: now,
+            updatedAt: now,
+          } as Collections[typeof key];
+          // Kapalı dosyada kapanış tarihi boşsa bugün: veritabanındaki tetikleyiciyle aynı
+          if (key === "cases") {
+            const kase = item as Collections["cases"];
+            if (kase.status === "Kapalı" && !kase.closingDate) kase.closingDate = today();
           }
-          await reloadFromServer();
-          toast.success(`${count} kayıt aktarıldı`);
-        } catch (err) {
-          toast.error(sbError(err));
+          return item;
+        }) as never;
+        total += drafts.length;
+      }
+      onProgress?.(0, total);
+      if (!total) return 0;
+      // Tek RPC: JSON paket. Ardından bütün tabloları yeniden çekmek yok; ekran paketten güncellenir.
+      const { total: saved } = await persistImportBatch(prepared);
+      onProgress?.(saved, saved);
+      setState((prev) => {
+        const next = { ...prev };
+        for (const key of keys) {
+          const items = prepared[key];
+          if (!items?.length) continue;
+          const list = [...(prev[key] as { id: string; createdAt?: string }[])];
+          const index = new Map(list.map((row, i) => [row.id, i]));
+          for (const item of items as { id: string; createdAt?: string }[]) {
+            const at = index.get(item.id);
+            if (at == null) {
+              index.set(item.id, list.length);
+              list.push(item);
+            } else list[at] = { ...list[at], ...item, createdAt: list[at].createdAt ?? item.createdAt };
+          }
+          (next as Record<string, unknown>)[key] = list;
         }
-      })();
-      return keys.reduce((n, k) => n + (batch[k]?.length ?? 0), 0);
+        return next;
+      });
+      return saved;
     },
-    [reloadFromServer],
+    [],
   );
 
   const replaceState = useCallback((_next: ErpState) => {
@@ -1103,8 +1186,10 @@ export function ErpProvider({ children }: { children: ReactNode }) {
     patch,
     remove,
     removeMany,
+    patchMany,
     updateSettings,
     rememberOption,
+    rememberOptions,
     recordInstallmentPayment,
     removeInstallmentPayment,
     createTransfer,
@@ -1133,9 +1218,6 @@ export function useErp() {
 }
 
 export { today };
-
-// ActivityLog tipini export için tut (lint)
-export type { ActivityLog };
 
 // Geliştirme: bu dosya sıcak yenilenince React context'i yeniden oluşur, ErpProvider eski, sayfalar yeni
 // context'i kullanır ve "useErp must be used within ErpProvider" hatası çıkar. Bu yüzden değişiklikte

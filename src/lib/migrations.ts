@@ -234,9 +234,10 @@ const COLLECTION_KEYS: CollectionKey[] = [
   "collections",
   "contacts",
   "events",
+  "banks",
+  "salaryGarnishments",
   "documents",
   "notifications",
-  "activities",
 ];
 
 /** Eksik koleksiyon/alanları doldurur; içe aktarılan yedekler için de kullanılır. */

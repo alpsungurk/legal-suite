@@ -26,7 +26,7 @@ import {
   EVENT_TYPE_SALARY,
   EVENT_TYPE_SERVICE,
   bankHasAnswer,
-  isEnforcementClosed,
+  isEnforcementInactive,
   normalizeBankAnswers,
 } from "@/lib/erp-types";
 import {
@@ -598,7 +598,6 @@ export function archiveCandidates(state: ErpState, throughYear: number) {
     reminders: state.reminders.filter((r) => old(r.date) && r.status !== "Bekliyor"),
     promises: state.promises.filter((p) => old(p.dueDate) && p.status !== "Bekliyor"),
     contacts: state.contacts.filter((c) => old(c.date)),
-    activities: state.activities.filter((a) => old(a.createdAt)),
     notifications: state.notifications.filter((n) => old(n.createdAt)),
   };
 }
@@ -684,7 +683,7 @@ export function seizureWarning(
   e: EnforcementFile,
   settings: { seizureValidMonths: number; seizureReminderDays: number },
 ) {
-  if (e.side === "Borçlu" || isEnforcementClosed(e.status)) return null;
+  if (e.side === "Borçlu" || isEnforcementInactive(e.status)) return null;
   const due = seizureDueDate(e, settings.seizureValidMonths);
   if (!due) return null;
   const left = daysFromToday(due);
@@ -732,7 +731,7 @@ export function icraDeadlines(state: ErpState): IcraDeadline[] {
   const s = state.settings;
   // Borçlu olduğumuz dosyalarda yalnızca tebliğ süresi (itiraz / ödeme) izlenir
   const open = new Map(
-    state.enforcements.filter((e) => !isEnforcementClosed(e.status)).map((e) => [e.id, e]),
+    state.enforcements.filter((e) => !isEnforcementInactive(e.status)).map((e) => [e.id, e]),
   );
   const later = (enfId: string, date: ISODate, exceptId: string, type: string) =>
     state.events.some(
@@ -981,7 +980,8 @@ export function computeAlerts(
       tone: late ? "danger" : r.type === "Duruşma" ? "warning" : "info",
       title: late ? `Geçmiş: ${r.type}` : r.date === t ? `Bugün: ${r.type}` : `Yarın: ${r.type}`,
       detail: r.title,
-      link: "/takvim",
+      // İcra dosyasına bağlı kontrol hatırlatması doğrudan dosyayı açar
+      link: r.enforcementId ? `/icra/${r.enforcementId}` : "/takvim",
       date: r.date,
       category: "Ajanda",
     });

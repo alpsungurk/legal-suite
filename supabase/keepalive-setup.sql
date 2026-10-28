@@ -1,4 +1,6 @@
 -- Bir kerelik: keepalive + sabit haftalık cron.
+-- Her kurulumda (her büro / Supabase projesi) <PROJE-KODU> ve <ANON-KEY> değerlerini
+-- Supabase → Project Settings → API sayfasındaki kendi değerlerinizle değiştirin.
 -- SQL Editor'de (postgres) çalıştırın. pg_cron + pg_net açık olmalı.
 -- Saatler sabittir (disk I/O için esnek UI yok):
 --   Aylık ücret  Pzt 00:10 TR
@@ -10,8 +12,8 @@ create extension if not exists pg_net;
 create extension if not exists pg_cron;
 
 insert into app.config (key, value) values
-  ('project_url', 'https://cflkynimfesmztxfurxl.supabase.co'),
-  ('anon_key',    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNmbGt5bmltZmVzbXp0eGZ1cnhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE4Mjk1MDUsImV4cCI6MjEwNzQwNTUwNX0.zv547bz_cwCxVDGBnHdsF4Mzxk4Rhkg4K-qlEfGqrtE')
+  ('project_url', 'https://<PROJE-KODU>.supabase.co'),
+  ('anon_key',    '<ANON-KEY>')
 on conflict (key) do update set value = excluded.value;
 
 -- Eski esnek-UI RPC'leri (varsa)

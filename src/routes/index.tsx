@@ -12,7 +12,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { useErp } from "@/lib/erp-store";
-import { isEnforcementClosed } from "@/lib/erp-types";
+import { isEnforcementInactive } from "@/lib/erp-types";
 import { accountBalances, allInstallments, clientFinance, feeIncomeInRange } from "@/lib/finance";
 import { addDays, formatDateLong, formatMoney, sumBy, today } from "@/lib/format";
 import { StatGrid, StatTile } from "@/components/app/StatTile";
@@ -24,7 +24,6 @@ import {
   AlertsPanel,
   CashflowChart,
   ExpenseBreakdown,
-  RecentActivity,
   UpcomingInstallments,
 } from "@/components/dashboard/widgets";
 import { QuickAddMenu } from "@/components/layout/Topbar";
@@ -169,7 +168,6 @@ function FinanceDashboard() {
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
         {seeExpenses && <ExpenseBreakdown />}
         {perm.can("ledger") && <ClientBalances />}
-        {perm.can("activity") && <RecentActivity />}
       </div>
     </>
   );
@@ -239,7 +237,7 @@ function LawyerDashboard() {
   ).length;
   const late = myEvents.filter((r) => r.date < t).length;
   const myEnf = state.enforcements.filter(
-    (e) => e.responsibleIds.includes(currentUser.id) && !isEnforcementClosed(e.status),
+    (e) => e.responsibleIds.includes(currentUser.id) && !isEnforcementInactive(e.status),
   );
   const monthStart = `${t.slice(0, 7)}-01`;
   const myExpenses = state.expenses.filter(

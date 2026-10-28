@@ -31,9 +31,11 @@ import {
 import { fileNoKey, formatDate, formatMoney, relativeDue, sumBy } from "@/lib/format";
 import {
   CLOSED_ENFORCEMENT_STATUS,
+  NO_ACTION_ENFORCEMENT_STATUS,
   STOPPED_ENFORCEMENT_STATUS,
   enforcementStatusLabel,
   isEnforcementClosed,
+  isEnforcementInactive,
   type EnforcementFile,
   type EnforcementSide,
 } from "@/lib/erp-types";
@@ -74,7 +76,9 @@ export function EnforcementList({
     due: owed ? undefined : seizureDueDate(e, settings.seizureValidMonths),
   }));
   type R = (typeof rows)[number];
-  const open = rows.filter((r) => !isEnforcementClosed(r.e.status));
+  // "İşlem Yapılmayacak" dosyalar açık sayılmaz (takipteki alacağa girmez), kapalı da sayılmaz
+  const open = rows.filter((r) => !isEnforcementInactive(r.e.status));
+  const closedCount = rows.filter((r) => isEnforcementClosed(r.e.status)).length;
   const fileIds = new Set(files.map((e) => e.id));
   const broken = owed
     ? []
@@ -98,17 +102,14 @@ export function EnforcementList({
       header: "Durum",
       sort: (r) => r.e.status,
       cell: (r) => (
-        <div className="min-w-0">
-          <StatusBadge status={r.e.status} />
+        // Bütün sütunlar sabit genişlikte: sıralama / sayfa değişince tablo kaymaz
+        <div className="w-[150px] min-w-0" title={enforcementStatusLabel(r.e)}>
+          <StatusBadge status={r.e.status} className="max-w-full overflow-hidden" />
           {r.e.status === STOPPED_ENFORCEMENT_STATUS && r.e.stopReason && (
-            <p className="mt-1 max-w-[140px] truncate text-xs text-muted-foreground">
-              {r.e.stopReason}
-            </p>
+            <p className="mt-1 truncate text-xs text-muted-foreground">{r.e.stopReason}</p>
           )}
           {r.e.status === CLOSED_ENFORCEMENT_STATUS && r.e.closeReason && (
-            <p className="mt-1 max-w-[140px] truncate text-xs text-muted-foreground">
-              {r.e.closeReason}
-            </p>
+            <p className="mt-1 truncate text-xs text-muted-foreground">{r.e.closeReason}</p>
           )}
         </div>
       ),
@@ -118,7 +119,11 @@ export function EnforcementList({
       header: owed ? "Borçlu (müvekkil) → Alacaklı" : "Alacaklı (müvekkil) → Borçlu",
       sort: (r) => clientName(r.e.clientId),
       cell: (r) => (
-        <div className="min-w-0 text-sm">
+        // Uzun ad kesilir, tamamı üzerine gelince görünür
+        <div
+          className="w-[200px] min-w-0 text-sm xl:w-[240px]"
+          title={`${clientName(r.e.clientId)} → ${partyNames(r.e).join(", ")}`}
+        >
           <p className="truncate font-medium">{clientName(r.e.clientId)}</p>
           <p className="truncate text-xs text-muted-foreground">→ {partyNames(r.e).join(", ")}</p>
         </div>
@@ -129,9 +134,20 @@ export function EnforcementList({
       header: "Birim / Dosya no",
       sort: (r) => r.e.no,
       cell: (r) => (
-        <div className="min-w-0">
+        <div className="w-[170px] min-w-0" title={r.e.office}>
           <p className="font-semibold">{r.e.no}</p>
           <p className="truncate text-xs text-muted-foreground">{r.e.office}</p>
+        </div>
+      ),
+    },
+    {
+      id: "opening",
+      header: "Takip tarihi",
+      hideBelow: "md",
+      sort: (r) => r.e.openingDate || "0000",
+      cell: (r) => (
+        <div className="w-[90px] whitespace-nowrap text-sm">
+          {r.e.openingDate ? formatDate(r.e.openingDate) : "—"}
         </div>
       ),
     },
@@ -141,8 +157,8 @@ export function EnforcementList({
       hideBelow: "lg",
       sort: (r) => r.e.type,
       cell: (r) => (
-        <div className="min-w-0 text-sm">
-          <p>{r.e.type}</p>
+        <div className="w-[120px] min-w-0 text-sm" title={r.e.procedure || r.e.type}>
+          <p className="truncate">{r.e.type}</p>
           {r.e.procedure && (
             <p className="truncate text-xs text-muted-foreground">{r.e.procedure}</p>
           )}
@@ -155,7 +171,11 @@ export function EnforcementList({
       align: "right",
       money: true,
       sort: (r) => r.s.claim,
-      cell: (r) => <Money value={r.s.claim} className="font-medium" />,
+      cell: (r) => (
+        <div className="ml-auto w-[130px] whitespace-nowrap">
+          <Money value={r.s.claim} className="font-medium" />
+        </div>
+      ),
     },
     ...(owed
       ? []
@@ -167,7 +187,7 @@ export function EnforcementList({
             sort: (r) => r.due ?? "9999",
             cell: (r) =>
               r.due ? (
-                <div className="text-sm">
+                <div className="w-[120px] whitespace-nowrap text-sm">
                   <p className={cn(r.hz && "font-semibold text-rose-600 dark:text-rose-400")}>
                     {formatDate(r.due)}
                   </p>
@@ -206,7 +226,7 @@ export function EnforcementList({
             sort: (r) => r.s.nextPromise?.dueDate ?? "9999",
             cell: (r) =>
               r.s.nextPromise ? (
-                <div className="text-sm">
+                <div className="w-[110px] whitespace-nowrap text-sm">
                   <Money value={r.s.nextPromise.amount} className="font-medium" />
                   <p
                     className={cn(
@@ -229,9 +249,13 @@ export function EnforcementList({
       header: "Sorumlu",
       hideBelow: "xl",
       cell: (r) => (
-        <AvatarStack
-          names={r.e.responsibleIds.map((id) => state.users.find((u) => u.id === id)?.name ?? "?")}
-        />
+        <div className="w-[90px]">
+          <AvatarStack
+            names={r.e.responsibleIds.map(
+              (id) => state.users.find((u) => u.id === id)?.name ?? "?",
+            )}
+          />
+        </div>
       ),
     },
   ];
@@ -299,12 +323,14 @@ export function EnforcementList({
                 value={rows.filter((r) => r.e.status === STOPPED_ENFORCEMENT_STATUS).length}
                 icon={CirclePause}
                 tone="violet"
+                hint="İtiraz, tedbir vb. ile duran dosyalar"
               />
               <StatTile
                 label="Kapalı"
-                value={rows.length - open.length}
+                value={closedCount}
                 icon={Lock}
                 tone="green"
+                hint="İnfaz, haricen tahsil vb. ile kapanan"
               />
             </>
           ) : (
@@ -400,6 +426,14 @@ export function EnforcementList({
         exportName={exportName}
         exportColumns={exportColumns}
         onRowClick={(r) => navigate({ to: "/icra/$id", params: { id: r.e.id } })}
+        // Büronun Excel'deki işaretleri: kapalı dosyalar sarı, işlem yapılmayacaklar koyu lacivert
+        rowClassName={(r) =>
+          r.e.status === NO_ACTION_ENFORCEMENT_STATUS
+            ? "bg-indigo-950/[0.07] hover:bg-indigo-950/[0.11] dark:bg-indigo-500/10 dark:hover:bg-indigo-500/15"
+            : isEnforcementClosed(r.e.status)
+              ? "bg-amber-100/60 hover:bg-amber-100 dark:bg-amber-500/10 dark:hover:bg-amber-500/15"
+              : undefined
+        }
         rowActions={
           canEdit || canDelete
             ? (r) => (
@@ -464,6 +498,7 @@ export function EnforcementList({
             {!owed && <ProgressBar value={r.s.progress} className="mt-2" />}
             <p className="mt-1 text-xs text-muted-foreground">
               {formatMoney(r.s.claim)} · {r.e.office}
+              {r.e.openingDate && ` · Takip ${formatDate(r.e.openingDate)}`}
               {r.hz && r.due && (
                 <span className="text-rose-600 dark:text-rose-400">
                   {" "}

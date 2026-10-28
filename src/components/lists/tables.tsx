@@ -1,4 +1,5 @@
 /** Hem liste sayfalarında hem detay sekmelerinde kullanılan tablolar. */
+import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   ArrowRight,
@@ -12,6 +13,7 @@ import {
   RotateCcw,
   Trash2,
   Undo2,
+  UserCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useErp } from "@/lib/erp-store";
@@ -33,6 +35,9 @@ import { useQuick } from "@/components/forms/quick";
 import { useConfirm } from "@/components/app/confirm";
 import { downloadAttachment, openAttachment } from "@/lib/attachments";
 import { cn } from "@/lib/utils";
+import { Combobox } from "@/components/app/fields";
+import { Button } from "@/components/ui/button";
+import { useOptions } from "@/lib/options";
 
 type Hide = { client?: boolean; case?: boolean };
 
@@ -591,6 +596,20 @@ export function CaseTable({
       },
     },
     {
+      id: "fee",
+      header: "Vekalet ücreti",
+      hideBelow: "xl",
+      sort: (c) => c.feeStatus ?? "",
+      cell: (c) =>
+        c.feeStatus ? (
+          <span className="block max-w-[160px] truncate text-sm" title={c.feeStatus}>
+            {c.feeStatus}
+          </span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+    {
       id: "status",
       header: "Durum",
       sort: (c) => c.status,
@@ -610,6 +629,8 @@ export function CaseTable({
         c.esasNo,
         c.opposingParty,
         n.client(c.clientId)?.name,
+        c.feeStatus,
+        c.note,
       ]}
       searchPlaceholder="Dosya no, konu, mahkeme, esas no, taraf ara..."
       filters={[
@@ -621,6 +642,17 @@ export function CaseTable({
         },
         { id: "type", label: "Tür", options: state.settings.caseTypes, get: (c) => c.type },
         {
+          id: "fee",
+          label: "Vekalet ücreti",
+          options: [
+            ...new Set([
+              ...(state.settings.caseFeeStatuses ?? []),
+              ...rows.map((c) => c.feeStatus).filter((x): x is string => !!x),
+            ]),
+          ],
+          get: (c) => c.feeStatus,
+        },
+        {
           id: "resp",
           label: "Sorumlu",
           options: state.users.map((u) => u.name),
@@ -630,6 +662,23 @@ export function CaseTable({
       dateRange={{ label: "Açılış", get: (c) => c.openingDate }}
       initialSort={{ id: "no", desc: true }}
       exportName={exportName}
+      exportColumns={[
+        { header: "Dosya no", get: (c) => c.no, width: 12 },
+        { header: "Tür", get: (c) => c.type, width: 10 },
+        { header: "Mahkeme", get: (c) => c.court ?? "", width: 34 },
+        { header: "Esas no", get: (c) => c.esasNo ?? "", width: 14 },
+        { header: "Müvekkil", get: (c) => n.client(c.clientId)?.name ?? "", width: 28 },
+        { header: "Karşı taraf", get: (c) => c.opposingParty ?? "", width: 24 },
+        { header: "Durum", get: (c) => c.status, width: 12 },
+        { header: "Vekalet ücreti", get: (c) => c.feeStatus ?? "", width: 24 },
+        { header: "Açılış tarihi", get: (c) => formatDate(c.openingDate), width: 12 },
+        {
+          header: "Sorumlu",
+          get: (c) => c.responsibleIds.map((id) => n.user(id)?.name).join(", "),
+          width: 20,
+        },
+        { header: "Not", get: (c) => c.note ?? "", width: 40 },
+      ]}
       onRowClick={(c) => navigate({ to: "/dosyalar/$id", params: { id: c.id } })}
       rowActions={
         permissions.can("cases", "edit") || permissions.can("cases", "delete")
@@ -687,6 +736,7 @@ export function CaseTable({
 
 export function ReminderTable({ rows }: { rows: Reminder[] }) {
   const { patch, remove, permissions } = useErp();
+  const canAssign = permissions.can("reminders", "edit");
   const n = useNames();
   const quick = useQuick();
   const confirm = useConfirm();
@@ -762,6 +812,13 @@ export function ReminderTable({ rows }: { rows: Reminder[] }) {
       initialSort={{ id: "date" }}
       onRowClick={(r) => quick.open("reminder", { record: r })}
       exportName="Ajanda"
+      selectable={canAssign}
+      bulkActions={(sel, clear) => (
+        <BulkAssign
+          ids={sel.map((r) => r.id)}
+          onDone={clear}
+        />
+      )}
       rowActions={(r) => (
         <>
           {r.status === "Bekliyor" && (
@@ -1142,5 +1199,36 @@ export function LedgerTable({
         </tr>
       )}
     />
+  );
+}
+
+/** Ajanda: seçili kayıtlara (ör. aktarılan duruşma listesi) sorumlu avukatı tek seferde atar */
+function BulkAssign({ ids, onDone }: { ids: string[]; onDone: () => void }) {
+  const { patchMany } = useErp();
+  const o = useOptions();
+  const [assigneeId, setAssigneeId] = useState("");
+  return (
+    <div className="flex items-center gap-2">
+      <div className="w-56">
+        <Combobox
+          value={assigneeId || undefined}
+          onChange={setAssigneeId}
+          options={o.staff}
+          placeholder="Sorumlu avukat seçin"
+        />
+      </div>
+      <Button
+        size="sm"
+        disabled={!assigneeId}
+        onClick={() => {
+          patchMany("reminders", ids, { assigneeId });
+          toast.success(`${ids.length} kaydın sorumlusu ${o.staff.find((x) => x.value === assigneeId)?.label} yapıldı`);
+          setAssigneeId("");
+          onDone();
+        }}
+      >
+        <UserCheck /> Sorumlu ata
+      </Button>
+    </div>
   );
 }

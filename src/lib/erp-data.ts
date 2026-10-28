@@ -25,13 +25,14 @@ import {
   DEFAULT_CLOSE_REASONS,
   DEFAULT_CLAIM_TYPES,
   DEFAULT_BANK_ANSWER_TYPES,
+  DEFAULT_HEARING_ATTENDANCE,
+  DEFAULT_CASE_FEE_STATUSES,
   DEFAULT_PROCEDURES,
   DEFAULT_BANK_RESPONSE_DAYS,
   DEFAULT_SALARY_RESPONSE_DAYS,
   STATE_VERSION,
   type Account,
   type AccountTx,
-  type ActivityLog,
   type AppNotification,
   type CaseFile,
   type Client,
@@ -109,6 +110,8 @@ export function defaultSettings(): Settings {
     enforcementCloseReasons: [...DEFAULT_CLOSE_REASONS],
     claimTypes: [...DEFAULT_CLAIM_TYPES],
     bankAnswerTypes: [...DEFAULT_BANK_ANSWER_TYPES],
+    hearingAttendance: [...DEFAULT_HEARING_ATTENDANCE],
+    caseFeeStatuses: [...DEFAULT_CASE_FEE_STATUSES],
     procedures: DEFAULT_PROCEDURES.map((p) => ({ ...p })),
     bankResponseDays: DEFAULT_BANK_RESPONSE_DAYS,
     salaryResponseDays: DEFAULT_SALARY_RESPONSE_DAYS,
@@ -136,9 +139,9 @@ export function emptyState(): ErpState {
     contacts: [],
     events: [],
     banks: [],
+    salaryGarnishments: [],
     documents: [],
     notifications: [],
-    activities: [],
   };
 }
 
@@ -1093,31 +1096,6 @@ export function createSeedState(): ErpState {
     }),
   ];
 
-  const activities: ActivityLog[] = [
-    {
-      ...base,
-      id: "act-1",
-      actorId: "usr-leyla",
-      action: "Ekleme",
-      entity: "Masraf",
-      entityId: "exp-3",
-      detail: "Bilirkişi ücreti · ₺2.500",
-      createdAt: ago(60 * 24 * 12),
-      updatedAt: ago(60 * 24 * 12),
-    },
-    {
-      ...base,
-      id: "act-2",
-      actorId: "usr-ahmet",
-      action: "İşlem",
-      entity: "Tahsilat",
-      entityId: "plan-128",
-      detail: "Taksit tahsil edildi · Ayşe Demir · ₺4.000",
-      createdAt: ago(60 * 24 * 25),
-      updatedAt: ago(60 * 24 * 25),
-    },
-  ];
-
   const settings = defaultSettings();
   const uniq = (xs: Array<string | undefined>) =>
     [...new Set(xs.filter((x): x is string => !!x))].sort((a, b) => a.localeCompare(b, "tr"));
@@ -1143,6 +1121,5 @@ export function createSeedState(): ErpState {
     events: [],
     documents: [],
     notifications,
-    activities,
   };
 }

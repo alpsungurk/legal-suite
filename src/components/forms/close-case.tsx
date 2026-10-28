@@ -4,7 +4,7 @@ import { useConfirm } from "@/components/app/confirm";
 import { useErp } from "@/lib/erp-store";
 import { caseLabel } from "@/lib/finance";
 import { addMonths, formatDate, today } from "@/lib/format";
-import type { CaseFile } from "@/lib/erp-types";
+import { LOCKED_CASE_TYPES, type CaseFile } from "@/lib/erp-types";
 
 /**
  * Kapalı dosyanın kalıcı silineceği tarih: saklama süresi (kapanış + ayardaki ay) dolduktan sonraki
@@ -106,7 +106,8 @@ export function usePurgeCase() {
     if (!ok) return false;
     closeCase(caseId);
     if (typeof window !== "undefined" && window.location.pathname.includes(caseId)) {
-      void navigate({ to: "/dosyalar" });
+      const tur = LOCKED_CASE_TYPES.includes(c.type) ? c.type : "diger";
+      void navigate({ to: "/dosyalar", search: { tur } });
     }
     return true;
   };

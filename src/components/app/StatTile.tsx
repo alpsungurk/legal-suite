@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { Children, Fragment, isValidElement, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { toneSoftClass, toneTextClass, type Tone } from "@/components/app/StatusBadge";
@@ -26,14 +26,19 @@ export function StatTile({
   const body = (
     <div
       className={cn(
-        "stat-card group @container relative flex h-full min-h-[8.25rem] min-w-0 flex-col",
+        // overflow-hidden: dar ekranda hiçbir yazı kartın dışına taşmaz
+        "stat-card group @container relative flex h-full min-h-[8.25rem] min-w-0 flex-col overflow-hidden",
         "rounded-2xl border border-border/80 bg-card p-3.5 shadow-soft sm:p-4",
-        to && "cursor-pointer",
+        to && "stat-card-link cursor-pointer",
         className,
       )}
     >
-      <div className="flex h-9 items-center justify-between gap-2">
-        <p className="min-w-0 truncate text-xs font-medium leading-none text-muted-foreground @[11rem]:text-[14px]">
+      <div className="flex min-h-9 items-center justify-between gap-2">
+        {/* Uzun başlık (ör. "İcra tahsilatı (aktarılmamış)") iki satıra iner */}
+        <p
+          className="line-clamp-2 min-w-0 text-xs font-medium leading-tight text-muted-foreground @[11rem]:text-[14px]"
+          title={label}
+        >
           {label}
         </p>
         <span
@@ -47,9 +52,10 @@ export function StatTile({
         </span>
       </div>
 
+      {/* Tutar kart genişliğine göre küçülür; yine sığmazsa satır kırılır */}
       <p
-        className="money mt-3 break-words font-bold leading-none tracking-tight"
-        style={{ fontSize: "clamp(1.15rem, 9.5cqw, 1.65rem)" }}
+        className="money mt-3 font-bold leading-tight tracking-tight [overflow-wrap:anywhere]"
+        style={{ fontSize: "clamp(0.95rem, 8.5cqw, 1.65rem)" }}
       >
         {value}
       </p>
@@ -77,11 +83,36 @@ export function StatTile({
   );
 }
 
+/** Görünen kart sayısı (koşullu <>…</> grupları açılarak) */
+function tileCount(children: ReactNode): number {
+  return Children.toArray(children).reduce<number>(
+    (n, c) =>
+      n +
+      (isValidElement<{ children?: ReactNode }>(c) && c.type === Fragment
+        ? tileCount(c.props.children)
+        : 1),
+    0,
+  );
+}
+
+/**
+ * Kart sayısına göre sütun: 4 kart telefonda ve orta genişlikte 2×2, geniş ekranda tek sıra
+ * (yan menü açıkken 1024 px'te 4 sütun kartları sıkıştırıp yazıyı taşırıyordu).
+ */
+const GRID_COLS: Record<number, string> = {
+  1: "grid-cols-1",
+  2: "grid-cols-1 sm:grid-cols-2",
+  3: "grid-cols-1 sm:grid-cols-3",
+  6: "grid-cols-2 md:grid-cols-3 2xl:grid-cols-6",
+};
+
 export function StatGrid({ children, className }: { children: ReactNode; className?: string }) {
+  const n = tileCount(children);
   return (
     <div
       className={cn(
-        "stagger grid auto-rows-fr grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] gap-3 lg:grid-cols-4",
+        "stagger grid auto-rows-fr gap-3",
+        GRID_COLS[n] ?? "grid-cols-2 xl:grid-cols-4",
         className,
       )}
     >

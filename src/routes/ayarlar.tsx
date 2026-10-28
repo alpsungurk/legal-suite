@@ -38,9 +38,13 @@ import { useQuick } from "@/components/forms/quick";
 import { useConfirm } from "@/components/app/confirm";
 import {
   LOCKED_CASE_STATUSES,
+  LOCKED_CLOSE_REASONS,
   LOCKED_ENFORCEMENT_STATUSES,
   LOCKED_EVENT_TYPES,
   LOCKED_FEE_KINDS,
+  LOCKED_REMINDER_TYPES,
+  LOCKED_HEARING_ATTENDANCE,
+  LOCKED_CASE_TYPES,
   type CategoryKey,
   type FirmProfile,
   type Settings as SettingsT,
@@ -478,12 +482,23 @@ const CAT_GROUPS: Array<{
   {
     title: "Dosyalar",
     items: [
-      { key: "caseTypes", title: "Dosya türleri", desc: "Dava, icra, danışmanlık..." },
+      {
+        key: "caseTypes",
+        title: "Dosya türleri",
+        desc: "Hukuk, ceza, idare, danışmanlık... (kilitliler Dosyalar sayfasında ayrı sekmedir)",
+        locked: LOCKED_CASE_TYPES,
+      },
       {
         key: "caseStatuses",
         title: "Dosya durumları",
-        desc: "Açık, derdest, karar... (Kapalı dosyayı kapatır)",
+        desc: "Açık, derdest, karar... (Kapalı dosyayı kapatır; kilitliler sayfada sayılır)",
         locked: LOCKED_CASE_STATUSES,
+      },
+      {
+        key: "caseFeeStatuses",
+        title: "Vekalet ücreti durumu",
+        desc: "Dava dosyasında seçilir: alındı, icrada, istendi, yok, CMK...",
+        canEmpty: true,
       },
       {
         key: "courts",
@@ -496,7 +511,18 @@ const CAT_GROUPS: Array<{
         title: "Belge kategorileri",
         desc: "Dilekçe, karar, vekaletname...",
       },
-      { key: "reminderTypes", title: "Ajanda türleri", desc: "Duruşma, süre sonu, toplantı..." },
+      {
+        key: "reminderTypes",
+        title: "Ajanda türleri",
+        desc: "Duruşma, süre sonu, toplantı... (Duruşma ve Keşif duruşma listesine girer)",
+        locked: LOCKED_REMINDER_TYPES,
+      },
+      {
+        key: "hearingAttendance",
+        title: "Duruşma katılımı",
+        desc: "Haftalık duruşma listesinde avukatların yanında seçilir: Mazeret, Tevkil, E-duruşma... (“Mazeret” ile başlayanlar kırmızı yazılır)",
+        locked: LOCKED_HEARING_ATTENDANCE,
+      },
     ],
   },
   {
@@ -530,7 +556,7 @@ const CAT_GROUPS: Array<{
         key: "enforcementCloseReasons",
         title: "Kapanış sebepleri",
         desc: "Durum \"Kapalı\" seçilince sorulur (kapatma elle yapılır)",
-        locked: ["İnfaz"],
+        locked: LOCKED_CLOSE_REASONS,
         canEmpty: true,
       },
       {
@@ -704,7 +730,8 @@ function CategoriesTab({ access }: { access: SectionAccess }) {
       {CAT_GROUPS.map((g) => (
         <div key={g.title} className="space-y-3">
           <h3 className="text-sm font-semibold text-muted-foreground">{g.title}</h3>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {/* items-start: kısa listeli kart, yanındaki uzun kart kadar uzayıp boş kalmaz */}
+          <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
             {g.items.map((c) => (
               <CategoryEditor
                 key={c.key}
@@ -781,19 +808,20 @@ function CategoryEditor({
           return (
             <span
               key={i}
-              title={isLocked ? "Program bu değeri kullanıyor, silinemez" : undefined}
-              className="group inline-flex h-7 items-center gap-1 rounded-full border border-border/80 bg-secondary/50 pl-3 pr-1.5 text-xs font-medium animate-pop"
+              title={isLocked ? `${i} — program bu değeri kullanıyor, silinemez` : i}
+              className="group inline-flex h-7 max-w-full items-center gap-1 rounded-full border border-border/80 bg-secondary/50 pl-3 pr-1.5 text-xs font-medium animate-pop"
             >
-              {i}
+              {/* Uzun değer (ör. senet açıklaması) tek satırda kesilir; tamamı üzerine gelince görünür */}
+              <span className="min-w-0 truncate">{i}</span>
               {isLocked ? (
-                <Lock className="mx-0.5 h-3 w-3 text-muted-foreground" />
+                <Lock className="mx-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
               ) : !canRemove ? (
                 <span className="w-1.5" />
               ) : (
                 <button
                   type="button"
                   onClick={() => removeItem(i)}
-                  className="grid h-4 w-4 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/15 hover:text-destructive"
+                  className="grid h-4 w-4 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/15 hover:text-destructive"
                   aria-label={`${i} sil`}
                 >
                   <X className="h-3 w-3" />
@@ -945,7 +973,7 @@ function ArchiveSection() {
         ["Biten ajanda kaydı", c.reminders.length],
         ["Sonuçlanan ödeme sözü", c.promises.length],
         ["Görüşme notu", c.contacts.length],
-        ["Aktivite / bildirim", c.activities.length + c.notifications.length],
+        ["Bildirim", c.notifications.length],
       ]
     : [];
   const total = counts.reduce((n, [, v]) => n + v, 0);

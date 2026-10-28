@@ -6,10 +6,11 @@ import { normalizeBankAnswers } from "@/lib/erp-types";
 import type {
   Account,
   AccountTx,
-  ActivityLog,
   AppNotification,
   AttachmentRef,
   Bank,
+  SalaryGarnishment,
+  SalaryGarnishmentEntry,
   CaseFile,
   Client,
   Collection,
@@ -149,8 +150,7 @@ export function settingsFromRow(r: Record<string, unknown> | null): Settings {
     enforcementOffices: (r.enforcement_offices as string[]) ?? [],
     rolePermissions: (r.role_permissions as Record<string, boolean>) ?? base.rolePermissions,
     // Aşağıdakiler 20261016 migration'ı ile geldi; çalıştırılmadıysa varsayılanlar kullanılır
-    enforcementStopReasons:
-      (r.enforcement_stop_reasons as string[]) ?? base.enforcementStopReasons,
+    enforcementStopReasons: (r.enforcement_stop_reasons as string[]) ?? base.enforcementStopReasons,
     enforcementEventTypes: (r.enforcement_event_types as string[]) ?? base.enforcementEventTypes,
     inquiryTypes: (r.inquiry_types as string[]) ?? base.inquiryTypes,
     seizureTypes: (r.seizure_types as string[]) ?? base.seizureTypes,
@@ -163,6 +163,8 @@ export function settingsFromRow(r: Record<string, unknown> | null): Settings {
       (r.enforcement_close_reasons as string[]) ?? base.enforcementCloseReasons,
     claimTypes: (r.claim_types as string[]) ?? base.claimTypes,
     bankAnswerTypes: (r.bank_answer_types as string[]) ?? base.bankAnswerTypes,
+    hearingAttendance: (r.hearing_attendance as string[]) ?? base.hearingAttendance,
+    caseFeeStatuses: (r.case_fee_statuses as string[]) ?? base.caseFeeStatuses,
     procedures: proceduresFromJson(r.procedures) ?? base.procedures,
     bankResponseDays: num(r.bank_response_days, base.bankResponseDays),
     salaryResponseDays: num(r.salary_response_days, base.salaryResponseDays),
@@ -223,6 +225,8 @@ export function settingsToRow(s: Partial<Settings>) {
   if (s.enforcementCloseReasons != null) row.enforcement_close_reasons = s.enforcementCloseReasons;
   if (s.claimTypes != null) row.claim_types = s.claimTypes;
   if (s.bankAnswerTypes != null) row.bank_answer_types = s.bankAnswerTypes;
+  if (s.hearingAttendance != null) row.hearing_attendance = s.hearingAttendance;
+  if (s.caseFeeStatuses != null) row.case_fee_statuses = s.caseFeeStatuses;
   if (s.procedures != null) row.procedures = s.procedures;
   if (s.bankResponseDays != null) row.bank_response_days = s.bankResponseDays;
   if (s.salaryResponseDays != null) row.salary_response_days = s.salaryResponseDays;
@@ -310,6 +314,7 @@ export function caseFromRow(r: Record<string, unknown>): CaseFile {
     openingDate: dateOnly(r.opening_date as string),
     closingDate: optStr(r.closing_date) ? dateOnly(r.closing_date as string) : undefined,
     agreedFee: optNum(r.agreed_fee),
+    feeStatus: optStr(r.fee_status),
     note: optStr(r.note),
   };
 }
@@ -328,6 +333,7 @@ export function caseToRow(c: Partial<CaseFile>) {
   if (c.openingDate != null) row.opening_date = c.openingDate;
   if (c.closingDate !== undefined) row.closing_date = c.closingDate || null;
   if (c.agreedFee !== undefined) row.agreed_fee = c.agreedFee ?? null;
+  if (c.feeStatus !== undefined) row.fee_status = c.feeStatus || null;
   if (c.note !== undefined) row.note = c.note || null;
   return row;
 }
@@ -379,6 +385,51 @@ export function bankToRow(b: Partial<Bank>) {
   const row: Record<string, unknown> = {};
   if (b.name != null) row.name = b.name.trim();
   if (b.active != null) row.active = b.active;
+  return row;
+}
+
+/* ───── Maaş haczi sıraları ───── */
+
+export function salaryEntryFromRow(r: Record<string, unknown>): SalaryGarnishmentEntry {
+  return {
+    id: String(r.id),
+    office: String(r.office ?? ""),
+    fileNo: String(r.file_no ?? ""),
+    notifiedAt: optStr(dateOnly(r.notified_at as string)),
+    note: optStr(r.note),
+    position: num(r.position) || 1,
+  };
+}
+
+export function salaryGarnishmentFromRow(
+  r: Record<string, unknown>,
+  entries: SalaryGarnishmentEntry[] = [],
+): SalaryGarnishment {
+  return {
+    id: String(r.id),
+    firmId: String(r.org_id),
+    createdAt: iso(r.created_at as string),
+    updatedAt: iso(r.updated_at as string),
+    clientId: String(r.client_id),
+    employeeName: String(r.employee_name ?? ""),
+    payday: r.payday == null ? undefined : num(r.payday),
+    status: r.status === "İşten ayrıldı" ? "İşten ayrıldı" : "Devam ediyor",
+    responsibleIds: Array.isArray(r.responsible_ids) ? (r.responsible_ids as string[]) : [],
+    leftAt: optStr(dateOnly(r.left_at as string)),
+    note: optStr(r.note),
+    entries: [...entries].sort((a, b) => a.position - b.position),
+  };
+}
+
+export function salaryGarnishmentToRow(q: Partial<SalaryGarnishment>) {
+  const row: Record<string, unknown> = {};
+  if (q.clientId != null) row.client_id = q.clientId;
+  if (q.employeeName != null) row.employee_name = q.employeeName.trim();
+  if (q.payday !== undefined) row.payday = q.payday ?? null;
+  if (q.status != null) row.status = q.status;
+  if (q.responsibleIds != null) row.responsible_ids = q.responsibleIds;
+  if (q.leftAt !== undefined) row.left_at = q.leftAt || null;
+  if (q.note !== undefined) row.note = q.note || null;
   return row;
 }
 
@@ -702,10 +753,7 @@ export function installmentFromRow(
   };
 }
 
-export function planFromRow(
-  r: Record<string, unknown>,
-  installments: Installment[] = [],
-): FeePlan {
+export function planFromRow(r: Record<string, unknown>, installments: Installment[] = []): FeePlan {
   return {
     id: String(r.id),
     firmId: String(r.org_id),
@@ -757,6 +805,9 @@ export function reminderFromRow(r: Record<string, unknown>): Reminder {
     assigneeId: String(r.assignee_id),
     status: r.status as Reminder["status"],
     note: optStr(r.note),
+    caseNo: optStr(r.case_no),
+    parties: optStr(r.parties),
+    excuse: optStr(r.excuse),
   };
 }
 
@@ -773,6 +824,9 @@ export function reminderToRow(r: Partial<Reminder>) {
   if (r.assigneeId != null) row.assignee_id = r.assigneeId;
   if (r.status != null) row.status = r.status;
   if (r.note !== undefined) row.note = r.note || null;
+  if (r.caseNo !== undefined) row.case_no = r.caseNo || null;
+  if (r.parties !== undefined) row.parties = r.parties || null;
+  if (r.excuse !== undefined) row.excuse = r.excuse || null;
   return row;
 }
 
@@ -832,21 +886,6 @@ export function notificationToRow(n: Partial<AppNotification>) {
   if (n.read != null) row.read = n.read;
   if (n.link !== undefined) row.link = n.link || null;
   return row;
-}
-
-export function activityFromRow(r: Record<string, unknown>): ActivityLog {
-  return {
-    id: String(r.id),
-    firmId: String(r.org_id),
-    createdAt: iso(r.created_at as string),
-    updatedAt: iso(r.created_at as string),
-    actorId: String(r.actor_id ?? ""),
-    action: r.action as ActivityLog["action"],
-    entity: String(r.entity ?? ""),
-    entityId: optStr(r.entity_id),
-    detail: String(r.detail ?? ""),
-    changes: r.changes as ActivityLog["changes"],
-  };
 }
 
 export function yearStatsFromRow(r: Record<string, unknown>): { year: number; stats: YearStats } {

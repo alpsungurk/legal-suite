@@ -136,6 +136,7 @@ function Page() {
           value={formatMoney(feeIncomeInRange(state, monthStart, t))}
           icon={TrendingUp}
           tone="green"
+          hint="Ayın başından bugüne"
         />
         <StatTile
           label="Bekleyen"

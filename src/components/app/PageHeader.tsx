@@ -3,7 +3,7 @@ import { ArrowLeft, ChevronRight, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-export type Crumb = { label: string; to?: string };
+export type Crumb = { label: string; to?: string; search?: Record<string, string> };
 
 export function PageHeader({
   title,
@@ -25,12 +25,16 @@ export function PageHeader({
   const router = useRouter();
   /** Önceki sayfaya döner; geçmiş yoksa (adres doğrudan açıldıysa) üst sayfaya gider. */
   const goBack = () => {
-    const parent = crumbs?.filter((c) => c.to).at(-1)?.to;
+    const parent = crumbs?.filter((c) => c.to).at(-1);
     // Yalnızca uygulama içinde bir önceki sayfa varsa geri gidilir (index 0 = ilk sayfa)
     const index = (router.history.location.state as { __TSR_index?: number } | undefined)
       ?.__TSR_index;
     if (typeof index === "number" && index > 0) router.history.back();
-    else if (parent) void router.navigate({ to: parent });
+    else if (parent?.to)
+      void router.navigate({
+        to: parent.to,
+        ...(parent.search ? { search: parent.search } : {}),
+      });
   };
   return (
     <header
@@ -53,7 +57,11 @@ export function PageHeader({
               <span key={i} className="flex items-center gap-1">
                 {i > 0 && <ChevronRight className="h-3 w-3 opacity-60" />}
                 {c.to ? (
-                  <Link to={c.to} className="transition-colors hover:text-foreground">
+                  <Link
+                    to={c.to}
+                    {...(c.search ? { search: c.search } : {})}
+                    className="transition-colors hover:text-foreground"
+                  >
                     {c.label}
                   </Link>
                 ) : (

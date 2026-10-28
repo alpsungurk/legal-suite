@@ -16,3 +16,6 @@ enable_confirmations = false
 
 [functions.invite-user]
 verify_jwt = true
+
+[functions.storage-cleanup]
+verify_jwt = true

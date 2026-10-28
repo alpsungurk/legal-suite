@@ -1,16 +1,17 @@
 import { useEffect, useState } from "react";
-import { Building, Pencil, Plus, Trash2 } from "lucide-react";
+import { Building, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useErp } from "@/lib/erp-store";
 import { newId } from "@/lib/mappers";
 import { DEFAULT_LIST_ICON, LIST_ICONS, listIcon } from "@/lib/list-icons";
+import { matches } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { CompanyList } from "@/lib/erp-types";
+import type { Client, CompanyList } from "@/lib/erp-types";
 import { Section } from "@/components/app/bits";
-import { MultiCombobox, type Option } from "@/components/app/fields";
 import { EmptyState } from "@/components/EmptyState";
 import { useConfirm } from "@/components/app/confirm";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 
@@ -48,24 +49,24 @@ export function CompanyListsTab({ access }: { access: Access }) {
         sekmelerde durur. İstediğiniz kadar liste ekleyebilirsiniz.
       </p>
       {access.create && (
-      <Section title="Yeni liste">
-        <form
-          className="flex gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            add();
-          }}
-        >
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Örn. Kaya Holding dosyaları"
-          />
-          <Button type="submit">
-            <Plus /> Liste ekle
-          </Button>
-        </form>
-      </Section>
+        <Section title="Yeni liste">
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              add();
+            }}
+          >
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Örn. Kaya Holding dosyaları"
+            />
+            <Button type="submit">
+              <Plus /> Liste ekle
+            </Button>
+          </form>
+        </Section>
       )}
       {lists.length === 0 ? (
         <EmptyState
@@ -116,11 +117,9 @@ function CompanyListEditor({
   const [companiesOnly, setCompaniesOnly] = useState(true);
   useEffect(() => setName(list.name), [list.name]);
 
-  const options: Option[] = state.clients
-    .filter(
-      (c) => !companiesOnly || c.kind === "Kurumsal" || list.clientIds.includes(c.id),
-    )
-    .map((c) => ({ value: c.id, label: c.name, hint: c.kind }));
+  const clients = state.clients.filter(
+    (c) => !companiesOnly || c.kind === "Kurumsal" || list.clientIds.includes(c.id),
+  );
   const fileCount = state.enforcements.filter((e) => list.clientIds.includes(e.clientId)).length;
   const Icon = listIcon(list.icon);
 
@@ -138,7 +137,12 @@ function CompanyListEditor({
               setRenaming(false);
             }}
           >
-            <Input value={name} onChange={(e) => setName(e.target.value)} className="h-8" autoFocus />
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="h-8"
+              autoFocus
+            />
             <Button type="submit" size="sm">
               Kaydet
             </Button>
@@ -193,11 +197,10 @@ function CompanyListEditor({
             ))}
           </div>
         </div>
-        <MultiCombobox
+        <ClientChecklist
+          clients={clients}
           value={list.clientIds}
           onChange={(clientIds) => onChange({ ...list, clientIds })}
-          options={options}
-          placeholder="Müvekkil seçin"
         />
         <label className="flex items-center gap-2 text-xs text-muted-foreground">
           <Switch checked={companiesOnly} onCheckedChange={setCompaniesOnly} />
@@ -205,5 +208,54 @@ function CompanyListEditor({
         </label>
       </div>
     </Section>
+  );
+}
+
+function ClientChecklist({
+  clients,
+  value,
+  onChange,
+}: {
+  clients: Client[];
+  value: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const shown = clients.filter((c) => matches(query, c.name));
+  const toggle = (id: string, on: boolean) =>
+    onChange(on ? [...value, id] : value.filter((v) => v !== id));
+
+  return (
+    <div className="rounded-lg border">
+      <div className="flex items-center gap-2 border-b px-3">
+        <Search className="h-4 w-4 text-muted-foreground" />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Müvekkil ara…"
+          className="h-9 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+        />
+        <span className="shrink-0 text-xs text-muted-foreground">{value.length} seçili</span>
+      </div>
+      <ul className="max-h-64 divide-y overflow-y-auto">
+        {shown.map((c) => (
+          <li key={c.id}>
+            <label className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-secondary/60">
+              <Checkbox
+                checked={value.includes(c.id)}
+                onCheckedChange={(on) => toggle(c.id, on === true)}
+              />
+              <span className="min-w-0 flex-1 truncate">{c.name}</span>
+              <span className="shrink-0 text-xs text-muted-foreground">{c.kind}</span>
+            </label>
+          </li>
+        ))}
+        {!shown.length && (
+          <li className="px-3 py-4 text-center text-sm text-muted-foreground">
+            Müvekkil bulunamadı
+          </li>
+        )}
+      </ul>
+    </div>
   );
 }

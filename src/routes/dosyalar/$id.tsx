@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useErp } from "@/lib/erp-store";
 import { caseFinance, enforcementSummary } from "@/lib/finance";
+import { CASE_LISTS, LOCKED_CASE_TYPES, OTHER_CASE_LIST } from "@/lib/erp-types";
 import { toast } from "sonner";
 import { formatDate, formatDateLong, formatMoney, relativeDue, today } from "@/lib/format";
 import { PageHeader } from "@/components/app/PageHeader";
@@ -85,6 +86,14 @@ function Page() {
     );
   }
   const client = state.clients.find((x) => x.id === c.clientId);
+  const list =
+    CASE_LISTS.find((l) => l.tur === c.type) ??
+    (LOCKED_CASE_TYPES.includes(c.type) ? undefined : OTHER_CASE_LIST);
+  const listCrumb = {
+    label: list?.label ?? "Dosyalar",
+    to: "/dosyalar",
+    ...(list ? { search: { tur: list.tur } } : {}),
+  };
   const fin = caseFinance(state, c.id);
   // Başkalarının masraflarını görme izni yoksa yalnızca kendi girdikleri görünür
   const expenses = state.expenses.filter(
@@ -163,7 +172,7 @@ function Page() {
   return (
     <PageShell>
       <PageHeader
-        crumbs={[{ label: "Dosyalar", to: "/dosyalar" }, { label: c.no }]}
+        crumbs={[listCrumb, { label: c.no }]}
         title={
           <span>
             <span className="mr-2 text-primary">{c.no}</span>
@@ -324,7 +333,13 @@ function Page() {
             />
           </>
         ) : (
-          <StatTile label="Belgeler" value={docs.length} icon={FileText} tone="violet" />
+          <StatTile
+            label="Belgeler"
+            value={docs.length}
+            icon={FileText}
+            tone="violet"
+            hint="Bu dosyaya yüklenen belgeler"
+          />
         )}
         <StatTile
           label="Sıradaki"
@@ -363,6 +378,8 @@ function Page() {
                     { label: "Mahkeme / merci", value: c.court },
                     { label: "Esas no", value: c.esasNo },
                     { label: "Karşı taraf", value: c.opposingParty },
+                    { label: "Tür", value: c.type },
+                    ...(c.feeStatus ? [{ label: "Vekalet ücreti", value: c.feeStatus }] : []),
                     { label: "Sorumlu", value: <AvatarStack names={responsible} max={5} /> },
                     { label: "Açılış", value: formatDateLong(c.openingDate) },
                     ...(c.closingDate

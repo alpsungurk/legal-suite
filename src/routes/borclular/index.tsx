@@ -1,5 +1,14 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { FileSpreadsheet, Pencil, Plus, Trash2, UserX } from "lucide-react";
+import {
+  FileSpreadsheet,
+  Gavel,
+  HandCoins,
+  Pencil,
+  Plus,
+  Trash2,
+  UserX,
+  Wallet,
+} from "lucide-react";
 import { useDeleteDebtor } from "@/components/forms/delete-actions";
 import { useErp } from "@/lib/erp-store";
 import { debtorSummary } from "@/lib/finance";
@@ -134,21 +143,33 @@ function Page() {
         }
       />
       <StatGrid>
-        <StatTile label="Borçlu" value={rows.length} icon={UserX} tone="blue" />
+        <StatTile
+          label="Borçlu"
+          value={rows.length}
+          icon={UserX}
+          tone="blue"
+          hint="Kayıtlı borçlu / karşı taraf kartı"
+        />
         <StatTile
           label="Toplam borç"
           value={formatMoney(sumBy(rows, (r) => r.s.claim))}
+          icon={Gavel}
           tone="violet"
+          hint="Takip çıkış rakamlarının toplamı"
         />
         <StatTile
           label="Tahsil edilen"
           value={formatMoney(sumBy(rows, (r) => r.s.collected))}
+          icon={HandCoins}
           tone="green"
+          hint="İcra dosyalarından tahsil edilen"
         />
         <StatTile
           label="Kalan"
           value={formatMoney(sumBy(rows, (r) => r.s.remaining))}
+          icon={Wallet}
           tone="amber"
+          hint="Tahsil edilmeyi bekleyen"
         />
       </StatGrid>
       <DataTable

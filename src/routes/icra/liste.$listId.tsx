@@ -45,8 +45,9 @@ function Page() {
     (e) => e.side === "Borçlu" && list.clientIds.includes(e.clientId),
   ).length;
   const tab = taraf === "borclu" ? "borclu" : "alacakli";
+  // Başka şirket listesine geçince diğer sayfalardaki gibi açılış animasyonu
   return (
-    <PageShell>
+    <PageShell key={listId}>
       <PageHeader
         title={list.name}
         description={names || "Bu listeye henüz müvekkil eklenmedi"}

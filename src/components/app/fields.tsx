@@ -216,18 +216,39 @@ export function MultiCombobox({
   options,
   placeholder = "Seçin",
   invalid,
+  creatable,
 }: {
   value: string[];
   onChange: (v: string[]) => void;
   options: Option[];
   placeholder?: string;
   invalid?: boolean;
+  /** Listede olmayan değer yazılıp eklenebilir (değer = yazılan metin) */
+  creatable?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const toggle = (v: string) =>
     onChange(value.includes(v) ? value.filter((x) => x !== v) : [...value, v]);
+  const typed = search.trim();
+  const low = (x: string) => x.toLocaleLowerCase("tr");
+  const canCreate =
+    creatable &&
+    !!typed &&
+    !options.some((o) => low(o.label) === low(typed)) &&
+    !value.some((v) => low(v) === low(typed));
+  // Yazılıp eklenen (listede olmayan) değerler de işaretli olarak listede görünür
+  const typedValues = value
+    .filter((v) => !options.some((o) => o.value === v))
+    .map((v) => ({ value: v, label: v }) as Option);
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) setSearch("");
+      }}
+    >
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -270,11 +291,28 @@ export function MultiCombobox({
         align="start"
       >
         <Command>
-          <CommandInput placeholder="Ara..." />
+          <CommandInput
+            placeholder={creatable ? "Ara veya yeni yaz..." : "Ara..."}
+            value={search}
+            onValueChange={setSearch}
+          />
           <CommandList className="max-h-64">
-            <CommandEmpty>Sonuç yok</CommandEmpty>
+            {!canCreate && <CommandEmpty>Sonuç yok</CommandEmpty>}
             <CommandGroup>
-              {options.map((o) => (
+              {canCreate && (
+                <CommandItem
+                  value={`__ekle__ ${typed}`}
+                  onSelect={() => {
+                    onChange([...value, typed]);
+                    setSearch("");
+                  }}
+                  className="gap-2 font-medium text-primary"
+                >
+                  <Plus className="h-4 w-4 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">“{typed}” ekle</span>
+                </CommandItem>
+              )}
+              {[...typedValues, ...options].map((o) => (
                 <CommandItem
                   key={o.value}
                   value={`${o.label} ${o.value}`}
