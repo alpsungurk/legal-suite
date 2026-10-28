@@ -71,7 +71,10 @@ function Dashboard() {
       </header>
       {!hydrated ? (
         <ContentLoader />
-      ) : permissions.can("fees") || permissions.can("accounts") || permissions.can("ledger") ? (
+      ) : permissions.can("fees") ||
+        permissions.can("accounts") ||
+        permissions.can("ledger") ||
+        permissions.can("vekalet") ? (
         <FinanceDashboard />
       ) : (
         <LawyerDashboard />
@@ -180,8 +183,8 @@ function FinanceDashboard() {
         {perm.can("ledger") && <ClientBalances />}
       </div>
 
-      {/* Yalnızca yöneticiye: gösterge panelinin en altında */}
-      {perm.isAdmin && <VekaletSection />}
+      {/* "Vekalet ücreti" izni olanlara: gösterge panelinin en altında */}
+      {perm.can("vekalet") && <VekaletSection />}
     </>
   );
 }

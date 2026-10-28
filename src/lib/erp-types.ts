@@ -917,6 +917,7 @@ export type PermissionModuleKey =
   | "reminders"
   | "enforcements"
   | "fees"
+  | "vekalet"
   | "ledger"
   | "accounts"
   | "reports"
@@ -1010,6 +1011,20 @@ export const PERMISSION_MODULES: PermissionModule[] = [
     },
     coupled: true,
     menu: "Tahsilatlar",
+  },
+  {
+    key: "vekalet",
+    label: "Vekalet ücreti",
+    hint: "Yalnızca bu izni olanlar görür: vekalet ücreti planları, taksitleri ve tahsilatları (Tahsilatlar'dan ayrıdır)",
+    actions: ["view", "create", "edit", "delete"],
+    actionHints: {
+      view: "Vekalet ücretlerini, taksitlerini ve gösterge panelindeki bölümü görür",
+      create: "Yeni vekalet ücreti planı açar",
+      edit: "Vekalet tahsilatı alır / geri alır, planı düzenler",
+      delete: "Vekalet planını siler (çöp kutusuna gider)",
+    },
+    coupled: true,
+    menu: "Vekalet ücreti",
   },
   {
     key: "ledger",

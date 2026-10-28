@@ -173,6 +173,11 @@ export function applyPaymentToPlan(
   return { ...plan, installments: plan.installments.map((i) => byId.get(i.id)!) };
 }
 
+/** Planın izin modülü: vekalet planı "vekalet", diğerleri "fees" iznine bağlıdır */
+export function planModule(p: { adminOnly?: boolean }) {
+  return p.adminOnly ? ("vekalet" as const) : ("fees" as const);
+}
+
 /* ───────────── Masraflar ───────────── */
 
 /** Müvekkile yansıyan ve büronun ödediği masraf: müvekkilin carisine borç yazılır. */

@@ -57,6 +57,7 @@ export const MODULE_LABELS: Record<string, string> = {
   enforcements: "İcra",
   expenses: "Masraflar",
   fees: "Tahsilatlar",
+  vekalet: "Vekalet ücreti",
   reminders: "Ajanda",
   documents: "Belgeler",
   accounts: "Banka / Kasa",

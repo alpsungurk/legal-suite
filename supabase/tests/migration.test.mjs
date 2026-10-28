@@ -1000,6 +1000,9 @@ await setAs(S, {});
 let vkErr = null;
 try { const sql = readFileSync(fileURLToPath(new URL("../migrations/20261029140000_vekalet_ozel.sql", import.meta.url)), "utf8"); await db.exec(sql); await db.exec(sql); } catch (e) { vkErr = e; }
 ok("vekalet migration'ı çalıştı (iki kez)", !vkErr, vkErr ? vkErr.message : "");
+let vpErr = null;
+try { const sql = readFileSync(fileURLToPath(new URL("../migrations/20261029160000_vekalet_izni.sql", import.meta.url)), "utf8"); await db.exec(sql); await db.exec(sql); } catch (e) { vpErr = e; }
+ok("vekalet izni migration'ı çalıştı (iki kez)", !vpErr, vpErr ? vpErr.message : "");
 await setAs(S, { "fees.view": true, "fees.create": true, "fees.edit": true, "ledger.view": true });
 const sCli = async () => Number((await asUser(S, () => one(`select balance from public.v_client_balances where client_id=$1`, [client2]))).balance);
 const aCli = async () => Number((await asUser(A, () => one(`select balance from public.v_client_balances where client_id=$1`, [client2]))).balance);
@@ -1028,6 +1031,35 @@ await one(`select app.cron_notifications()`);
 ok("vekalet: geciken taksit bildirimi yalnızca yöneticiye, /vekalet bağlantısıyla",
   (await q(`select user_id, link from public.notifications where dedupe_key = $1`, [`inst-overdue:${vkInst}`])).every((n) => n.user_id === A && n.link === "/vekalet")
   && (await q(`select 1 from public.notifications where dedupe_key = $1`, [`inst-overdue:${vkInst}`])).length === 1);
+// ── Vekalet izni: admin kime verirse o görür / yönetir
+ok("vekalet izni: my_permissions vekalet anahtarlarını içerir", await (async () => { const r = await asUser(A, async () => (await one(`select public.my_permissions() p`)).p); return "vekalet.view" in r && "vekalet.delete" in r; })());
+await setAs(S, { "vekalet.view": true });
+ok("vekalet izni: yalnızca görme izni olan avukat plan, taksit ve tahsilatı görür",
+  (await asUser(S, () => q(`select 1 from public.fee_plans where id=$1`, [vkPlan]))).length === 1
+  && (await asUser(S, () => q(`select 1 from public.installments where plan_id=$1`, [vkPlan]))).length === 1
+  && (await asUser(S, () => q(`select 1 from public.installment_payments where installment_id=$1`, [vkInst]))).length === 1);
+ok("vekalet izni: görme izniyle tahsilat giremez", await fails(() => asUser(S, () => q(`select public.record_installment_payment($1,$2,10,current_date,'Nakit',null,null)`, [vkPlan, vkInst])), /yetkiniz yok/));
+ok("vekalet izni: görme izniyle plan açamaz", await fails(() => asUser(S, () => q(`insert into public.fee_plans (title, client_id, total, admin_only) values ('x',$1,1,true)`, [client2]))));
+await setAs(S, { "vekalet.view": true, "vekalet.edit": true, "vekalet.create": true });
+ok("vekalet izni: düzenleme izniyle tahsilat girer", (await asUser(S, async () => (await one(`select public.record_installment_payment($1,$2,50,current_date,'Nakit',null,null) n`, [vkPlan, vkInst])).n)) === 1);
+const vkOwn = await asUser(S, async () => (await one(`insert into public.fee_plans (title, client_id, total, admin_only) values ('Avukatın vekalet planı',$1,10,true) returning id`, [client2])).id);
+ok("vekalet izni: ekleme izniyle vekalet planı açar", !!vkOwn);
+ok("vekalet izni: vekalet izni olan, Tahsilatlar izni olmadan normal planı göremez",
+  (await asUser(S, () => q(`select 1 from public.fee_plans where id=$1`, [sPlan]))).length === 0);
+await db.exec(`delete from public.notifications`);
+await one(`select app.cron_notifications()`);
+const vkRecv = (await q(`select user_id from public.notifications where dedupe_key = $1`, [`inst-overdue:${vkInst}`])).map((n) => n.user_id).sort();
+ok("vekalet izni: geciken taksit bildirimi vekalet izni olan herkese gider", JSON.stringify(vkRecv) === JSON.stringify([A, S].sort()), JSON.stringify(vkRecv));
+// Çöp kutusu: vekalet planı silmek vekalet silme izni ister; yetkisiz tutar / döküm görmez
+const vkCli2 = await ins(`insert into public.clients (name) values ('Vekaletli Müvekkil')`);
+await ins(`insert into public.fee_plans (title, client_id, total, admin_only) values ('Gizli vekalet',$1,777,true)`, [vkCli2]);
+await setAs(S, { "clients.view": true, "clients.delete": true, "fees.view": true, "fees.delete": true });
+const vkPv = await asUser(S, async () => (await one(`select public.trash_preview('clients', array[$1]::uuid[]) p`, [vkCli2])).p);
+ok("vekalet izni: vekalet planı olan müvekkili silmek vekalet silme izni ister, tutar sızmaz",
+  vkPv.missing === "vekalet" && vkPv.items.length === 0 && Object.keys(vkPv.money).length === 0, JSON.stringify(vkPv));
+ok("vekalet izni: yetkisiz çöpe atamaz", await fails(() => asUser(S, () => q(`select public.trash_delete('clients', array[$1]::uuid[])`, [vkCli2])), /yetkiniz yok/));
+await setAs(S, { "clients.view": true, "clients.delete": true, "fees.view": true, "fees.delete": true, "vekalet.view": true, "vekalet.delete": true });
+ok("vekalet izni: vekalet silme izniyle çöpe atabilir", (await asUser(S, async () => (await one(`select public.trash_delete('clients', array[$1]::uuid[]) n`, [vkCli2])).n)) === 1);
 await setAs(S, {});
 
 console.log(R.join("\n"));

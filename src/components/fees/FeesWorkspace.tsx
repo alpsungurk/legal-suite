@@ -26,6 +26,7 @@ import { useErp } from "@/lib/erp-store";
 import {
   allInstallments,
   feeIncomeInRange,
+  planModule,
   promiseStatus,
   type InstallmentRow,
 } from "@/lib/finance";
@@ -80,7 +81,8 @@ export function FeesWorkspace({
   const quick = useQuick();
   const confirm = useConfirm();
   const [planId, setPlanId] = useState<string | null>(null);
-  if (adminOnly ? !permissions.isAdmin : !permissions.can("fees")) return <NoAccess />;
+  const mod = adminOnly ? "vekalet" : "fees";
+  if (!permissions.can(mod)) return <NoAccess />;
 
   // Bu bölümün planları; hesaplar (bekleyen, bu ay tahsil edilen) yalnızca bunlarla yapılır
   const plans = fullState.plans.filter((p) => inSection(p, adminOnly));
@@ -141,7 +143,7 @@ export function FeesWorkspace({
                 <Repeat /> Aylık ücretleri oluştur ({pendingAccrual.length})
               </Button>
             )}
-            {(adminOnly ? perm.isAdmin : perm.can("fees", "create")) && (
+            {perm.can(mod, "create") && (
               <Button
                 onClick={() =>
                   quick.open("plan", {
@@ -330,7 +332,7 @@ function PendingTab({
       header: "",
       align: "right",
       cell: (r) =>
-        permissions.can("fees", "edit") ? (
+        permissions.can(planModule(r.plan), "edit") ? (
           <Button
             size="sm"
             variant="soft"
@@ -466,7 +468,7 @@ function PaidTab({ rows, onOpenPlan }: { rows: PaidRow[]; onOpenPlan: (id: strin
       exportName="Tahsil edilenler"
       onRowClick={(r) => onOpenPlan(r.plan.id)}
       rowActions={(r) =>
-        permissions.can("fees", "edit") ? (
+        permissions.can(planModule(r.plan), "edit") ? (
           <DropdownMenuItem
             onClick={async () => {
               if (

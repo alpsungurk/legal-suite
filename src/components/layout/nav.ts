@@ -32,7 +32,7 @@ export type NavPage = {
 
 export const NAV_PAGES: NavPage[] = [
   { title: "Gösterge paneli", url: "/", icon: LayoutDashboard },
-  { title: "Vekalet ücreti", url: "/vekalet", icon: Lock, allow: (p) => p.isAdmin },
+  { title: "Vekalet ücreti", url: "/vekalet", icon: Lock, allow: (p) => p.can("vekalet") },
   { title: "Ajanda", url: "/takvim", icon: CalendarDays },
   { title: "Müvekkiller", url: "/muvekkiller", icon: Users, allow: (p) => p.can("clients") },
   { title: "Dosyalar", url: "/dosyalar", icon: FolderKanban, allow: (p) => p.can("cases") },

@@ -25,6 +25,7 @@ import {
   clientLedger,
   installmentStatus,
   isOutstandingCharge,
+  planModule,
   planSummary,
   recordClientId,
   REIMBURSE_SUFFIX,
@@ -452,7 +453,9 @@ export function PlanTable({
             <p
               className={cn(
                 "text-[12.5px]",
-                r.s.next.dueDate < today() ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground",
+                r.s.next.dueDate < today()
+                  ? "text-rose-600 dark:text-rose-400"
+                  : "text-muted-foreground",
               )}
             >
               {relativeDue(r.s.next.dueDate)}
@@ -514,9 +517,14 @@ export function PlanTable({
       initialSort={{ id: "next" }}
       exportName="Tahsilat planları"
       onRowClick={(r) => onOpen?.(r.plan)}
-      selectable={permissions.can("fees", "delete") || permissions.isAdmin}
+      selectable={
+        permissions.can("fees", "delete") ||
+        permissions.can("vekalet", "delete") ||
+        permissions.can("vekalet", "edit")
+      }
       bulkActions={(sel, clear) => {
-        // Yönetici planları Vekalet (yalnızca yöneticiye görünür) bölümüne taşıyabilir / geri alabilir
+        // Hem Tahsilatlar hem Vekalet izni olan planları Vekalet bölümüne taşıyabilir / geri alabilir
+        const canMove = permissions.can("fees", "edit") && permissions.can("vekalet", "edit");
         const toPrivate = sel.filter((r) => !r.plan.adminOnly).map((r) => r.plan.id);
         const toPublic = sel.filter((r) => r.plan.adminOnly).map((r) => r.plan.id);
         const move = (ids: string[], adminOnly: boolean) => {
@@ -530,7 +538,7 @@ export function PlanTable({
         };
         return (
           <>
-            {permissions.isAdmin && toPrivate.length > 0 && (
+            {canMove && toPrivate.length > 0 && (
               <Button
                 size="sm"
                 variant="outline"
@@ -540,7 +548,7 @@ export function PlanTable({
                 <Lock /> Vekalete taşı ({toPrivate.length})
               </Button>
             )}
-            {permissions.isAdmin && toPublic.length > 0 && (
+            {canMove && toPublic.length > 0 && (
               <Button
                 size="sm"
                 variant="outline"
@@ -550,46 +558,44 @@ export function PlanTable({
                 <LockOpen /> Tahsilatlar'a taşı ({toPublic.length})
               </Button>
             )}
-            {permissions.can("fees", "delete") && (
+            {sel.every((r) => permissions.can(planModule(r.plan), "delete")) && (
               <BulkTrash entity="fee_plans" ids={sel.map((r) => r.plan.id)} onDone={clear} />
             )}
           </>
         );
       }}
-      rowActions={
-        permissions.can("fees", "edit")
-          ? (r) => (
+      rowActions={(r) =>
+        permissions.can(planModule(r.plan), "edit") ? (
+          <>
+            {r.s.remaining > 0 && !r.plan.cancelled && (
+              <DropdownMenuItem onClick={() => quick.open("payment", { plan: r.plan })}>
+                <HandCoins /> Tahsilat al
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem onClick={() => quick.open("plan", { record: r.plan })}>
+              <Pencil /> Düzenle
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => patch("plans", r.plan.id, { cancelled: !r.plan.cancelled })}
+            >
+              {r.plan.cancelled ? <Undo2 /> : <Ban />}{" "}
+              {r.plan.cancelled ? "İptali geri al" : "İptal et"}
+            </DropdownMenuItem>
+            {permissions.can(planModule(r.plan), "delete") && (
               <>
-                {r.s.remaining > 0 && !r.plan.cancelled && (
-                  <DropdownMenuItem onClick={() => quick.open("payment", { plan: r.plan })}>
-                    <HandCoins /> Tahsilat al
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuItem onClick={() => quick.open("plan", { record: r.plan })}>
-                  <Pencil /> Düzenle
-                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  onClick={() => patch("plans", r.plan.id, { cancelled: !r.plan.cancelled })}
+                  className="text-destructive focus:text-destructive"
+                  onClick={() =>
+                    trash("fee_plans", [r.plan.id], `${r.plan.title} çöp kutusuna taşınsın mı?`)
+                  }
                 >
-                  {r.plan.cancelled ? <Undo2 /> : <Ban />}{" "}
-                  {r.plan.cancelled ? "İptali geri al" : "İptal et"}
+                  <Trash2 /> Sil
                 </DropdownMenuItem>
-                {permissions.can("fees", "delete") && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      className="text-destructive focus:text-destructive"
-                      onClick={() =>
-                        trash("fee_plans", [r.plan.id], `${r.plan.title} çöp kutusuna taşınsın mı?`)
-                      }
-                    >
-                      <Trash2 /> Sil
-                    </DropdownMenuItem>
-                  </>
-                )}
               </>
-            )
-          : undefined
+            )}
+          </>
+        ) : null
       }
       mobileCard={(r) => (
         <div>
@@ -846,7 +852,10 @@ export function ReminderTable({ rows }: { rows: Reminder[] }) {
           </p>
           {r.status === "Bekliyor" && (
             <p
-              className={cn("text-[12.5px]", r.date < t ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground")}
+              className={cn(
+                "text-[12.5px]",
+                r.date < t ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground",
+              )}
             >
               {relativeDue(r.date)}
             </p>
@@ -1093,7 +1102,8 @@ export function LedgerTable({
    */
   const planOfPayment = (paymentId: string) =>
     state.plans.find((p) => p.installments.some((i) => i.payments.some((x) => x.id === paymentId)));
-  const canEnf = permissions.can("enforcements", "create") || permissions.can("enforcements", "edit");
+  const canEnf =
+    permissions.can("enforcements", "create") || permissions.can("enforcements", "edit");
   const deletable = (e: LedgerEntry): boolean => {
     switch (e.kind) {
       case "Masraf": {
@@ -1102,10 +1112,14 @@ export function LedgerTable({
       }
       case "Masraf iadesi":
         return permissions.can("expenses", "edit");
-      case "Ücret tahakkuku":
-        return permissions.can("fees", "delete");
-      case "Ücret tahsilatı":
-        return permissions.can("fees", "edit") && !!planOfPayment(e.id);
+      case "Ücret tahakkuku": {
+        const plan = state.plans.find((p) => p.id === e.id);
+        return permissions.can(plan ? planModule(plan) : "fees", "delete");
+      }
+      case "Ücret tahsilatı": {
+        const plan = planOfPayment(e.id);
+        return !!plan && permissions.can(planModule(plan), "edit");
+      }
       case "İcra tahsilatı":
         return canEnf;
       case "Müvekkile aktarım":
@@ -1120,7 +1134,8 @@ export function LedgerTable({
       if (c) navigate({ to: "/icra/$id", params: { id: c.enforcementId } });
     } else if (e.kind === "Masraf" || e.kind === "Masraf iadesi") navigate({ to: "/masraflar" });
     else if (e.kind === "Müvekkile aktarım") navigate({ to: "/banka-kasa" });
-    else if (e.kind === "Ücret tahakkuku" || e.kind === "Ücret tahsilatı") navigate({ to: "/tahsilatlar" });
+    else if (e.kind === "Ücret tahakkuku" || e.kind === "Ücret tahsilatı")
+      navigate({ to: "/tahsilatlar" });
   };
   const deleteEntry = async (e: LedgerEntry) => {
     // Ana kayıtlar (masraf, plan, aktarım) bağlılarıyla çöp kutusuna gider
@@ -1218,7 +1233,10 @@ export function LedgerTable({
       export: (e) => e.credit || null,
       cell: (e) =>
         e.credit ? (
-          <Money value={e.credit} className="text-emerald-600 dark:text-emerald-400 dark:text-emerald-400" />
+          <Money
+            value={e.credit}
+            className="text-emerald-600 dark:text-emerald-400 dark:text-emerald-400"
+          />
         ) : (
           <span className="text-muted-foreground">—</span>
         ),
@@ -1312,7 +1330,9 @@ function BulkAssign({ ids, onDone }: { ids: string[]; onDone: () => void }) {
         disabled={!assigneeId}
         onClick={() => {
           patchMany("reminders", ids, { assigneeId });
-          toast.success(`${ids.length} kaydın sorumlusu ${o.staff.find((x) => x.value === assigneeId)?.label} yapıldı`);
+          toast.success(
+            `${ids.length} kaydın sorumlusu ${o.staff.find((x) => x.value === assigneeId)?.label} yapıldı`,
+          );
           setAssigneeId("");
           onDone();
         }}

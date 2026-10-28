@@ -13,6 +13,7 @@ import {
   installmentPaid,
   installmentRemaining,
   installmentStatus,
+  planModule,
   planSummary,
 } from "@/lib/finance";
 import { formatDate, relativeDue } from "@/lib/format";
@@ -83,7 +84,7 @@ export function PlanSheet({
                   s.status === "Gecikmiş" ? "red" : s.status === "Tamamlandı" ? "green" : "primary"
                 }
               />
-              {permissions.can("fees", "edit") && (
+              {permissions.can(planModule(plan), "edit") && (
                 <div className="flex gap-2">
                   {s.remaining > 0 && !plan.cancelled && (
                     <Button className="flex-1" onClick={() => quick.open("payment", { plan })}>
@@ -143,15 +144,19 @@ export function PlanSheet({
                             </p>
                           )}
                         </div>
-                        {permissions.can("fees", "edit") && rem > 0 && !plan.cancelled && (
-                          <Button
-                            size="sm"
-                            variant="soft"
-                            onClick={() => quick.open("payment", { plan, installmentId: inst.id })}
-                          >
-                            Tahsil et
-                          </Button>
-                        )}
+                        {permissions.can(planModule(plan), "edit") &&
+                          rem > 0 &&
+                          !plan.cancelled && (
+                            <Button
+                              size="sm"
+                              variant="soft"
+                              onClick={() =>
+                                quick.open("payment", { plan, installmentId: inst.id })
+                              }
+                            >
+                              Tahsil et
+                            </Button>
+                          )}
                       </div>
                       {inst.payments.length > 0 && (
                         <ul className="mt-2 space-y-1 border-t border-border/60 pt-2">
@@ -166,7 +171,7 @@ export function PlanSheet({
                                 {account(p.accountId) && ` · ${account(p.accountId)}`}
                               </span>
                               <Money value={p.amount} className="font-medium text-foreground" />
-                              {permissions.can("fees", "edit") && (
+                              {permissions.can(planModule(plan), "edit") && (
                                 <button
                                   type="button"
                                   title="Ödemeyi geri al"

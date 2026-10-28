@@ -453,7 +453,7 @@ function buildGroups(
   const overdue = allInstallments(state).filter((r) => r.status === "Gecikmiş");
   // Vekalet (yalnızca yöneticiye özel) taksitleri kendi menüsünde sayılır
   const overdueInst = p.can("fees") ? overdue.filter((r) => !r.plan.adminOnly).length : 0;
-  const overdueVekalet = p.isAdmin ? overdue.filter((r) => r.plan.adminOnly).length : 0;
+  const overdueVekalet = p.can("vekalet") ? overdue.filter((r) => r.plan.adminOnly).length : 0;
   const todayEvents = state.reminders.filter(
     (r) =>
       r.status === "Bekliyor" && r.date === t && (p.can("reminders") || r.assigneeId === userId),
@@ -478,8 +478,8 @@ function buildGroups(
       label: "Genel",
       items: [
         { title: "Gösterge paneli", url: "/", icon: LayoutDashboard },
-        // Yalnızca yönetici: gösterge panelinin hemen altında
-        ...(p.isAdmin
+        // "Vekalet ücreti" izni olanlara (Ayarlar → İzinler): gösterge panelinin hemen altında
+        ...(p.can("vekalet")
           ? [
               {
                 title: "Vekalet ücreti",
