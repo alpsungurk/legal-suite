@@ -343,6 +343,7 @@ function Page() {
               icon={Send}
               tone={s.untransferred ? "amber" : "green"}
               to="/banka-kasa"
+              hint={s.untransferred ? "Banka & Kasa'dan aktarın" : "Aktarılacak tutar yok"}
             />
           </>
         )}

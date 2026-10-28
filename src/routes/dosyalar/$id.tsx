@@ -324,7 +324,13 @@ function Page() {
             />
           </>
         ) : (
-          <StatTile label="Belgeler" value={docs.length} icon={FileText} tone="violet" />
+          <StatTile
+            label="Belgeler"
+            value={docs.length}
+            icon={FileText}
+            tone="violet"
+            hint="Bu dosyaya yüklenen belgeler"
+          />
         )}
         <StatTile
           label="Sıradaki"

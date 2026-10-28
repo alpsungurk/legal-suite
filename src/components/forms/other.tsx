@@ -247,7 +247,7 @@ function BankAnswersEditor({
 /* ───────────── Ajanda ───────────── */
 
 export function ReminderForm({ open, onOpenChange, record, preset, onSaved }: FormProps<Reminder>) {
-  const { save, state, currentUser } = useErp();
+  const { save, state, currentUser, rememberOption } = useErp();
   const o = useOptions();
   const ef = state.enforcements.find(
     (e) => e.id === (record?.enforcementId ?? preset?.enforcementId),
@@ -294,10 +294,22 @@ export function ReminderForm({ open, onOpenChange, record, preset, onSaved }: Fo
           options: o.staff,
           required: true,
         },
+        // Duruşmada mahkeme listeden seçilir ya da yazılır (yeni mahkeme Ayarlar listesine eklenir)
         {
           name: "location",
-          label: (v) => (isHearingType(v.type) ? "Mahkeme" : "Yer"),
-          placeholder: "Örn. Ankara 5. Asliye Hukuk Mahkemesi",
+          label: "Mahkeme",
+          type: "combobox",
+          options: o.courts,
+          creatable: true,
+          allowClear: true,
+          placeholder: "Listeden seçin veya yazın",
+          visible: (v) => isHearingType(v.type),
+        },
+        {
+          name: "location",
+          label: "Yer",
+          placeholder: "Örn. Çağlayan Adliyesi B Blok",
+          visible: (v) => !isHearingType(v.type),
         },
         // Duruşma listesinde ayrı sütunlar: dosya no, müvekkil ve sıfatı, mazeret
         {
@@ -338,6 +350,7 @@ export function ReminderForm({ open, onOpenChange, record, preset, onSaved }: Fo
         ...record,
       }}
       onSubmit={(v) => {
+        if (isHearingType(v.type)) rememberOption("courts", v.location);
         const assigneeChanged = !record || record.assigneeId !== v.assigneeId;
         const item = save(
           "reminders",

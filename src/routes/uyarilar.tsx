@@ -134,7 +134,7 @@ function Page() {
         }
       />
 
-      <StatGrid className="lg:grid-cols-5">
+      <StatGrid>
         <StatTile
           label="Dikkat gerektiren"
           value={alerts.length}

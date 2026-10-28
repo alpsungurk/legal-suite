@@ -767,6 +767,15 @@ ok("kilitli: dosya durumları, aylık ücret, İnfaz geri gelir",
   lk.c.includes("Açık") && lk.c.includes("Kapalı") && lk.f.includes("Aylık ücret") && lk.f.includes("Danışmanlık") && lk.r.includes("İnfaz"), JSON.stringify(lk));
 ok("kilitli: süre hesabındaki işlem türleri silinemez",
   lk.t.length === 11 && lk.t.includes("Ödeme emri tebliği") && lk.t.includes("89/3 haciz ihbarnamesi") && lk.t.includes("Diğer"), JSON.stringify(lk.t));
+let lk2Err = null;
+try { const sql = readFileSync(fileURLToPath(new URL("../migrations/20261028150000_kilitli_ayarlar_2.sql", import.meta.url)), "utf8"); await db.exec(sql); await db.exec(sql); } catch (e) { lk2Err = e; }
+ok("kilitli ayarlar 2 migration'ı çalıştı (iki kez)", !lk2Err, lk2Err ? lk2Err.message : "");
+const lk2 = await asUser(A, () => one(
+  `update public.org_settings set case_statuses = '{Açık,Kapalı,Karar}', reminder_types = '{Toplantı}'
+   returning case_statuses c, reminder_types r`));
+ok("kilitli: Derdest / Kanun yolu ve Duruşma / Keşif / Diğer silinemez, kilitsiz değer silinebilir",
+  ["Derdest", "Kanun yolu"].every((x) => lk2.c.includes(x)) && lk2.c.includes("Karar")
+  && ["Duruşma", "Keşif", "Diğer", "Toplantı"].every((x) => lk2.r.includes(x)) && !lk2.r.includes("Süre sonu"), JSON.stringify(lk2));
 
 // ── Toplu aktarım: Ajanda (duruşma listesi) tek RPC'de
 let ajErr = null;

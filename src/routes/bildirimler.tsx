@@ -136,8 +136,20 @@ function Page() {
           hint={unread.length ? "Okunmayı bekliyor" : "Hepsi okundu"}
           hintTone={unread.length ? "red" : "green"}
         />
-        <StatTile label="Bugün" value={todays.length} icon={CalendarClock} tone="blue" />
-        <StatTile label="Son 7 gün" value={week.length} icon={Bell} tone="violet" />
+        <StatTile
+          label="Bugün"
+          value={todays.length}
+          icon={CalendarClock}
+          tone="blue"
+          hint="Bugün gelen bildirimler"
+        />
+        <StatTile
+          label="Son 7 gün"
+          value={week.length}
+          icon={Bell}
+          tone="violet"
+          hint="Son bir haftada gelenler"
+        />
         <StatTile
           label="Toplam"
           value={mine.length}

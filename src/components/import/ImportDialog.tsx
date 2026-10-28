@@ -71,6 +71,7 @@ import {
 } from "@/lib/import-workbook";
 import type { Workbook } from "@/lib/excel-read";
 import type { ImportBatch } from "@/lib/erp-store";
+import { isHearingType } from "@/lib/erp-types";
 import { buildWithUpdates, changeText, planEnforcementUpdate } from "@/lib/import-update";
 
 const PAGE_SIZE = 50;
@@ -491,7 +492,11 @@ export function ImportDialog({
       // Yeni mahkeme / icra dairesi / tür değerleri listelere tek ayar yazımıyla eklenir
       const enfs = batch.enforcements ?? [];
       rememberOptions({
-        courts: (batch.cases ?? []).map((c) => c.court),
+        // UYAP duruşma listesindeki mahkemeler de Ayarlar → Mahkemeler listesine eklenir
+        courts: [
+          ...(batch.cases ?? []).map((c) => c.court),
+          ...(batch.reminders ?? []).filter((r) => isHearingType(r.type)).map((r) => r.location),
+        ],
         enforcementOffices: enfs.map((e) => e.office),
         enforcementTypes: enfs.map((e) => e.type),
         enforcementStopReasons: enfs.map((e) => e.stopReason),

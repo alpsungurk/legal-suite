@@ -234,7 +234,7 @@ function Page() {
         icon={Timer}
       />
 
-      <StatGrid className="lg:grid-cols-4">
+      <StatGrid>
         <StatTile
           label="Gecikmiş"
           value={count("Gecikmiş")}

@@ -6,6 +6,7 @@ import {
   ListOrdered,
   Printer,
   Scale,
+  Send,
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
@@ -160,6 +161,7 @@ function Page() {
           value={formatMoney(sumBy(rows, (r) => r.fin.balance))}
           icon={Scale}
           tone="blue"
+          hint="Müvekkil alacakları ile borçların farkı"
         />
         <StatTile
           label="İcra tahsilatı (aktarılmamış)"
@@ -169,7 +171,9 @@ function Page() {
               (c) => c.amount,
             ),
           )}
+          icon={Send}
           tone="violet"
+          hint="Müvekkile aktarılmayı bekleyen"
           to="/banka-kasa"
         />
       </StatGrid>

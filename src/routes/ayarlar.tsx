@@ -42,6 +42,7 @@ import {
   LOCKED_ENFORCEMENT_STATUSES,
   LOCKED_EVENT_TYPES,
   LOCKED_FEE_KINDS,
+  LOCKED_REMINDER_TYPES,
   type CategoryKey,
   type FirmProfile,
   type Settings as SettingsT,
@@ -483,7 +484,7 @@ const CAT_GROUPS: Array<{
       {
         key: "caseStatuses",
         title: "Dosya durumları",
-        desc: "Açık, derdest, karar... (Kapalı dosyayı kapatır)",
+        desc: "Açık, derdest, karar... (Kapalı dosyayı kapatır; kilitliler sayfada sayılır)",
         locked: LOCKED_CASE_STATUSES,
       },
       {
@@ -497,7 +498,12 @@ const CAT_GROUPS: Array<{
         title: "Belge kategorileri",
         desc: "Dilekçe, karar, vekaletname...",
       },
-      { key: "reminderTypes", title: "Ajanda türleri", desc: "Duruşma, süre sonu, toplantı..." },
+      {
+        key: "reminderTypes",
+        title: "Ajanda türleri",
+        desc: "Duruşma, süre sonu, toplantı... (Duruşma ve Keşif duruşma listesine girer)",
+        locked: LOCKED_REMINDER_TYPES,
+      },
     ],
   },
   {

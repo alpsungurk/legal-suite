@@ -323,12 +323,14 @@ export function EnforcementList({
                 value={rows.filter((r) => r.e.status === STOPPED_ENFORCEMENT_STATUS).length}
                 icon={CirclePause}
                 tone="violet"
+                hint="İtiraz, tedbir vb. ile duran dosyalar"
               />
               <StatTile
                 label="Kapalı"
                 value={closedCount}
                 icon={Lock}
                 tone="green"
+                hint="İnfaz, haricen tahsil vb. ile kapanan"
               />
             </>
           ) : (

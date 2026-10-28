@@ -1,6 +1,14 @@
 import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { FileSpreadsheet, FolderKanban, Plus } from "lucide-react";
+import {
+  CalendarClock,
+  FileSpreadsheet,
+  FolderKanban,
+  FolderOpen,
+  Plus,
+  Scale,
+  Undo2,
+} from "lucide-react";
 import { useErp } from "@/lib/erp-store";
 import { PageHeader } from "@/components/app/PageHeader";
 import { PageShell, NoAccess } from "@/components/app/bits";
@@ -9,7 +17,8 @@ import { Segmented } from "@/components/app/fields";
 import { Button } from "@/components/ui/button";
 import { CaseTable } from "@/components/lists/tables";
 import { useQuick } from "@/components/forms/quick";
-import { addDays, today } from "@/lib/format";
+import { addDays, formatDate, today } from "@/lib/format";
+import { isHearingType } from "@/lib/erp-types";
 
 export const Route = createFileRoute("/dosyalar/")({
   head: () => ({ meta: [{ title: "Dosyalar — Avukat Yönetim Paneli" }] }),
@@ -30,10 +39,15 @@ function Page() {
   );
   const open = state.cases.filter((c) => c.status !== "Kapalı");
   const weekEnd = addDays(today(), 7);
-  const hearings = state.reminders.filter(
-    (r) =>
-      r.type === "Duruşma" && r.status === "Bekliyor" && r.date >= today() && r.date <= weekEnd,
-  );
+  // Duruşma ve keşifler (haftalık duruşma listesiyle aynı), en yakını önce
+  const hearings = state.reminders
+    .filter(
+      (r) =>
+        isHearingType(r.type) && r.status === "Bekliyor" && r.date >= today() && r.date <= weekEnd,
+    )
+    .sort((a, b) => `${a.date} ${a.time ?? ""}`.localeCompare(`${b.date} ${b.time ?? ""}`));
+  const next = hearings[0];
+  const count = (status: string) => state.cases.filter((c) => c.status === status).length;
 
   if (!permissions.can("cases")) return <NoAccess />;
   return (
@@ -65,20 +79,36 @@ function Page() {
         <StatTile
           label="Açık dosya"
           value={open.length}
+          icon={FolderOpen}
           tone="blue"
-          hint={`${state.cases.length} toplam`}
+          hint={`Kapalı olmayan dosyalar · ${state.cases.length} toplam`}
         />
         <StatTile
           label="Derdest"
-          value={state.cases.filter((c) => c.status === "Derdest").length}
+          value={count("Derdest")}
+          icon={Scale}
           tone="violet"
+          hint="Görülmekte olan davalar"
         />
         <StatTile
           label="Kanun yolunda"
-          value={state.cases.filter((c) => c.status === "Kanun yolu").length}
+          value={count("Kanun yolu")}
+          icon={Undo2}
           tone="amber"
+          hint="İstinaf ya da temyiz aşamasında"
         />
-        <StatTile label="Bu hafta duruşma" value={hearings.length} tone="green" to="/takvim" />
+        <StatTile
+          label="Bu hafta duruşma"
+          value={hearings.length}
+          icon={CalendarClock}
+          tone="green"
+          to="/takvim"
+          hint={
+            next
+              ? `Sıradaki: ${formatDate(next.date)}${next.time ? ` ${next.time}` : ""}${next.location ? ` · ${next.location}` : ""}`
+              : "Önümüzdeki 7 günde duruşma yok"
+          }
+        />
       </StatGrid>
       <div className="flex flex-wrap items-center gap-2">
         <Segmented

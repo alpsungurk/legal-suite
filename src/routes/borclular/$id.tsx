@@ -11,6 +11,7 @@ import {
   Phone,
   Trash2,
   UserX,
+  Wallet,
 } from "lucide-react";
 import { useDeleteContact, useDeleteDebtor } from "@/components/forms/delete-actions";
 import { useErp } from "@/lib/erp-store";
@@ -160,8 +161,15 @@ function Page() {
           value={formatMoney(s.collected)}
           icon={HandCoins}
           tone="green"
+          hint="İcra dosyalarından tahsil edilen"
         />
-        <StatTile label="Kalan" value={formatMoney(s.remaining)} tone="violet" />
+        <StatTile
+          label="Kalan"
+          value={formatMoney(s.remaining)}
+          icon={Wallet}
+          tone="violet"
+          hint="Takip çıkışından kalan"
+        />
         <StatTile
           label="Ödeme sözü"
           value={s.promiseCount}

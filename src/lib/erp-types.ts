@@ -70,8 +70,12 @@ export type ClosedCasesSummary = {
 
 /** Varsayılan dosya durumları; Ayarlar > Kategoriler'den değiştirilebilir. */
 export const CASE_STATUSES = ["Açık", "Derdest", "Karar", "Kanun yolu", "Kapalı"];
-/** "Kapalı" dosya kapatmayı tetikler, "Açık" yeni dosyanın varsayılanıdır: silinemez */
-export const LOCKED_CASE_STATUSES = ["Açık", "Kapalı"];
+/**
+ * Silinemez: "Kapalı" dosya kapatmayı tetikler, "Açık" yeni dosyanın varsayılanıdır,
+ * "Derdest" ve "Kanun yolu" Dosyalar sayfasındaki kartlarda sayılır.
+ * Sunucuda da kilitli (app.keep_locked_settings).
+ */
+export const LOCKED_CASE_STATUSES = ["Açık", "Derdest", "Kanun yolu", "Kapalı"];
 export type CaseStatus = string;
 
 export type CaseFile = BaseEntity & {
@@ -246,6 +250,8 @@ export type Reminder = BaseEntity & {
 /** Duruşma listesine giren ajanda türleri: dosya no, müvekkil / sıfat, katılacak avukat, mazeret */
 export const HEARING_REMINDER_TYPES = ["Duruşma", "Keşif"];
 export const isHearingType = (type?: string) => !!type && HEARING_REMINDER_TYPES.includes(type);
+/** Silinemez ajanda türleri: duruşma listesi + hatırlatma / aktarımda yedek tür ("Diğer") */
+export const LOCKED_REMINDER_TYPES = [...HEARING_REMINDER_TYPES, "Diğer"];
 
 /* ───────────────────────── İcra ───────────────────────── */
 
