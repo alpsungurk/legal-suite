@@ -777,6 +777,44 @@ ok("kilitli: Derdest / Kanun yolu ve Duruşma / Keşif / Diğer silinemez, kilit
   ["Derdest", "Kanun yolu"].every((x) => lk2.c.includes(x)) && lk2.c.includes("Karar")
   && ["Duruşma", "Keşif", "Diğer", "Toplantı"].every((x) => lk2.r.includes(x)) && !lk2.r.includes("Süre sonu"), JSON.stringify(lk2));
 
+// ── Duruşma katılımı seçenekleri (Mazeret, Mazeret (hakim yokluğu), büronun ekledikleri)
+let haErr = null;
+try { const sql = readFileSync(fileURLToPath(new URL("../migrations/20261028160000_durusma_katilim.sql", import.meta.url)), "utf8"); await db.exec(sql); await db.exec(sql); } catch (e) { haErr = e; }
+ok("duruşma katılımı migration'ı çalıştı (iki kez)", !haErr, haErr ? haErr.message : "");
+const ha0 = (await asUser(A, () => one(`select hearing_attendance h from public.org_settings`))).h;
+ok("duruşma katılımı: mevcut büroda varsayılan seçenekler", ha0.includes("Mazeret") && ha0.includes("Mazeret (hakim yokluğu)"), JSON.stringify(ha0));
+await setAs(U, { "settings_categories.view": true, "settings_categories.create": true, "settings_categories.delete": true });
+const ha1 = await tryUpd(U, `update public.org_settings set hearing_attendance = '{Tevkil,E-duruşma}' returning hearing_attendance h`);
+ok("duruşma katılımı: kategori izniyle avukat ekler / siler, Mazeret silinemez",
+  ha1.length === 1 && ["Tevkil", "E-duruşma", "Mazeret"].every((x) => ha1[0].h.includes(x)) && !ha1[0].h.includes("Mazeret (hakim yokluğu)"), JSON.stringify(ha1));
+await setAs(U, { "settings_categories.view": true });
+ok("duruşma katılımı: izni olmayan ekleyemez", (await tryUpd(U, `update public.org_settings set hearing_attendance = hearing_attendance || '{X}' returning org_id`)).length === 0
+  && !(await asUser(A, () => one(`select hearing_attendance h from public.org_settings`))).h.includes("X"));
+await setAs(U, {});
+
+// ── Hukuk / ceza / idare dosya listeleri: türler, durumlar, vekalet ücreti durumu
+let dlErr = null;
+try { const sql = readFileSync(fileURLToPath(new URL("../migrations/20261028170000_dosya_listeleri.sql", import.meta.url)), "utf8"); await db.exec(sql); await db.exec(sql); } catch (e) { dlErr = e; }
+ok("dosya listeleri migration'ı çalıştı (iki kez)", !dlErr, dlErr ? dlErr.message : "");
+const dl0 = await asUser(A, () => one(`select case_types t, case_statuses s, case_fee_statuses f from public.org_settings`));
+ok("dosya listeleri: Hukuk / Ceza / İdare ve İstinafta / Temyizde mevcut büroya eklendi, ücret durumları hazır",
+  ["Hukuk", "Ceza", "İdare"].every((x) => dl0.t.includes(x)) && ["İstinafta", "Temyizde"].every((x) => dl0.s.includes(x))
+  && dl0.f.includes("Vekalet ücreti icrada"), JSON.stringify(dl0));
+const dl1 = await asUser(A, () => one(`update public.org_settings set case_types = '{Danışmanlık}' returning case_types t`));
+ok("dosya listeleri: Hukuk / Ceza / İdare silinemez", ["Hukuk", "Ceza", "İdare", "Danışmanlık"].every((x) => dl1.t.includes(x)), JSON.stringify(dl1));
+const dlCase = "aaaaaaaa-bbbb-cccc-ffff-000000000001";
+const dlRes = await asUser(A, async () => (await one(`select public.import_batch($1::jsonb) r`, [JSON.stringify({ cases: [{
+  id: dlCase, no: "2026/DL1", title: "Ankara 9. Sulh Hukuk Mahkemesi", type: "Hukuk", status: "İstinafta",
+  court: "Ankara 9. Sulh Hukuk Mahkemesi", esas_no: "2026/515", opening_date: "2026-01-01", responsible_ids: [],
+  fee_status: "Vekalet ücreti icrada", note: "Listedeki durum: İSTİNAFTA",
+}] })])).r);
+const dlRow = await one(`select status, fee_status, type from public.cases where id=$1`, [dlCase]);
+ok("dosya listeleri: aktarım vekalet ücreti durumunu yazar", dlRes.cases === 1 && dlRow.fee_status === "Vekalet ücreti icrada" && dlRow.status === "İstinafta", JSON.stringify(dlRow));
+await setAs(U, { "settings_categories.view": true, "settings_categories.create": true });
+ok("dosya listeleri: kategori izniyle vekalet ücreti durumu eklenir",
+  (await tryUpd(U, `update public.org_settings set case_fee_statuses = case_fee_statuses || '{"Yarısı alındı"}' returning org_id`)).length === 1);
+await setAs(U, {});
+
 // ── Toplu aktarım: Ajanda (duruşma listesi) tek RPC'de
 let ajErr = null;
 try { const sql = readFileSync(fileURLToPath(new URL("../migrations/20261028120000_import_batch_ajanda.sql", import.meta.url)), "utf8"); await db.exec(sql); await db.exec(sql); } catch (e) { ajErr = e; }
@@ -809,6 +847,22 @@ ok("ajanda: aktarım dosya no, müvekkil / sıfat ve mazereti yazar",
   dbRow.case_no === "2026/1" && dbRow.parties === "Birgül Aktay (Davacı)" && dbRow.excuse === "Başka duruşma", JSON.stringify(dbRow));
 await asUser(U, () => q(`update public.reminders set excuse = null where id=$1`, [ajRows[0].id]));
 ok("ajanda: katılacak avukat mazereti kaldırabilir", (await one(`select excuse from public.reminders where id=$1`, [ajRows[0].id])).excuse === null);
+
+// ── Dosya aktarımı: değişmeyen satır yeniden yazılmaz
+let daErr = null;
+try { const sql = readFileSync(fileURLToPath(new URL("../migrations/20261028180000_dosya_aktarim_tek_sorgu.sql", import.meta.url)), "utf8"); await db.exec(sql); await db.exec(sql); } catch (e) { daErr = e; }
+ok("dosya aktarımı tek sorgu migration'ı çalıştı (iki kez)", !daErr, daErr ? daErr.message : "");
+const sameCase = {
+  id: dlCase, no: "2026/DL1", title: "Ankara 9. Sulh Hukuk Mahkemesi", type: "Hukuk", status: "İstinafta",
+  court: "Ankara 9. Sulh Hukuk Mahkemesi", esas_no: "2026/515", opening_date: "2026-01-01", responsible_ids: [],
+  fee_status: "Vekalet ücreti icrada", note: "Listedeki durum: İSTİNAFTA",
+};
+const beforeStamp = (await one(`select updated_at from public.cases where id=$1`, [dlCase])).updated_at;
+await asUser(A, () => one(`select public.import_batch($1::jsonb) r`, [JSON.stringify({ cases: [sameCase] })]));
+const afterStamp = (await one(`select updated_at from public.cases where id=$1`, [dlCase])).updated_at;
+ok("dosya aktarımı: aynı dosya yeniden yüklenince satır yazılmaz", String(beforeStamp) === String(afterStamp), `${beforeStamp} → ${afterStamp}`);
+await asUser(A, () => one(`select public.import_batch($1::jsonb) r`, [JSON.stringify({ cases: [{ ...sameCase, status: "Kapalı" }] })]));
+ok("dosya aktarımı: değişen durum yazılır", (await one(`select status from public.cases where id=$1`, [dlCase])).status === "Kapalı");
 
 console.log(R.join("\n"));
 console.log(`\nPASS: ${R.filter((x) => x.startsWith("PASS")).length}  FAIL: ${R.filter((x) => x.startsWith("FAIL")).length}`);

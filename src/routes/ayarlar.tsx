@@ -43,6 +43,8 @@ import {
   LOCKED_EVENT_TYPES,
   LOCKED_FEE_KINDS,
   LOCKED_REMINDER_TYPES,
+  LOCKED_HEARING_ATTENDANCE,
+  LOCKED_CASE_TYPES,
   type CategoryKey,
   type FirmProfile,
   type Settings as SettingsT,
@@ -480,12 +482,23 @@ const CAT_GROUPS: Array<{
   {
     title: "Dosyalar",
     items: [
-      { key: "caseTypes", title: "Dosya türleri", desc: "Dava, icra, danışmanlık..." },
+      {
+        key: "caseTypes",
+        title: "Dosya türleri",
+        desc: "Hukuk, ceza, idare, danışmanlık... (kilitliler Dosyalar sayfasında ayrı sekmedir)",
+        locked: LOCKED_CASE_TYPES,
+      },
       {
         key: "caseStatuses",
         title: "Dosya durumları",
         desc: "Açık, derdest, karar... (Kapalı dosyayı kapatır; kilitliler sayfada sayılır)",
         locked: LOCKED_CASE_STATUSES,
+      },
+      {
+        key: "caseFeeStatuses",
+        title: "Vekalet ücreti durumu",
+        desc: "Dava dosyasında seçilir: alındı, icrada, istendi, yok, CMK...",
+        canEmpty: true,
       },
       {
         key: "courts",
@@ -503,6 +516,12 @@ const CAT_GROUPS: Array<{
         title: "Ajanda türleri",
         desc: "Duruşma, süre sonu, toplantı... (Duruşma ve Keşif duruşma listesine girer)",
         locked: LOCKED_REMINDER_TYPES,
+      },
+      {
+        key: "hearingAttendance",
+        title: "Duruşma katılımı",
+        desc: "Haftalık duruşma listesinde avukatların yanında seçilir: Mazeret, Tevkil, E-duruşma... (“Mazeret” ile başlayanlar kırmızı yazılır)",
+        locked: LOCKED_HEARING_ATTENDANCE,
       },
     ],
   },

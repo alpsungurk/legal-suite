@@ -69,13 +69,30 @@ export type ClosedCasesSummary = {
 };
 
 /** Varsayılan dosya durumları; Ayarlar > Kategoriler'den değiştirilebilir. */
-export const CASE_STATUSES = ["Açık", "Derdest", "Karar", "Kanun yolu", "Kapalı"];
+export const CASE_STATUSES = [
+  "Açık",
+  "Derdest",
+  "Karar",
+  "Kanun yolu",
+  "İstinafta",
+  "Temyizde",
+  "Kapalı",
+];
 /**
  * Silinemez: "Kapalı" dosya kapatmayı tetikler, "Açık" yeni dosyanın varsayılanıdır,
- * "Derdest" ve "Kanun yolu" Dosyalar sayfasındaki kartlarda sayılır.
+ * "Derdest", "Kanun yolu", "İstinafta" ve "Temyizde" Dosyalar sayfasındaki kartlarda sayılır.
  * Sunucuda da kilitli (app.keep_locked_settings).
  */
-export const LOCKED_CASE_STATUSES = ["Açık", "Derdest", "Kanun yolu", "Kapalı"];
+export const LOCKED_CASE_STATUSES = [
+  "Açık",
+  "Derdest",
+  "Kanun yolu",
+  "İstinafta",
+  "Temyizde",
+  "Kapalı",
+];
+/** Kanun yolundaki dosya durumları (Dosyalar → "Kanun yolunda" kartı) */
+export const APPEAL_CASE_STATUSES = ["Kanun yolu", "İstinafta", "Temyizde"];
 export type CaseStatus = string;
 
 export type CaseFile = BaseEntity & {
@@ -92,6 +109,8 @@ export type CaseFile = BaseEntity & {
   closingDate?: ISODate;
   /** Anlaşılan vekalet ücreti (bilgi amaçlı) */
   agreedFee?: number;
+  /** Vekalet ücreti durumu: alındı, icrada, istendi… (Ayarlar → Kategoriler) */
+  feeStatus?: string;
   note?: string;
 };
 
@@ -250,6 +269,13 @@ export type Reminder = BaseEntity & {
 /** Duruşma listesine giren ajanda türleri: dosya no, müvekkil / sıfat, katılacak avukat, mazeret */
 export const HEARING_REMINDER_TYPES = ["Duruşma", "Keşif"];
 export const isHearingType = (type?: string) => !!type && HEARING_REMINDER_TYPES.includes(type);
+/**
+ * Duruşmada "Katılacak avukat" yerine seçilebilen seçenekler (Ayarlar → Kategoriler).
+ * "Mazeret" ile başlayanlar katılınmayacak sayılır (listede kırmızı).
+ */
+export const DEFAULT_HEARING_ATTENDANCE = ["Mazeret", "Mazeret (hakim yokluğu)"];
+export const LOCKED_HEARING_ATTENDANCE = ["Mazeret"];
+export const isExcuseOption = (option?: string) => !!option && /^mazeret/i.test(option.trim());
 /** Silinemez ajanda türleri: duruşma listesi + hatırlatma / aktarımda yedek tür ("Diğer") */
 export const LOCKED_REMINDER_TYPES = [...HEARING_REMINDER_TYPES, "Diğer"];
 
@@ -694,6 +720,10 @@ export type Settings = {
   enforcementCloseReasons: string[];
   claimTypes: string[];
   bankAnswerTypes: string[];
+  /** Duruşma listesinde avukatların yanında seçilen katılım seçenekleri (Mazeret, Tevkil…) */
+  hearingAttendance: string[];
+  /** Dava dosyalarında vekalet ücreti durumu seçenekleri */
+  caseFeeStatuses: string[];
   /** Takip şekilleri ve süre kuralları */
   procedures: Procedure[];
   /** 89/1→89/2→89/3 ve 89/3→kesinleşme cevap süresi (gün); hatırlatma ertesi gün */
@@ -762,7 +792,55 @@ export type ErpState = {
 
 export const STATE_VERSION = 3;
 
-export const DEFAULT_CASE_TYPES = ["Dava", "İcra", "Danışmanlık", "Arabuluculuk", "Ceza"];
+export const DEFAULT_CASE_TYPES = [
+  "Hukuk",
+  "Ceza",
+  "İdare",
+  "Dava",
+  "İcra",
+  "Danışmanlık",
+  "Arabuluculuk",
+];
+/** Dosyalar sayfasındaki sekmeler: silinemez (sunucuda da kilitli) */
+export const LOCKED_CASE_TYPES = ["Hukuk", "Ceza", "İdare"];
+
+/** Yan menüdeki ayrı dosya listeleri. tur, Dosyalar sayfasının ?tur= adresiyle aynıdır. */
+export const CASE_LISTS: {
+  tur: (typeof LOCKED_CASE_TYPES)[number];
+  label: string;
+  description: string;
+}[] = [
+  {
+    tur: "Hukuk",
+    label: "Hukuk dosya listesi",
+    description: "Hukuk mahkemelerindeki dosyalar",
+  },
+  {
+    tur: "Ceza",
+    label: "Ceza dosya listesi",
+    description: "Ceza mahkemelerindeki dosyalar",
+  },
+  {
+    tur: "İdare",
+    label: "İdare dosya listesi",
+    description: "İdare ve vergi mahkemelerindeki dosyalar",
+  },
+];
+
+export const OTHER_CASE_LIST = {
+  tur: "diger",
+  label: "Diğer dosyalar",
+  description: "Danışmanlık, arabuluculuk ve benzeri işler",
+};
+/** Vekalet ücreti durumu için hazır seçenekler (büro düzenler) */
+export const DEFAULT_CASE_FEE_STATUSES = [
+  "Vekalet ücreti alındı",
+  "Vekalet ücreti icrada",
+  "Vekalet ücreti istendi",
+  "Vekalet ücreti yok",
+  "CMK vekalet ücreti alınacak",
+  "CMK",
+];
 export const DEFAULT_EXPENSE_TYPES = [
   "Harç",
   "Bilirkişi",

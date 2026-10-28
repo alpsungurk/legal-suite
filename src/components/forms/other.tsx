@@ -325,10 +325,15 @@ export function ReminderForm({ open, onOpenChange, record, preset, onSaved }: Fo
           placeholder: "Örn. Birgül Aktay (Davacı)",
           visible: (v) => isHearingType(v.type),
         },
+        // Katılım: boşsa avukat katılır; Ayarlar'daki seçenekler (Mazeret, Tevkil…) ya da yazılan
         {
           name: "excuse",
-          label: "Mazeret",
-          placeholder: "Boşsa avukat katılacak; doluysa mazeret verilecek",
+          label: "Katılım (mazeret, tevkil…)",
+          type: "combobox",
+          options: state.settings.hearingAttendance ?? [],
+          creatable: true,
+          allowClear: true,
+          placeholder: "Boşsa avukat katılacak",
           span: 2,
           visible: (v) => isHearingType(v.type),
         },

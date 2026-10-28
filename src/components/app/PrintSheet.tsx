@@ -15,6 +15,7 @@ export function PrintSheet({
   plainFooter,
   showLogo = true,
   actions,
+  landscape = false,
 }: {
   title: string;
   subtitle?: ReactNode;
@@ -28,6 +29,8 @@ export function PrintSheet({
   showLogo?: boolean;
   /** "Yazdır / PDF" yanında ek düğmeler (ör. doğrudan PDF indir) */
   actions?: ReactNode;
+  /** Yatay A4 (haftalık duruşma listesi) */
+  landscape?: boolean;
 }) {
   const { state } = useErp();
   const firm = state.settings.firm;
@@ -35,9 +38,13 @@ export function PrintSheet({
   useEffect(() => {
     document.title = `${title} — ${firm.name}`;
   }, [title, firm.name]);
+  const sheet = landscape ? "max-w-[297mm]" : "max-w-[210mm]";
   return (
     <div className="min-h-screen bg-muted/40 py-8 print:bg-white print:py-0">
-      <div className="no-print mx-auto mb-4 flex max-w-[210mm] items-center justify-between gap-2 px-4">
+      {landscape && (
+        <style>{`@media print { @page { size: A4 landscape; margin: 8mm; } }`}</style>
+      )}
+      <div className={`no-print mx-auto mb-4 flex ${sheet} items-center justify-between gap-2 px-4`}>
         <p className="text-sm text-muted-foreground">
           Yazdır penceresinde “PDF olarak kaydet” seçerek PDF alabilirsiniz.
         </p>
@@ -51,8 +58,12 @@ export function PrintSheet({
           </Button>
         </div>
       </div>
-      {toolbar && <div className="no-print mx-auto mb-4 max-w-[210mm] px-4">{toolbar}</div>}
-      <article className="print-sheet mx-auto min-h-[297mm] max-w-[210mm] bg-white p-[14mm] text-[12px] leading-relaxed text-slate-900 shadow-elevated animate-fade-up">
+      {toolbar && <div className={`no-print mx-auto mb-4 ${sheet} px-4`}>{toolbar}</div>}
+      <article
+        className={`print-sheet mx-auto bg-white text-[12px] leading-relaxed text-slate-900 shadow-elevated animate-fade-up ${
+          landscape ? "min-h-[210mm] max-w-[297mm] p-[8mm]" : "min-h-[297mm] max-w-[210mm] p-[14mm]"
+        }`}
+      >
         <header className="flex items-start justify-between gap-6 border-b-2 border-[#143064] pb-5">
           <div className="flex items-center gap-3">
             {!showLogo ? null : logo ? (

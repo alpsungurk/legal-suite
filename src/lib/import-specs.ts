@@ -19,6 +19,7 @@ import {
   type EnforcementSide,
   type ErpState,
   type Permissions,
+  type Reminder,
   type User,
 } from "@/lib/erp-types";
 import { caseCourtLabel } from "@/lib/finance";
@@ -99,9 +100,36 @@ export type ImportSpec = {
   build: (rows: RowValues[], ctx: ImportContext) => ImportBatch;
   /** Bilgi taşımayan sütunlar (UYAP'ın "Görüntüle", "Takvime Ekle" düğmeleri): nota eklenmez */
   ignoreHeaders?: string[];
+  /**
+   * Başlığı boş sütun: ilk dolu hücrelere bakıp hangi alan olduğunu söyler (büronun elle tuttuğu
+   * listelerde müvekkil / durum / açıklama sütunlarının başlığı olmayabiliyor). used: eşlenmiş alanlar.
+   */
+  guessColumn?: (samples: string[], used: Set<string>) => string | undefined;
+  /**
+   * Kayıtlı kayıt (check().existing) Excel'de değişmişse güncelleme planı: değişenler ekranda
+   * "eski → yeni" gösterilir, batch kayda yazılır. Verilmezse kayıtlı satır aktarılmaz.
+   */
+  planUpdate?: (
+    v: RowValues,
+    ctx: ImportContext,
+  ) => { changes: FieldChange[]; blocked: boolean; batch: ImportBatch } | null;
   /** Hazır şablon dosyası: verilirse "Şablon" düğmesi bu dosyayı olduğu gibi indirir (public/ altında) */
   templateFile?: { url: string; filename: string };
 };
+
+/** Güncellemede ekranda gösterilen değişiklik: "Durum: Açık → Kapalı" */
+export type FieldChange = { label: string; from: string; to: string };
+
+const lineKey = (l: string) => l.replace(/\s+/g, " ").trim().toLocaleLowerCase("tr");
+
+/** Kayıttaki metin korunur; Excel'de olup kayıtta olmayan satırlar sona eklenir */
+export function mergeText(current = "", incoming = ""): string {
+  if (!incoming.trim()) return current;
+  if (!current.trim()) return incoming;
+  const have = new Set(current.split("\n").map(lineKey).filter(Boolean));
+  const add = incoming.split("\n").filter((l) => lineKey(l) && !have.has(lineKey(l)));
+  return add.length ? `${current.trimEnd()}\n${add.join("\n")}` : current;
+}
 
 /* ───────────── Ortak çözümleyiciler ───────────── */
 
@@ -363,6 +391,14 @@ function findClient(state: ErpState, value: string): { client?: Client; error?: 
   return { error: "Müvekkil bulunamadı; önce müvekkili ekleyin veya listeden seçin" };
 }
 
+/**
+ * Dosya listelerinde müvekkil: aynı adla birden çok kart varsa ilki kullanılır (yeni kart açılıp
+ * mükerrer çoğalmasın); TC / vergi no da eşleşir.
+ */
+function clientByName(state: ErpState, name: string) {
+  return findClient(state, name).client ?? state.clients.find((c) => norm(c.name) === norm(name));
+}
+
 function findCase(state: ErpState, value: string): { kase?: CaseFile; error?: string } {
   const k = norm(firstPart(value)).replace(/\s/g, "");
   if (!k) return {};
@@ -533,66 +569,357 @@ function nextCaseNumbers(cases: CaseFile[], count: number) {
 const openCaseStatuses = (ctx: ImportContext) =>
   ctx.state.settings.caseStatuses.filter((s) => s !== "Kapalı");
 
+/**
+ * Büro listelerindeki mahkeme kısaltmalarını açar (küçük harf): "ANK. 9.SULH" → "ankara 9. sulh
+ * hukuk", "ANK. 27.AHM" → "ankara 27. asliye hukuk mahkemesi", "ANK. 1. İD" → "ankara 1. idare
+ * mahkemesi". Kısaltmanın sonu \b ile değil boşluk / metin sonuyla bulunur (Türkçe harflerde \b
+ * çalışmaz).
+ */
+const courtish =
+  /mahkeme|\bmah\b|idare|vergi|asliye|sulh|icra|\bceza\b|hukuk|\biş\b|\b(ahm|shm|id|ascm|acm)\b/i;
+
+/**
+ * Parantezli mahkeme:
+ * "Ankara 15. İdare (ANKARA 8. İDARE)" → asıl ad + önceki mahkeme.
+ * "Tazminat Komisyonu (Ankara 20. Ağır Ceza)" → parantezdeki mahkeme asıl addır.
+ */
+function splitPreviousCourt(raw: string): { name: string; previous?: string; label?: string } {
+  const m = raw.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
+  if (!m) return { name: raw.trim() };
+  const outside = m[1].trim();
+  const inside = m[2].trim();
+  if (courtish.test(outside) && courtish.test(inside)) return { name: outside, previous: inside };
+  if (!courtish.test(outside) && courtish.test(inside)) return { name: inside, label: outside };
+  return { name: raw.trim() };
+}
+
+function titleWord(w: string) {
+  if (/^(cbs|bam)$/i.test(w)) return w.toLocaleUpperCase("tr");
+  const i = w.search(/[A-Za-zÇĞİÖŞÜçğıöşü]/);
+  if (i < 0) return w;
+  return w.slice(0, i) + w.charAt(i).toLocaleUpperCase("tr") + w.slice(i + 1);
+}
+
+export function expandCourt(court: string | undefined, bias?: "ceza") {
+  const end = "(?=\\s|$)";
+  const rules: Array<[RegExp, string]> = [
+    [/\bank\b\.?/g, " ankara "],
+    [/\bist\b\.?/g, " istanbul "],
+    [/batı\./g, "batı "],
+    [/asliye(ceza|hukuk|ticaret)/g, "asliye $1"],
+    [/(\d+)\s*\.?\s*/g, " $1. "],
+    [new RegExp(`\\bas?cm\\.?${end}`, "g"), "asliye ceza mahkemesi"],
+    [new RegExp(`\\basl\\.?\\s*c\\.?${end}`, "g"), "asliye ceza"],
+    [new RegExp(`\\b(ahm|ashm|ash)\\.?${end}`, "g"), "asliye hukuk mahkemesi"],
+    [new RegExp(`\\basl\\.?\\s*h\\.?${end}`, "g"), "asliye hukuk"],
+    [new RegExp(`\\bshm\\.?${end}`, "g"), "sulh hukuk mahkemesi"],
+    [new RegExp(`\\b(ihm|icrh|icr)\\.?${end}`, "g"), "icra hukuk mahkemesi"],
+    [new RegExp(`\\batm\\.?${end}`, "g"), "asliye ticaret mahkemesi"],
+    [new RegExp(`\\bid\\.?${end}`, "g"), "idare mahkemesi"],
+    [new RegExp(`\\basl\\.?${end}`, "g"), "asliye"],
+    [/\bsulh(?!\s*(hukuk|ceza))/g, "sulh hukuk"],
+    [new RegExp(`\\bmah\\.?${end}`, "g"), "mahkemesi"],
+  ];
+  let s = norm(court);
+  for (const [re, to] of rules) s = s.replace(re, to);
+  // Sıra numarasının noktası ("9.") dışındaki noktalar atılır ("Sorgun.", "Ank . 6")
+  s = s
+    .replace(/(?<!\d)\./g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  // Yalın "asliye" hukuk listesinde asliye hukuk; CMK açıklaması varsa asliye ceza
+  if (/\basliye\b/.test(s) && !/\basliye\s+(hukuk|ceza|ticaret)\b/.test(s))
+    s = s.replace(/\basliye\b/, bias === "ceza" ? "asliye ceza" : "asliye hukuk");
+  return s;
+}
+
+/**
+ * Mahkeme karşılaştırma anahtarı: aynı mahkemenin farklı yazımları aynı anahtarı verir
+ * ("ANK. 9. SULH" = "ANKARA 9. SHM" = "Ankara 9. Sulh Hukuk Mahkemesi").
+ */
+export function courtKey(court: string | undefined, bias?: "ceza") {
+  return expandCourt(court, bias)
+    .replace(/mahkemesi/g, "")
+    // "41. Asliye" ile "41. Asliye Hukuk" aynı mahkeme; ceza ve ticaret ayrı kalır
+    .replace(/\basliye hukuk\b/g, "asliye")
+    .replace(/[^0-9a-zçğıöşü]/g, "");
+}
+
+/** Ekranda ve listede kullanılacak düzgün ad: "ANK. 9.SULH" → "Ankara 9. Sulh Hukuk Mahkemesi" */
+export function prettyCourt(court: string | undefined, bias?: "ceza") {
+  const e = expandCourt(court, bias);
+  if (!e) return (court ?? "").trim();
+  const kind = /(hukuk|ceza|sulh|aile|iş|idare|vergi|icra|tüketici|ticaret|çocuk|kadastro|asliye)/;
+  const named = /(mahkemesi|hakimliği|masası|savcılığı|dairesi|\bbam\b)/;
+  const full = kind.test(e) && !named.test(e) ? `${e} mahkemesi` : e;
+  return full.split(" ").map(titleWord).join(" ");
+}
+
+/**
+ * "2026/515 (2023/698)" → { main: "2026/515", previous: ["2023/698"] }.
+ * "2025/56 ile birleştirildi. (2026/338)" → dosyanın kendi numarası parantezdeki 2026/338;
+ * yazının tamamı remark olarak nota gider.
+ */
+export function parseEsas(raw: string | undefined) {
+  const text = (raw ?? "").trim();
+  const nums = text.match(/\d{4}\s*\/\s*\d+(?:\s*[a-zçğıöşü]\.)?/gi) ?? [];
+  const clean = nums.map((n) => n.replace(/\s+/g, "").replace(/([a-zçğıöşü]\.)$/i, " $1"));
+  // Numaradan başka yazı varsa (ör. "ile birleştirildi") açıklama olarak saklanır
+  const remark = /[a-zçğıöşü]{3,}/i.test(text.replace(/\d{4}\s*\/\s*\d+/g, "")) ? text : undefined;
+  if (remark && /birleş/i.test(remark) && clean.length > 1)
+    return { main: clean[clean.length - 1], previous: [], remark };
+  return { main: clean[0] ?? text, previous: clean.slice(1), remark };
+}
+
+/**
+ * Kayıtlı dava dosyası (yeniden yüklemede güncellenir): mahkeme + esas no; esas no yoksa
+ * aynı mahkemede esas nosu olmayan, aynı müvekkilin dosyası.
+ */
+export function findCaseByCourtEsas(
+  state: ErpState,
+  court: string,
+  esas: string,
+  clientName?: string,
+) {
+  const ck = courtKey(court);
+  const key = fileNoKey(parseEsas(esas).main);
+  if (!key) {
+    if (!ck || !clientName) return undefined;
+    const client = clientByName(state, clientName);
+    return client
+      ? state.cases.find(
+          (c) => !c.esasNo && c.clientId === client.id && courtKey(c.court) === ck,
+        )
+      : undefined;
+  }
+  const same = state.cases.filter((c) => fileNoKey(c.esasNo ?? "") === key);
+  return ck ? same.find((c) => courtKey(c.court) === ck) : same.length === 1 ? same[0] : undefined;
+}
+
+/** Mahkemeden dosya türü: İdare / Vergi → İdare, Ceza / Çocuk → Ceza, diğerleri Hukuk */
+function caseTypeFromCourt(court: string, types: string[]) {
+  // Kısaltmalar açılmış ad (ASCM → asliye ceza, İD → idare); CBS: başsavcılık (ilamat), infaz da ceza
+  const c = expandCourt(court);
+  const t = /idare|vergi/.test(c)
+    ? "İdare"
+    : /ceza|çocuk mah|infaz|\bcbs\b|savcılı/.test(c)
+      ? "Ceza"
+      : "Hukuk";
+  return matchOption(t, types) ?? t;
+}
+
+/**
+ * Listedeki durum yazısından dosya durumu: KAPALI 57 → Kapalı, İSTİNAFTA → İstinafta,
+ * YARGITAYDA / TEMYİZDE → Temyizde, İSTİNAFTAN DÖNDÜ / DERDEST → Açık.
+ */
+export function caseStatusFrom(text: string): string | undefined {
+  const t = norm(text);
+  if (!t) return undefined;
+  if (/açıkta/.test(t)) return "Açık";
+  if (/istinaftan döndü|bozdu/.test(t)) return /yargıtay|temyiz/.test(t) ? "Temyizde" : "Açık";
+  if (/yargıtay|temyiz/.test(t)) return "Temyizde";
+  if (/istinaf/.test(t)) return "İstinafta";
+  if (/kapal|işlemden kaldırıldı/.test(t)) return "Kapalı";
+  if (/derdest|açık|birleştirme|değişik iş/.test(t)) return "Açık";
+  return undefined;
+}
+
+/** "VEK. ÜCR. ALINDI" → "Vekalet ücreti alındı"; vekalet ücreti / CMK yazmıyorsa tanınmaz */
+export function feeStatusFrom(text: string, options: string[]): string | undefined {
+  const t = norm(text).replace(/\./g, " ").replace(/\s+/g, " ");
+  if (!/vek|ücr|ucr|cmk/.test(t)) return undefined;
+  const label = /cmk/.test(t)
+    ? /alınacak|alinacak/.test(t)
+      ? "CMK vekalet ücreti alınacak"
+      : "CMK"
+    : /icra/.test(t)
+      ? "Vekalet ücreti icrada"
+      : /alındı|alindi|ödendi/.test(t)
+        ? "Vekalet ücreti alındı"
+        : /istendi|talep edildi/.test(t)
+          ? "Vekalet ücreti istendi"
+          : /yok/.test(t)
+            ? "Vekalet ücreti yok"
+            : undefined;
+  return label ? (matchOption(label, options) ?? label) : undefined;
+}
+
+type CaseResolved = {
+  court?: string;
+  esasNo?: string;
+  type: string;
+  status: string;
+  clientName?: string;
+  feeStatus?: string;
+  note?: string;
+};
+
+/** Bir satırı dava dosyasına çevirir (yeni kayıt ve güncelleme aynı kuralla) */
+function resolveCase(v: RowValues, ctx: ImportContext, warnings: string[] = []): CaseResolved {
+  const s = ctx.state;
+  // Ayarlardaki mahkeme aynı mahkemeyse onun yazımı kullanılır (liste kısaltma dolmasın)
+  const rawCourt = v.court?.trim() || "";
+  const parted = splitPreviousCourt(rawCourt);
+  // CMK vekalet yazısı ceza listesindeki yalın "asliye"yi asliye ceza yapar
+  const cmk = /\bcmk\b/.test(norm(`${v.feeStatus ?? ""} ${v.remark ?? ""}`));
+  const bias = cmk ? ("ceza" as const) : undefined;
+  // Aynı mahkemenin farklı yazımları tek ada iner: Ayarlar'da varsa o yazım, yoksa düzgün ad
+  // ("ANK. 9.SULH" → "Ankara 9. Sulh Hukuk Mahkemesi"); yeniden yüklemede de aynı ad çıkar
+  const court = parted.name
+    ? (s.settings.courts.find((c) => courtKey(c) === courtKey(parted.name, bias)) ??
+      prettyCourt(parted.name, bias))
+    : undefined;
+  const esas = parseEsas(v.esasNo);
+  const fromCourt = court ? caseTypeFromCourt(court, s.settings.caseTypes) : undefined;
+  const type =
+    (v.type?.trim() && matchOption(v.type, s.settings.caseTypes)) ||
+    (cmk && (!fromCourt || fromCourt === "Hukuk")
+      ? (matchOption("Ceza", s.settings.caseTypes) ?? "Ceza")
+      : fromCourt) ||
+    s.settings.caseTypes[0];
+
+  // Durum: "Durum" ve (varsa) başlıksız ikinci durum sütunu birlikte okunur
+  // ("DERDEST" + "KAPALI 57" → Kapalı; DERDEST tek başına → Açık). Tanınmazsa listedeki
+  // durumlardan biri (ör. "Karar") olduğu gibi alınır.
+  const statusRaw = [v.status, v.statusDetail].map((x) => x?.trim()).filter(Boolean).join(" ");
+  const status =
+    caseStatusFrom(statusRaw) ||
+    (v.status?.trim() && matchOption(v.status, s.settings.caseStatuses)) ||
+    "Açık";
+  if (statusRaw && !caseStatusFrom(statusRaw) && !matchOption(statusRaw, s.settings.caseStatuses))
+    warnings.push(`Durum tanınmadı, "Açık" sayıldı: ${statusRaw}`);
+  // Listedeki durumun ek bilgisi (ör. "KAPALI 57") notta kalır
+  const extraStatus = (v.statusDetail?.trim() || v.status?.trim() || "").trim();
+  const keepStatus =
+    extraStatus && norm(extraStatus) !== norm(status) && norm(extraStatus) !== "derdest";
+
+  // Müvekkil: ilk isim; aynı hücredeki diğer isimler nota
+  const names = (v.client ?? "")
+    .split(/\s*[,/;]\s*|\s+-\s+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+  const remark = v.remark?.trim() ?? "";
+  const feeStatus =
+    (v.feeStatus?.trim() && (matchOption(v.feeStatus, s.settings.caseFeeStatuses ?? []) ?? v.feeStatus.trim())) ||
+    feeStatusFrom(remark, s.settings.caseFeeStatuses ?? []);
+
+  const note = [
+    v.note?.trim(),
+    remark && !feeStatusFrom(remark, s.settings.caseFeeStatuses ?? []) && remark,
+    keepStatus && `Listedeki durum: ${extraStatus}`,
+    esas.remark && `Esas no notu: ${esas.remark}`,
+    esas.previous.length && `Önceki esas no: ${esas.previous.join(", ")}`,
+    parted.previous && `Önceki mahkeme: ${prettyCourt(parted.previous)}`,
+    parted.label,
+    names.length > 1 && `Diğer müvekkiller: ${names.slice(1).join(", ")}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return {
+    court,
+    esasNo: esas.main || undefined,
+    type,
+    status,
+    clientName: names[0],
+    feeStatus: feeStatus || undefined,
+    note: note || undefined,
+  };
+}
+
 const cases: ImportSpec = {
   kind: "cases",
-  title: "Dosyalar",
+  title: "Dosyalar (hukuk / ceza / idare)",
   noun: "dosya",
-  description: "Dava ve danışmanlık dosyalarını toplu ekleyin.",
+  description:
+    "Hukuk, ceza ve idare dosya listelerinizi yükleyin. Kayıtlı dosya (mahkeme + esas no) yeniden gelirse değişen bilgiler güncellenir.",
   allowed: (p) => p.can("cases", "create"),
   softDuplicates: false,
+  updatable: true,
   columns: [
-    {
-      key: "no",
-      header: "Dosya no",
-      hint: "Büro dosya numarası; boş bırakılırsa otomatik verilir",
-      example: "2026/150",
-      aliases: ["Büro dosya no", "No"],
-    },
-    {
-      key: "title",
-      header: "Konu",
-      required: true,
-      hint: "Dosya konusu",
-      example: "Alacak davası",
-      width: 26,
-      aliases: ["Dosya konusu", "Dosya adı"],
-    },
-    {
-      key: "client",
-      header: "Müvekkil",
-      required: true,
-      type: "lookup",
-      options: lists.clients,
-      hint: "Kayıtlı müvekkil adı veya TC / vergi no",
-      width: 26,
-    },
-    {
-      key: "type",
-      header: "Dosya türü",
-      type: "enum",
-      options: (c) => c.state.settings.caseTypes,
-      hint: "Ayarlar'daki dosya türlerinden biri (boşsa ilki)",
-      aliases: ["Tür"],
-    },
-    {
-      key: "status",
-      header: "Durum",
-      type: "enum",
-      options: openCaseStatuses,
-      hint: "Açık, Derdest, Karar veya Kanun yolu (boşsa Açık)",
-    },
     {
       key: "court",
       header: "Mahkeme",
       type: "lookup",
       creatable: true,
       options: (c) => c.state.settings.courts,
-      hint: "Listeden seçin veya yazın; yeni mahkeme listeye eklenir",
-      example: "İstanbul 3. Asliye Hukuk",
-      width: 28,
-      aliases: ["Mahkeme / merci", "Merci"],
+      hint: "Listeden seçin veya yazın; yeni mahkeme listeye eklenir. İdare / ceza mahkemesi türü belirler",
+      example: "Ankara 9. Sulh Hukuk Mahkemesi",
+      width: 30,
+      aliases: ["Mahkeme / merci", "Merci", "Birim"],
     },
-    { key: "esasNo", header: "Esas no", hint: "Ör. 2026/412 E." },
+    {
+      key: "esasNo",
+      header: "Esas no",
+      hint: "Ör. 2026/515. Parantezdeki eski numaralar nota yazılır",
+      example: "2026/515 (2023/698)",
+      aliases: ["Esas", "Esas numarası"],
+    },
+    {
+      key: "client",
+      header: "Müvekkil",
+      type: "lookup",
+      creatable: true,
+      options: lists.clients,
+      hint: "Kayıtlı değilse kartı açılır. Birden çok isim varsa ilki müvekkil, diğerleri nota",
+      width: 26,
+      aliases: ["Müvekkil adı", "Taraf"],
+    },
+    {
+      key: "status",
+      header: "Durum",
+      type: "enum",
+      creatable: true,
+      options: (c) => c.state.settings.caseStatuses,
+      hint: "Açık, Kapalı, İstinafta, Temyizde… KAPALI 57, YARGITAYDA gibi yazımlar da tanınır",
+      example: "İstinafta",
+      aliases: ["Dosya durumu"],
+    },
+    {
+      key: "statusDetail",
+      header: "Durum açıklaması",
+      hint: "İkinci durum sütunu (ör. KAPALI 57); durumla birlikte okunur",
+    },
+    {
+      key: "feeStatus",
+      header: "Vekalet ücreti durumu",
+      type: "enum",
+      creatable: true,
+      options: (c) => c.state.settings.caseFeeStatuses ?? [],
+      hint: "Alındı, icrada, istendi, yok, CMK…",
+      aliases: ["Ücret durumu"],
+    },
+    {
+      key: "remark",
+      header: "Açıklama",
+      hint: "VEK. ÜCR. ALINDI gibi yazımlar vekalet ücreti durumuna, diğerleri nota",
+      width: 28,
+      aliases: ["Açıklamalar"],
+    },
+    {
+      key: "type",
+      header: "Dosya türü",
+      type: "enum",
+      options: (c) => c.state.settings.caseTypes,
+      hint: "Boşsa mahkemeden: idare ve vergi → İdare, ceza veya CMK → Ceza, diğerleri → Hukuk",
+      aliases: ["Tür"],
+    },
+    {
+      key: "no",
+      header: "Dosya no",
+      hint: "Büro dosya numarası; boş bırakılırsa otomatik verilir",
+      example: "2026/150",
+      aliases: ["Büro dosya no"],
+    },
+    {
+      key: "title",
+      header: "Konu",
+      hint: "Boşsa mahkeme adı yazılır",
+      example: "Alacak davası",
+      width: 26,
+      aliases: ["Dosya konusu", "Dosya adı"],
+    },
     { key: "opposingParty", header: "Karşı taraf", hint: "Karşı taraf adı", width: 24 },
     {
       key: "responsible",
@@ -619,56 +946,160 @@ const cases: ImportSpec = {
     },
     { key: "note", header: "Not", hint: "Serbest not", width: 30 },
   ],
+  // Büro listelerinde başlıksız sütunlar: sıra no, mahkeme, müvekkil, durum, açıklama
+  guessColumn(samples, used) {
+    const share = (re: RegExp) => samples.filter((x) => re.test(x)).length / samples.length;
+    if (share(/^\d+([.,]0+)?$/) > 0.8) return undefined;
+    if (!used.has("esasNo") && share(/\d{4}\s*\/\s*\d+/) > 0.6) return "esasNo";
+    if (
+      !used.has("court") &&
+      share(/mahkeme|\bmah\b|asliye|sulh|ağır ceza|aile|idare|vergi|icra hukuk|tüketici|ticaret|çocuk|\bahm\b|\bshm\b|\bceza\b|\biş\b/i) > 0.6
+    )
+      return "court";
+    if (share(/kapal|istinaf|yargıtay|temyiz|derdest|açık|birleştirme|bozdu|kaldırıldı/i) > 0.4)
+      return !used.has("status") ? "status" : !used.has("statusDetail") ? "statusDetail" : undefined;
+    if (!used.has("remark") && share(/vek|ücr|cmk|oluştur|dosya/i) > 0.4) return "remark";
+    if (!used.has("client") && share(/^[^\d]{3,}$/) > 0.8) return "client";
+    return undefined;
+  },
   check(v, ctx) {
     const errors: Errors = {};
     const warnings: string[] = [];
-    required(v, "title", errors);
-    if (required(v, "client", errors)) {
-      const r = findClient(ctx.state, v.client);
-      if (r.error) errors.client = r.error;
+    const r = resolveCase(v, ctx, warnings);
+    if (!r.court && !r.esasNo && !v.title?.trim()) errors.court = "Mahkeme ve esas no girin";
+    if (!r.esasNo && !r.clientName && !v.no?.trim())
+      warnings.push("Esas no ve müvekkil yok: yeniden yüklemede tanınamaz, tekrar eklenir");
+    if (!r.clientName) warnings.push("Müvekkil yok");
+    else if (!clientByName(ctx.state, r.clientName)) {
+      if (ctx.permissions.can("clients", "create"))
+        warnings.push(`Yeni müvekkil kartı açılacak: ${r.clientName}`);
+      else errors.client = "Müvekkil kayıtlı değil (müvekkil ekleme yetkiniz yok)";
     }
-    enumOf(v, "type", ctx.state.settings.caseTypes, errors, ctx.state.settings.caseTypes[0]);
-    if (v.status && headerKey(v.status) === headerKey("Kapalı"))
-      errors.status = "Kapalı dosya aktarılamaz";
-    else enumOf(v, "status", openCaseStatuses(ctx), errors, "Açık");
+    if (v.type?.trim()) enumOf(v, "type", ctx.state.settings.caseTypes, errors, r.type);
     date(v, "openingDate", errors);
     money(v, "agreedFee", errors);
     if (v.responsible?.trim()) {
       const u = findUsers(ctx.state, v.responsible);
       if (u.missing.length) errors.responsible = `Kullanıcı bulunamadı: ${u.missing.join(", ")}`;
     }
+    // Kayıtlı dosya: mahkeme + esas no (ya da büro dosya no)
+    const byCourt = findCaseByCourtEsas(ctx.state, r.court ?? "", r.esasNo ?? "", r.clientName);
     const no = norm(v.no).replace(/\s/g, "");
-    const dup = no ? ctx.state.cases.find((c) => norm(c.no).replace(/\s/g, "") === no) : undefined;
-    if (!no) warnings.push("Dosya no otomatik verilecek");
+    const byNo = no ? ctx.state.cases.find((c) => norm(c.no).replace(/\s/g, "") === no) : undefined;
+    const dup = byCourt ?? byNo;
     return {
       errors,
       warnings,
-      existing: dup ? `Bu dosya no zaten kayıtlı: ${dup.no}` : undefined,
-      key: no || undefined,
+      existing: dup ? `Kayıtlı dosya: ${dup.no}${dup.esasNo ? ` · ${dup.esasNo}` : ""}` : undefined,
+      // Esas no yoksa mahkeme + müvekkil (aynı dosya listede iki kez geçmesin)
+      key: r.esasNo
+        ? `${courtKey(r.court)}|${fileNoKey(r.esasNo)}`
+        : no || (r.court && r.clientName ? `${courtKey(r.court)}|${norm(r.clientName)}` : undefined),
     };
   },
   build(rows, ctx) {
-    const auto = nextCaseNumbers(ctx.state.cases, rows.filter((v) => !v.no?.trim()).length);
-    const out: Draft<"cases">[] = rows.map((v) => ({
-      no: v.no?.trim() || auto.shift()!,
-      title: v.title.trim(),
-      clientId: findClient(ctx.state, v.client).client?.id,
-      type:
-        matchOption(v.type ?? "", ctx.state.settings.caseTypes) ?? ctx.state.settings.caseTypes[0],
-      status: (matchOption(v.status ?? "", openCaseStatuses(ctx)) ?? "Açık") as CaseFile["status"],
-      court: opt(v.court),
-      esasNo: opt(v.esasNo),
-      opposingParty: opt(v.opposingParty),
-      responsibleIds: v.responsible?.trim()
-        ? findUsers(ctx.state, v.responsible).ids
-        : ctx.user.role === "Avukat"
-          ? [ctx.user.id]
-          : [],
-      openingDate: parseDateText(v.openingDate ?? "") ?? today(),
-      agreedFee: parseAmount(v.agreedFee ?? "") || undefined,
-      note: opt(v.note),
-    }));
-    return { cases: out };
+    const s = ctx.state;
+    const auto = nextCaseNumbers(s.cases, rows.filter((v) => !v.no?.trim()).length);
+    const newClients = new Map<string, Draft<"clients"> & { id: string }>();
+    const clientId = (name?: string) => {
+      if (!name) return undefined;
+      const found = clientByName(s, name);
+      if (found) return found.id;
+      const k = norm(name);
+      if (!newClients.has(k))
+        newClients.set(k, {
+          id: newId(),
+          name: name.trim(),
+          kind: guessKind(name),
+          email: "",
+          phone: "",
+          status: "Aktif",
+        });
+      return newClients.get(k)!.id;
+    };
+    const out: Draft<"cases">[] = rows.map((v) => {
+      const r = resolveCase(v, ctx);
+      return {
+        no: v.no?.trim() || auto.shift()!,
+        title: v.title?.trim() || r.court || r.esasNo || "Dosya",
+        clientId: clientId(r.clientName),
+        type: r.type,
+        status: r.status as CaseFile["status"],
+        court: r.court,
+        esasNo: r.esasNo,
+        opposingParty: opt(v.opposingParty),
+        responsibleIds: v.responsible?.trim()
+          ? findUsers(s, v.responsible).ids
+          : ctx.user.role === "Avukat"
+            ? [ctx.user.id]
+            : [],
+        openingDate: parseDateText(v.openingDate ?? "") ?? today(),
+        agreedFee: parseAmount(v.agreedFee ?? "") || undefined,
+        feeStatus: r.feeStatus,
+        note: r.note,
+      };
+    });
+    return { cases: out, clients: [...newClients.values()] };
+  },
+  /**
+   * Kayıtlı dosyada Excel'de değişen bilgiler: durum, vekalet ücreti durumu, karşı taraf; not
+   * satırları eklenir (silinmez). Müvekkil yalnızca dosyada yoksa eklenir; büro no ve sorumlu değişmez.
+   */
+  planUpdate(v, ctx) {
+    const r = resolveCase(v, ctx);
+    const target =
+      findCaseByCourtEsas(ctx.state, r.court ?? "", r.esasNo ?? "", r.clientName) ??
+      (v.no?.trim()
+        ? ctx.state.cases.find(
+            (c) => norm(c.no).replace(/\s/g, "") === norm(v.no).replace(/\s/g, ""),
+          )
+        : undefined);
+    if (!target) return null;
+    const built = cases.build([v], ctx);
+    const d = built.cases?.[0];
+    if (!d) return null;
+    const merged: CaseFile = { ...target };
+    const changes: FieldChange[] = [];
+    if ((v.status?.trim() || v.statusDetail?.trim()) && d.status !== target.status) {
+      changes.push({ label: "Durum", from: target.status, to: d.status });
+      merged.status = d.status;
+    }
+    if (d.feeStatus && d.feeStatus !== (target.feeStatus ?? "")) {
+      changes.push({ label: "Vekalet ücreti", from: target.feeStatus || "—", to: d.feeStatus });
+      merged.feeStatus = d.feeStatus;
+    }
+    if (v.type?.trim() && d.type !== target.type) {
+      changes.push({ label: "Tür", from: target.type, to: d.type });
+      merged.type = d.type;
+    }
+    if (d.opposingParty && d.opposingParty !== (target.opposingParty ?? "")) {
+      changes.push({ label: "Karşı taraf", from: target.opposingParty || "—", to: d.opposingParty });
+      merged.opposingParty = d.opposingParty;
+    }
+    const clients = (built.clients ?? []).filter((c) => c.id === d.clientId);
+    if (!target.clientId && d.clientId) {
+      const name =
+        clients[0]?.name ?? ctx.state.clients.find((c) => c.id === d.clientId)?.name ?? "";
+      changes.push({ label: "Müvekkil eklenir", from: "", to: name });
+      merged.clientId = d.clientId;
+    }
+    const note = mergeText(target.note ?? "", d.note ?? "");
+    if (note !== (target.note ?? "")) {
+      changes.push({
+        label: "Not",
+        from: target.note?.trim() ? "mevcut not korunur" : "—",
+        to: target.note?.trim() ? "yeni satırlar eklenir" : note.replace(/\s+/g, " ").slice(0, 60),
+      });
+      merged.note = note;
+    }
+    return {
+      changes,
+      blocked: changes.length > 0 && !ctx.permissions.can("cases", "edit"),
+      batch: {
+        cases: [merged],
+        ...(merged.clientId && !target.clientId && clients.length ? { clients } : {}),
+      },
+    };
   },
 };
 
@@ -947,14 +1378,8 @@ function resolveReminder(
   // Dava dosyası: sistemde varsa bağlanır (UYAP'ta "2026/220", sistemde "2026/220 E." olabilir)
   const caseRaw = firstPart(v.case?.trim() ?? "");
   const court = v.location?.trim() ?? "";
-  const byNo = caseRaw
-    ? s.cases.filter(
-        (c) =>
-          fileNoKey(c.no) === fileNoKey(caseRaw) &&
-          (!court || !c.court || norm(c.court) === norm(court)),
-      )
-    : [];
-  const kase = byNo.length === 1 ? byNo[0] : undefined;
+  // UYAP "Dosya No" mahkemenin esas numarasıdır; kısaltmalı mahkeme adları da eşleşir
+  const kase = caseRaw ? findCaseByCourtEsas(s, court, caseRaw) : undefined;
 
   // Müvekkil: Müvekkil sütunu > taraflardan eşleşen > bağlı dava dosyasının müvekkili
   const parties = parseUyapParties(v.parties ?? "");
@@ -1017,6 +1442,24 @@ function resolveReminder(
   };
 }
 
+/**
+ * Aynı duruşma: aynı gün, aynı mahkeme ve dosya no (saat değişmiş olabilir: UYAP listesi
+ * yeniden yüklenince saati güncellenir).
+ */
+function findSameHearing(state: ErpState, date: string, location?: string, caseNo?: string) {
+  if (!caseNo) return undefined;
+  const ck = courtKey(location);
+  const no = fileNoKey(caseNo);
+  return state.reminders.find(
+    (x) =>
+      x.date === date &&
+      x.status !== "İptal" &&
+      courtKey(x.location) === ck &&
+      (fileNoKey(x.caseNo ?? "") === no ||
+        x.title.split("·").some((part) => fileNoKey(part) === no)),
+  );
+}
+
 const reminders: ImportSpec = {
   kind: "reminders",
   title: "Ajanda (duruşma listesi)",
@@ -1025,6 +1468,7 @@ const reminders: ImportSpec = {
     "UYAP Duruşma Sorgulama çıktısını olduğu gibi yükleyin; taraflardan müvekkilleriniz ve sıfatları bulunur.",
   allowed: (p) => p.can("reminders", "create"),
   softDuplicates: true,
+  updatable: true,
   ignoreHeaders: ["Dosya Görüntüle", "Takvime Ekle", "Sık Kullanılanlar", "E-Duruşma Talebi"],
   columns: [
     {
@@ -1125,20 +1569,18 @@ const reminders: ImportSpec = {
     // Aynı gün ve saatte aynı başlık ya da aynı yer + dosya no: UYAP listesi yeniden yüklenince
     // (arada müvekkil eklenip başlık değişse de) duruşma ikinci kez eklenmez
     const caseNo = firstPart(v.case?.trim() ?? "");
-    const dup = ctx.state.reminders.find(
-      (x) =>
-        x.date === r.date &&
-        (x.time ?? "") === (r.time ?? "") &&
-        x.status !== "İptal" &&
-        (norm(x.title) === norm(r.title) ||
-          (!!caseNo &&
-            norm(x.location) === norm(v.location) &&
-            x.title.split("·").some((part) => fileNoKey(part) === fileNoKey(caseNo)))),
-    );
+    const dup =
+      ctx.state.reminders.find(
+        (x) =>
+          x.date === r.date &&
+          (x.time ?? "") === (r.time ?? "") &&
+          x.status !== "İptal" &&
+          norm(x.title) === norm(r.title),
+      ) ?? findSameHearing(ctx.state, r.date, v.location, caseNo);
     return {
       errors,
       warnings,
-      existing: dup ? "Aynı gün, saat ve başlıkla ajanda kaydı zaten var" : undefined,
+      existing: dup ? "Bu duruşma ajandada kayıtlı" : undefined,
       key: [r.date, r.time ?? "", norm(v.location), caseNo ? norm(caseNo) : norm(r.title)].join("|"),
     };
   },
@@ -1161,6 +1603,55 @@ const reminders: ImportSpec = {
       };
     });
     return { reminders: out };
+  },
+  /**
+   * Kayıtlı duruşmada UYAP'ta değişenler: saat, işlem / başlık, müvekkil ve sıfatı, dosya bağlantısı;
+   * not satırları eklenir. Katılacak avukat, mazeret ve durum (büronun girdiği) değişmez.
+   */
+  planUpdate(v, ctx) {
+    const d = reminders.build([v], ctx).reminders?.[0];
+    if (!d) return null;
+    const caseNo = firstPart(v.case?.trim() ?? "");
+    const target =
+      findSameHearing(ctx.state, d.date, v.location, caseNo) ??
+      ctx.state.reminders.find(
+        (x) =>
+          x.date === d.date &&
+          (x.time ?? "") === (d.time ?? "") &&
+          x.status !== "İptal" &&
+          norm(x.title) === norm(d.title),
+      );
+    if (!target) return null;
+    const merged: Reminder = { ...target };
+    const changes: FieldChange[] = [];
+    if (d.time && d.time !== (target.time ?? "")) {
+      changes.push({ label: "Saat", from: target.time || "—", to: d.time });
+      merged.time = d.time;
+    }
+    if (d.title !== target.title) {
+      changes.push({ label: "Başlık", from: target.title, to: d.title });
+      merged.title = d.title;
+    }
+    if (d.parties && d.parties !== (target.parties ?? "")) {
+      changes.push({ label: "Müvekkil (sıfatı)", from: target.parties || "—", to: d.parties });
+      merged.parties = d.parties;
+    }
+    if (d.caseNo && !target.caseNo) merged.caseNo = d.caseNo;
+    if (d.caseId && !target.caseId) {
+      changes.push({ label: "Dava dosyasına bağlanır", from: "", to: d.caseNo ?? "" });
+      merged.caseId = d.caseId;
+    }
+    if (d.clientId && !target.clientId) merged.clientId = d.clientId;
+    const note = mergeText(target.note ?? "", d.note ?? "");
+    if (note !== (target.note ?? "")) {
+      changes.push({ label: "Not", from: target.note?.trim() ? "korunur" : "—", to: "yeni satırlar eklenir" });
+      merged.note = note;
+    }
+    return {
+      changes,
+      blocked: changes.length > 0 && !ctx.permissions.can("reminders", "edit"),
+      batch: { reminders: [merged] },
+    };
   },
 };
 

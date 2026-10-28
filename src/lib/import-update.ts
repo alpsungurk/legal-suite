@@ -17,9 +17,16 @@ import {
   type ErpState,
 } from "@/lib/erp-types";
 import { fileNoKey, formatDate, formatMoney, round2 } from "@/lib/format";
-import { norm, type ImportContext, type ImportSpec, type RowValues } from "@/lib/import-specs";
+import {
+  mergeText,
+  norm,
+  type FieldChange,
+  type ImportContext,
+  type ImportSpec,
+  type RowValues,
+} from "@/lib/import-specs";
 
-export type FieldChange = { label: string; from: string; to: string };
+export { mergeText, type FieldChange };
 
 export type UpdatePlan = {
   target: EnforcementFile;
@@ -36,17 +43,6 @@ export function findExistingEnforcement(state: ErpState, no: string, office: str
   const key = fileNoKey(no);
   const o = norm(office);
   return state.enforcements.find((e) => fileNoKey(e.no) === key && norm(e.office) === o);
-}
-
-const lineKey = (l: string) => l.replace(/\s+/g, " ").trim().toLocaleLowerCase("tr");
-
-/** Kayıttaki metin korunur; Excel'de olup kayıtta olmayan satırlar sona eklenir */
-export function mergeText(current = "", incoming = ""): string {
-  if (!incoming.trim()) return current;
-  if (!current.trim()) return incoming;
-  const have = new Set(current.split("\n").map(lineKey).filter(Boolean));
-  const add = incoming.split("\n").filter((l) => lineKey(l) && !have.has(lineKey(l)));
-  return add.length ? `${current.trimEnd()}\n${add.join("\n")}` : current;
 }
 
 const short = (s: string, n = 60) => {
@@ -170,6 +166,33 @@ export function withNewCards(state: ErpState, batch: ImportBatch): ErpState {
       ...(batch.debtors ?? []).map((d) => ({ ...d, ...stamp }) as Debtor),
     ],
   };
+}
+
+/**
+ * spec.planUpdate olan türler (dava dosyası, duruşma): yeni satırlar + güncellenecek kayıtlar tek
+ * pakette. Önceki satırlarda açılan müvekkil kartı sonrakilerde yeniden açılmaz.
+ */
+export function buildWithPlannedUpdates(
+  spec: ImportSpec,
+  fresh: RowValues[],
+  updates: RowValues[],
+  ctx: ImportContext,
+): { batch: ImportBatch; updated: number } {
+  const batch: ImportBatch = fresh.length ? spec.build(fresh, ctx) : {};
+  let state = withNewCards(ctx.state, batch);
+  let updated = 0;
+  for (const v of updates) {
+    const plan = spec.planUpdate?.(v, { ...ctx, state });
+    if (!plan?.changes.length || plan.blocked) continue;
+    for (const [key, items] of Object.entries(plan.batch) as Array<[keyof ImportBatch, unknown[]]>)
+      (batch as Record<string, unknown[]>)[key] = [
+        ...(((batch as Record<string, unknown[]>)[key] as unknown[]) ?? []),
+        ...items,
+      ];
+    state = withNewCards(state, plan.batch);
+    updated++;
+  }
+  return { batch, updated };
 }
 
 /**

@@ -158,6 +158,15 @@ export function CaseForm({ open, onOpenChange, record, preset, onSaved }: FormPr
       type: "money",
       hint: "Bilgi amaçlı; tahsilat planını ayrıca oluşturun",
     },
+    {
+      name: "feeStatus",
+      label: "Vekalet ücreti durumu",
+      type: "combobox",
+      options: state.settings.caseFeeStatuses ?? [],
+      creatable: true,
+      allowClear: true,
+      placeholder: "Alındı, icrada, istendi…",
+    },
     { name: "note", label: "Not", type: "textarea" },
   ];
   const initial = {
@@ -194,6 +203,7 @@ export function CaseForm({ open, onOpenChange, record, preset, onSaved }: FormPr
           return false;
         }
         rememberOption("courts", v.court);
+        if (v.feeStatus) rememberOption("caseFeeStatuses", v.feeStatus);
         const prevResp = new Set(record?.responsibleIds ?? []);
         const added = (v.responsibleIds as string[]).filter((id) => !prevResp.has(id));
         const item = save(
@@ -212,6 +222,8 @@ export function CaseForm({ open, onOpenChange, record, preset, onSaved }: FormPr
             openingDate: v.openingDate,
             closingDate: v.status === "Kapalı" ? v.closingDate || today() : undefined,
             agreedFee: Number(v.agreedFee) || undefined,
+            // Hiç girilmemişse gönderilmez; boşaltılırsa "" ile silinir
+            feeStatus: v.feeStatus || record?.feeStatus ? (v.feeStatus ?? "") : undefined,
             note: v.note || undefined,
           },
           added.length

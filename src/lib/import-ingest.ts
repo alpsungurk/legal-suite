@@ -21,7 +21,13 @@ export type FileInfo = {
   dataRows: number;
   missing: string[];
   truncated: boolean;
+  /** Başlığı olmayan, içeriğinden tanınan sütunlar: "F sütunu → Müvekkil" */
+  guessed: string[];
 };
+
+/** 0 → "A", 26 → "AA" */
+const columnLetter = (i: number): string =>
+  (i >= 26 ? columnLetter(Math.floor(i / 26) - 1) : "") + String.fromCharCode(65 + (i % 26));
 
 /* ───────────── Dosyayı satırlara çevirme ───────────── */
 
@@ -87,6 +93,27 @@ export async function ingest(source: File | Workbook, spec: ImportSpec, sheetNam
       unknownCols.push({ index, header: text });
     }
   });
+  // Başlığı boş ama dolu sütunlar içeriklerinden tanınır (spec destekliyorsa)
+  const guessed: string[] = [];
+  if (spec.guessColumn) {
+    const body = sheet.rows.slice(headerRow + 1, headerRow + 201);
+    const width = Math.max(header.length, ...body.map((r) => r?.length ?? 0));
+    const mapped = new Set(mapping.map((m) => m.index));
+    for (let index = 0; index < width; index++) {
+      if (mapped.has(index) || String(header[index] ?? "").trim()) continue;
+      const samples = body
+        .map((r) => cellToText(r?.[index] ?? null, undefined, wb.date1904))
+        .filter(Boolean)
+        .slice(0, 80);
+      if (!samples.length) continue;
+      const key = spec.guessColumn(samples, used);
+      if (!key || used.has(key)) continue;
+      mapping.push({ index, key });
+      used.add(key);
+      const col = spec.columns.find((c) => c.key === key);
+      guessed.push(`${columnLetter(index)} sütunu → ${col?.header ?? key}`);
+    }
+  }
   const missing = spec.columns.filter((c) => c.required && !used.has(c.key)).map((c) => c.header);
   const typeOf = new Map(spec.columns.map((c) => [c.key, c.type]));
   const multiOf = new Set(spec.columns.filter((c) => c.multiline).map((c) => c.key));
@@ -127,6 +154,7 @@ export async function ingest(source: File | Workbook, spec: ImportSpec, sheetNam
     dataRows: data.filter((r) => r?.some((c) => c != null && String(c).trim() !== "")).length,
     missing,
     truncated: rows.length >= MAX_ROWS && remaining,
+    guessed,
   };
   return { rows, info };
 }

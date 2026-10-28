@@ -72,7 +72,12 @@ import {
 import type { Workbook } from "@/lib/excel-read";
 import type { ImportBatch } from "@/lib/erp-store";
 import { isHearingType } from "@/lib/erp-types";
-import { buildWithUpdates, changeText, planEnforcementUpdate } from "@/lib/import-update";
+import {
+  buildWithPlannedUpdates,
+  buildWithUpdates,
+  changeText,
+  planEnforcementUpdate,
+} from "@/lib/import-update";
 
 const PAGE_SIZE = 50;
 
@@ -285,11 +290,13 @@ export function ImportDialog({
         } else seen.set(check.key, r.line);
       }
       const hasErrors = Object.keys(check.errors).length > 0;
-      // İcra: kayıtlı dosya hata değil; Excel'de değişen bilgiyle güncellenir
+      // İcra, dava dosyası, duruşma: kayıtlı kayıt hata değil; Excel'de değişen bilgiyle güncellenir
       if (spec.updatable && check.existing && !hasErrors && !fileDup) {
         let cached = updateCache.get(r.values);
         if (!cached) {
-          const up = planEnforcementUpdate(spec, r.values, ctx);
+          const up = spec.planUpdate
+            ? spec.planUpdate(r.values, ctx)
+            : planEnforcementUpdate(spec, r.values, ctx);
           const list = (up?.changes ?? []).map(changeText);
           cached = up?.blocked ? ["Güncelleme yetkiniz yok", ...list] : list;
           updateCache.set(r.values, cached);
@@ -492,6 +499,10 @@ export function ImportDialog({
       // Yeni mahkeme / icra dairesi / tür değerleri listelere tek ayar yazımıyla eklenir
       const enfs = batch.enforcements ?? [];
       rememberOptions({
+        // Dava dosyası türleri (Hukuk / Ceza / İdare), durumları ve vekalet ücreti durumları
+        caseTypes: (batch.cases ?? []).map((c) => c.type),
+        caseStatuses: (batch.cases ?? []).map((c) => c.status),
+        caseFeeStatuses: (batch.cases ?? []).map((c) => c.feeStatus),
         // UYAP duruşma listesindeki mahkemeler de Ayarlar → Mahkemeler listesine eklenir
         courts: [
           ...(batch.cases ?? []).map((c) => c.court),
@@ -534,9 +545,11 @@ export function ImportDialog({
     const ready = checked.filter((r) => r.status === "ok").map((r) => r.values);
     const updates = checked.filter((r) => r.status === "update").map((r) => r.values);
     if (!ready.length && !updates.length) return;
-    const batch = spec.updatable
-      ? buildWithUpdates(spec, ready, updates, ctx).batch
-      : spec.build(ready, ctx);
+    const batch = spec.planUpdate
+      ? buildWithPlannedUpdates(spec, ready, updates, ctx).batch
+      : spec.updatable
+        ? buildWithUpdates(spec, ready, updates, ctx).batch
+        : spec.build(ready, ctx);
     const company = isIcra ? companyClient.trim() : "";
     await runImport(
       batch,
@@ -837,6 +850,14 @@ export function ImportDialog({
                   userName={currentUser.name}
                   onApply={applyToVisible}
                 />
+                {!!info?.guessed?.length && (
+                  <div className="space-y-1 rounded-lg border border-blue-200/80 bg-blue-50/70 px-3 py-2 text-xs text-blue-900 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-200">
+                    <p>
+                      Başlığı olmayan sütunlar içeriğinden tanındı: {info.guessed.join(", ")}.
+                      Yanlışsa Excel'de sütuna başlık yazıp yeniden yükleyin.
+                    </p>
+                  </div>
+                )}
                 {(info?.missing.length || info?.unknown.length || info?.truncated) && (
                   <div className="space-y-1 rounded-lg border border-amber-200/80 bg-amber-50/70 px-3 py-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
                     {!!info?.missing.length && (

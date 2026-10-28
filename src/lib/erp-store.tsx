@@ -1099,24 +1099,48 @@ export function ErpProvider({ children }: { children: ReactNode }) {
         if (!drafts.length) continue;
         prepared[key] = drafts.map((d) => {
           const id = d.id ?? newId();
-          return {
+          const item = {
             ...d,
             id,
             firmId,
             createdAt: now,
             updatedAt: now,
           } as Collections[typeof key];
+          // Kapalı dosyada kapanış tarihi boşsa bugün: veritabanındaki tetikleyiciyle aynı
+          if (key === "cases") {
+            const kase = item as Collections["cases"];
+            if (kase.status === "Kapalı" && !kase.closingDate) kase.closingDate = today();
+          }
+          return item;
         }) as never;
         total += drafts.length;
       }
       onProgress?.(0, total);
       if (!total) return 0;
+      // Tek RPC: JSON paket. Ardından bütün tabloları yeniden çekmek yok; ekran paketten güncellenir.
       const { total: saved } = await persistImportBatch(prepared);
       onProgress?.(saved, saved);
-      await reloadFromServer();
+      setState((prev) => {
+        const next = { ...prev };
+        for (const key of keys) {
+          const items = prepared[key];
+          if (!items?.length) continue;
+          const list = [...(prev[key] as { id: string; createdAt?: string }[])];
+          const index = new Map(list.map((row, i) => [row.id, i]));
+          for (const item of items as { id: string; createdAt?: string }[]) {
+            const at = index.get(item.id);
+            if (at == null) {
+              index.set(item.id, list.length);
+              list.push(item);
+            } else list[at] = { ...list[at], ...item, createdAt: list[at].createdAt ?? item.createdAt };
+          }
+          (next as Record<string, unknown>)[key] = list;
+        }
+        return next;
+      });
       return saved;
     },
-    [reloadFromServer],
+    [],
   );
 
   const replaceState = useCallback((_next: ErpState) => {

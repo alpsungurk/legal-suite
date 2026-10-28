@@ -17,8 +17,10 @@ import {
   Receipt,
   Scale,
   Timer,
+  ScrollText,
   Search,
   Settings,
+  Shield,
   UserX,
   Users,
   Wallet,
@@ -55,11 +57,11 @@ import {
 } from "@/lib/finance";
 import { listIcon } from "@/lib/list-icons";
 import { today } from "@/lib/format";
-import type { Permissions, User } from "@/lib/erp-types";
+import { CASE_LISTS, type Permissions, type User } from "@/lib/erp-types";
 import { cn } from "@/lib/utils";
 
 type Badge = { badge?: number; badgeTone?: "red" | "blue" };
-type Leaf = { title: string; url: string; icon: LucideIcon } & Badge;
+type Leaf = { title: string; url: string; search?: Record<string, string>; icon: LucideIcon } & Badge;
 /** Ayarlar → Şirket listeleri: kendi içinde açılır, altında arama kutusu var */
 type CompanyBranch = { id: string; title: string; icon: LucideIcon; lists: Leaf[] };
 type Branch = {
@@ -76,6 +78,17 @@ const isCompanyBranch = (c: Leaf | CompanyBranch): c is CompanyBranch => "lists"
 
 const leavesOf = (i: Item): Leaf[] =>
   isBranch(i) ? i.children.flatMap((c) => (isCompanyBranch(c) ? c.lists : [c])) : [i];
+
+/** Aktif madde: aynı yoldaki ?tur= listeleri birbirinden ayrılır */
+const leafKey = (l: Pick<Leaf, "url" | "search">) => {
+  if (!l.search) return l.url;
+  const q = Object.entries(l.search)
+    .filter(([, v]) => v)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${k}=${v}`)
+    .join("&");
+  return q ? `${l.url}?${q}` : l.url;
+};
 
 const badgeClass = (tone?: "red" | "blue") =>
   tone === "red"
@@ -101,6 +114,7 @@ export function AppSidebar() {
   const { state: sidebarState, setOpenMobile, isMobile } = useSidebar();
   const collapsed = sidebarState === "collapsed";
   const pathname = useRouterState({ select: (r) => r.location.pathname });
+  const searchStr = useRouterState({ select: (r) => r.location.searchStr });
   const navigate = useNavigate();
   const { state, currentUser, permissions } = useErp();
 
@@ -109,34 +123,48 @@ export function AppSidebar() {
     [state, currentUser, permissions],
   );
 
-  // En uzun eşleşen adres aktif sayılır: /icra/borclu açıkken "Alacaklı olduğumuz" (/icra) yanmaz
-  const activeUrl = useMemo(() => {
-    const urls = groups.flatMap((g) => g.items.flatMap(leavesOf)).map((l) => l.url);
-    return urls
-      .filter((u) =>
-        u === "/" ? pathname === "/" : pathname === u || pathname.startsWith(u + "/"),
-      )
-      .sort((a, b) => b.length - a.length)[0];
-  }, [groups, pathname]);
-  const isActive = (url: string) => url === activeUrl;
+  // Sorgu parametresi olan madde (Hukuk / Ceza / İdare) düz /dosyalar linkinden önceliklidir.
+  // Uzun adres kazanır: /icra/borclu açıkken "Alacaklı olduğumuz" (/icra) yanmaz.
+  const activeKey = useMemo(() => {
+    const params = new URLSearchParams(searchStr.replace(/^\?/, ""));
+    const leaves = groups.flatMap((g) => g.items.flatMap(leavesOf));
+    let best: { key: string; score: number } | undefined;
+    for (const l of leaves) {
+      const exact = l.url === "/" ? pathname === "/" : pathname === l.url;
+      const nested = l.url !== "/" && pathname.startsWith(`${l.url}/`);
+      if (!exact && !nested) continue;
+      if (l.search) {
+        if (!exact) continue;
+        const ok = Object.entries(l.search).every(([k, v]) => params.get(k) === v);
+        if (!ok) continue;
+        const score = 2_000_000 + l.url.length;
+        if (!best || score > best.score) best = { key: leafKey(l), score };
+        continue;
+      }
+      const score = (exact ? 1_000_000 : 0) + l.url.length;
+      if (!best || score > best.score) best = { key: l.url, score };
+    }
+    return best?.key;
+  }, [groups, pathname, searchStr]);
+  const isActive = (url: string) => url === activeKey;
 
   // Açık / kapalı accordion durumu; sayfa bir bölümün içindeyse o bölüm kendiliğinden açılır
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [query, setQuery] = useState("");
   useEffect(() => {
-    if (!activeUrl) return;
+    if (!activeKey) return;
     const next: Record<string, boolean> = {};
     for (const g of groups)
       for (const item of g.items) {
         if (!isBranch(item)) continue;
-        if (leavesOf(item).some((l) => l.url === activeUrl)) {
+        if (leavesOf(item).some((l) => leafKey(l) === activeKey)) {
           next[item.id] = true;
           for (const c of item.children)
-            if (isCompanyBranch(c) && c.lists.some((l) => l.url === activeUrl)) next[c.id] = true;
+            if (isCompanyBranch(c) && c.lists.some((l) => leafKey(l) === activeKey)) next[c.id] = true;
         }
       }
     if (Object.keys(next).length) setOpen((o) => ({ ...o, ...next }));
-  }, [activeUrl, groups]);
+  }, [activeKey, groups]);
   const toggle = (id: string) => setOpen((o) => ({ ...o, [id]: !o[id] }));
   const closeMobile = () => {
     if (isMobile) setOpenMobile(false);
@@ -195,9 +223,9 @@ export function AppSidebar() {
                     );
                   }
 
-                  const inside = leavesOf(item).some((l) => l.url === activeUrl);
+                  const inside = leavesOf(item).some((l) => leafKey(l) === activeKey);
                   const isOpen = !!open[item.id];
-                  const firstUrl = leavesOf(item)[0]?.url ?? "/";
+                  const first = leavesOf(item)[0];
                   return (
                     <SidebarMenuItem key={item.id}>
                       <Collapsible open={isOpen && !collapsed} onOpenChange={() => toggle(item.id)}>
@@ -205,9 +233,20 @@ export function AppSidebar() {
                           isActive={collapsed && inside}
                           tooltip={item.title}
                           aria-expanded={isOpen}
-                          onClick={() =>
-                            collapsed ? void navigate({ to: firstUrl }) : toggle(item.id)
-                          }
+                          onClick={() => {
+                            if (!collapsed) {
+                              toggle(item.id);
+                              return;
+                            }
+                            if (first?.url === "/dosyalar") {
+                              void navigate({
+                                to: "/dosyalar",
+                                search: first.search?.tur ? { tur: first.search.tur } : {},
+                              });
+                              return;
+                            }
+                            void navigate({ to: first?.url ?? "/" });
+                          }}
                           className={cn(
                             buttonClass,
                             !collapsed && inside && "text-sidebar-foreground",
@@ -242,21 +281,37 @@ export function AppSidebar() {
                                   onNavigate={closeMobile}
                                 />
                               ) : (
-                                <SidebarMenuSubItem key={c.url}>
+                                <SidebarMenuSubItem key={leafKey(c)}>
                                   <SidebarMenuSubButton
                                     asChild
-                                    isActive={isActive(c.url)}
+                                    isActive={isActive(leafKey(c))}
                                     className={subButtonClass}
                                   >
-                                    <Link to={c.url} onClick={closeMobile}>
-                                      <c.icon />
-                                      <span>{c.title}</span>
-                                      {!!c.badge && (
-                                        <span className={cn("ml-auto", badgeClass(c.badgeTone))}>
-                                          {c.badge}
-                                        </span>
-                                      )}
-                                    </Link>
+                                    {c.url === "/dosyalar" ? (
+                                      <Link
+                                        to="/dosyalar"
+                                        search={c.search?.tur ? { tur: c.search.tur } : {}}
+                                        onClick={closeMobile}
+                                      >
+                                        <c.icon />
+                                        <span>{c.title}</span>
+                                        {!!c.badge && (
+                                          <span className={cn("ml-auto", badgeClass(c.badgeTone))}>
+                                            {c.badge}
+                                          </span>
+                                        )}
+                                      </Link>
+                                    ) : (
+                                      <Link to={c.url} onClick={closeMobile}>
+                                        <c.icon />
+                                        <span>{c.title}</span>
+                                        {!!c.badge && (
+                                          <span className={cn("ml-auto", badgeClass(c.badgeTone))}>
+                                            {c.badge}
+                                          </span>
+                                        )}
+                                      </Link>
+                                    )}
                                   </SidebarMenuSubButton>
                                 </SidebarMenuSubItem>
                               ),
@@ -456,7 +511,24 @@ function buildGroups(
       label: "Büro",
       items: [
         ...(p.can("clients") ? [{ title: "Müvekkiller", url: "/muvekkiller", icon: Users }] : []),
-        ...(p.can("cases") ? [{ title: "Dosyalar", url: "/dosyalar", icon: FolderKanban }] : []),
+        ...(p.can("cases")
+          ? [
+              {
+                id: "dosyalar",
+                title: "Dosyalar",
+                icon: FolderKanban,
+                children: [
+                  { title: "Tüm dosyalar", url: "/dosyalar", icon: FolderOpen },
+                  ...CASE_LISTS.map((l) => ({
+                    title: l.label,
+                    url: "/dosyalar",
+                    search: { tur: l.tur },
+                    icon: l.tur === "Hukuk" ? Scale : l.tur === "Ceza" ? Shield : ScrollText,
+                  })),
+                ],
+              },
+            ]
+          : []),
         ...(p.can("documents") ? [{ title: "Belgeler", url: "/belgeler", icon: FolderOpen }] : []),
       ],
     },

@@ -163,6 +163,8 @@ export function settingsFromRow(r: Record<string, unknown> | null): Settings {
       (r.enforcement_close_reasons as string[]) ?? base.enforcementCloseReasons,
     claimTypes: (r.claim_types as string[]) ?? base.claimTypes,
     bankAnswerTypes: (r.bank_answer_types as string[]) ?? base.bankAnswerTypes,
+    hearingAttendance: (r.hearing_attendance as string[]) ?? base.hearingAttendance,
+    caseFeeStatuses: (r.case_fee_statuses as string[]) ?? base.caseFeeStatuses,
     procedures: proceduresFromJson(r.procedures) ?? base.procedures,
     bankResponseDays: num(r.bank_response_days, base.bankResponseDays),
     salaryResponseDays: num(r.salary_response_days, base.salaryResponseDays),
@@ -223,6 +225,8 @@ export function settingsToRow(s: Partial<Settings>) {
   if (s.enforcementCloseReasons != null) row.enforcement_close_reasons = s.enforcementCloseReasons;
   if (s.claimTypes != null) row.claim_types = s.claimTypes;
   if (s.bankAnswerTypes != null) row.bank_answer_types = s.bankAnswerTypes;
+  if (s.hearingAttendance != null) row.hearing_attendance = s.hearingAttendance;
+  if (s.caseFeeStatuses != null) row.case_fee_statuses = s.caseFeeStatuses;
   if (s.procedures != null) row.procedures = s.procedures;
   if (s.bankResponseDays != null) row.bank_response_days = s.bankResponseDays;
   if (s.salaryResponseDays != null) row.salary_response_days = s.salaryResponseDays;
@@ -310,6 +314,7 @@ export function caseFromRow(r: Record<string, unknown>): CaseFile {
     openingDate: dateOnly(r.opening_date as string),
     closingDate: optStr(r.closing_date) ? dateOnly(r.closing_date as string) : undefined,
     agreedFee: optNum(r.agreed_fee),
+    feeStatus: optStr(r.fee_status),
     note: optStr(r.note),
   };
 }
@@ -328,6 +333,7 @@ export function caseToRow(c: Partial<CaseFile>) {
   if (c.openingDate != null) row.opening_date = c.openingDate;
   if (c.closingDate !== undefined) row.closing_date = c.closingDate || null;
   if (c.agreedFee !== undefined) row.agreed_fee = c.agreedFee ?? null;
+  if (c.feeStatus !== undefined) row.fee_status = c.feeStatus || null;
   if (c.note !== undefined) row.note = c.note || null;
   return row;
 }
