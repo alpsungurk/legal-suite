@@ -20,6 +20,7 @@ import { formatDate, relativeDue } from "@/lib/format";
 import { Money, ProgressBar, TextLink } from "@/components/app/bits";
 import { StatusBadge } from "@/components/app/StatusBadge";
 import { useQuick } from "@/components/forms/quick";
+import { AttachmentList } from "@/components/app/files";
 import { useConfirm } from "@/components/app/confirm";
 import { cn } from "@/lib/utils";
 
@@ -201,10 +202,26 @@ export function PlanSheet({
                   );
                 })}
               </ol>
+              {plan.agreement && (
+                <div className="mt-4 rounded-xl bg-secondary/40 p-3">
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Anlaşma bilgisi
+                  </p>
+                  <p className="whitespace-pre-line text-sm">{plan.agreement}</p>
+                </div>
+              )}
               {plan.note && (
                 <p className="mt-4 rounded-xl bg-secondary/40 p-3 text-sm text-muted-foreground">
                   {plan.note}
                 </p>
+              )}
+              {!!plan.files?.length && (
+                <div className="mt-4">
+                  <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Belgeler
+                  </p>
+                  <AttachmentList files={plan.files} readOnly />
+                </div>
               )}
             </div>
           </>

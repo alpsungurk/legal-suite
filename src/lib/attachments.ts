@@ -24,7 +24,7 @@ async function currentOrgId(): Promise<string> {
 
 export async function saveAttachment(
   file: Blob & { name?: string },
-  opts?: { entity?: "expense" | "document" | "logo"; entityId?: string },
+  opts?: { entity?: "expense" | "document" | "logo" | "plan"; entityId?: string },
 ): Promise<AttachmentRef> {
   if (file.size > MAX_ATTACHMENT_BYTES) {
     throw new Error("Dosya 15 MB'tan büyük olamaz");
@@ -62,7 +62,12 @@ export async function saveAttachment(
 export async function putAttachmentBlob(
   id: string,
   blob: Blob,
-  meta?: { name?: string; mime?: string; entity?: "expense" | "document" | "logo"; entityId?: string },
+  meta?: {
+    name?: string;
+    mime?: string;
+    entity?: "expense" | "document" | "logo" | "plan";
+    entityId?: string;
+  },
 ) {
   const orgId = await currentOrgId();
   const path = `${orgId}/${id}`;

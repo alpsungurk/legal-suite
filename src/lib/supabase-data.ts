@@ -205,7 +205,12 @@ export async function loadFullState(): Promise<LoadResult | null> {
   }));
   const attById = new Map(attachments.map((a) => [a.ref.id, a.ref]));
   const expenseReceipts = new Map<string, (typeof attachments)[0]["ref"][]>();
+  const planFiles = new Map<string, (typeof attachments)[0]["ref"][]>();
   for (const a of attachments) {
+    if (a.row.entity === "plan" && a.row.entity_id) {
+      const pid = String(a.row.entity_id);
+      planFiles.set(pid, [...(planFiles.get(pid) ?? []), a.ref]);
+    }
     if (a.row.entity === "expense" && a.row.entity_id) {
       const eid = String(a.row.entity_id);
       const list = expenseReceipts.get(eid) ?? [];
@@ -299,7 +304,7 @@ export async function loadFullState(): Promise<LoadResult | null> {
     }),
     plans: (plansRes.data ?? []).map((r) => {
       const row = r as Record<string, unknown>;
-      return planFromRow(row, instByPlan.get(String(row.id)) ?? []);
+      return planFromRow(row, instByPlan.get(String(row.id)) ?? [], planFiles.get(String(row.id)));
     }),
     reminders: (remindersRes.data ?? []).map((r) => reminderFromRow(r as Record<string, unknown>)),
     documents: (docsRes.data ?? [])
@@ -408,6 +413,8 @@ async function syncFeePlan(plan: FeePlan) {
   const row = { id: plan.id, ...planToRow(plan) };
   const { error } = await supabase.from("fee_plans").upsert(row);
   if (error) throw new Error(errMsg(error));
+  // Vekalet planı belgeleri (sözleşme, vekaletname…); dosyalar yüklenirken kopan bağlar temizlenir
+  if (plan.files) await syncPlanFiles(plan.id, plan.files);
 
   const { data: existing } = await supabase
     .from("installments")
@@ -461,6 +468,25 @@ async function syncFeePlan(plan: FeePlan) {
     const { error: pErr } = await supabase.from("installment_payments").upsert(pays);
     if (pErr) throw new Error(errMsg(pErr));
   }
+}
+
+async function syncPlanFiles(planId: string, files: { id: string }[]) {
+  const ids = files.map((f) => f.id);
+  if (ids.length) {
+    const { error } = await supabase
+      .from("attachments")
+      .update({ entity: "plan", entity_id: planId })
+      .in("id", ids);
+    if (error) throw new Error(errMsg(error));
+  }
+  const { data: linked } = await supabase
+    .from("attachments")
+    .select("id")
+    .eq("entity", "plan")
+    .eq("entity_id", planId);
+  const keep = new Set(ids);
+  const orphan = (linked ?? []).map((r) => r.id as string).filter((id) => !keep.has(id));
+  if (orphan.length) await supabase.from("attachments").delete().in("id", orphan);
 }
 
 async function syncExpenseReceipts(expenseId: string, receipts: { id: string }[]) {

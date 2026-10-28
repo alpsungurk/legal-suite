@@ -1062,6 +1062,38 @@ await setAs(S, { "clients.view": true, "clients.delete": true, "fees.view": true
 ok("vekalet izni: vekalet silme izniyle çöpe atabilir", (await asUser(S, async () => (await one(`select public.trash_delete('clients', array[$1]::uuid[]) n`, [vkCli2])).n)) === 1);
 await setAs(S, {});
 
+// ── Vekalet planı belgeleri ve anlaşma bilgisi
+let vbErr = null;
+try { const sql = readFileSync(fileURLToPath(new URL("../migrations/20261029170000_vekalet_belgeler.sql", import.meta.url)), "utf8"); await db.exec(sql); await db.exec(sql); } catch (e) { vbErr = e; }
+ok("vekalet belgeleri migration'ı çalıştı (iki kez)", !vbErr, vbErr ? vbErr.message : "");
+await asUser(A, () => q(`update public.fee_plans set agreement = 'Sözleşme 01.01.2026 · %20 oran' where id=$1`, [vkPlan]));
+const vbAtt = await asUser(A, async () => (await one(`insert into public.attachments (name, mime, size, storage_path, entity, entity_id) values ('sözleşme.pdf','application/pdf',1000,'${orgA}/vb1','plan',$1) returning id`, [vkPlan])).id);
+await setAs(S, { "documents.view": true, "expenses.view": true });
+ok("vekalet belgesi: documents / expenses görme izni olan avukat plan dosyasını göremez", (await asUser(S, () => q(`select 1 from public.attachments where id=$1`, [vbAtt]))).length === 0);
+await setAs(S, { "vekalet.view": true });
+ok("vekalet belgesi: vekalet görme izni olan görür", (await asUser(S, () => q(`select 1 from public.attachments where id=$1`, [vbAtt]))).length === 1);
+await setAs(S, { "vekalet.view": true, "vekalet.create": true });
+ok("vekalet belgesi: vekalet ekleme izni olan dosya yükleyebilir (documents izni olmadan)",
+  (await asUser(S, () => q(`insert into public.attachments (name, mime, size, storage_path, entity, entity_id) values ('vekaletname.pdf','application/pdf',500,'${orgA}/vb2','plan',$1) returning id`, [vkPlan]))).length === 1);
+await setAs(S, {});
+// Çöp kutusuna atılırken dosya korunur, kalıcı silinince temizlenir
+const vbCli = await ins(`insert into public.clients (name) values ('Belgeli Vekalet')`);
+const vbPlan = await ins(`insert into public.fee_plans (title, client_id, total, admin_only) values ('Belgeli',$1,100,true)`, [vbCli]);
+const vbAtt2 = await asUser(A, async () => (await one(`insert into public.attachments (name, mime, size, storage_path, entity, entity_id) values ('s.pdf','application/pdf',10,'${orgA}/vb3','plan',$1) returning id`, [vbPlan])).id);
+await asUser(A, () => q(`select public.trash_delete('fee_plans', array[$1]::uuid[])`, [vbPlan]));
+ok("vekalet belgesi: plan çöpe atılınca dosya korunur", (await one(`select count(*)::int c from public.attachments where id=$1`, [vbAtt2])).c === 1);
+const vbTrash = (await one(`select id from public.trash where entity='fee_plans' and label='Belgeli'`)).id;
+await asUser(A, () => q(`select public.trash_restore($1)`, [vbTrash]));
+ok("vekalet belgesi: geri yüklenince plan ve dosyası yerinde", (await one(`select count(*)::int c from public.fee_plans where id=$1`, [vbPlan])).c === 1 && (await one(`select count(*)::int c from public.attachments where id=$1`, [vbAtt2])).c === 1);
+await asUser(A, () => q(`select public.trash_delete('fee_plans', array[$1]::uuid[])`, [vbPlan]));
+const vbTrash2 = (await one(`select id from public.trash where entity='fee_plans' and label='Belgeli'`)).id;
+await asUser(A, () => q(`select public.trash_purge($1)`, [vbTrash2]));
+ok("vekalet belgesi: kalıcı silinince dosya da silinir", (await one(`select count(*)::int c from public.attachments where id=$1`, [vbAtt2])).c === 0);
+const vbPlan2 = await ins(`insert into public.fee_plans (title, client_id, total, admin_only) values ('Doğrudan silinecek',$1,100,true)`, [vbCli]);
+const vbAtt3 = await asUser(A, async () => (await one(`insert into public.attachments (name, mime, size, storage_path, entity, entity_id) values ('d.pdf','application/pdf',10,'${orgA}/vb4','plan',$1) returning id`, [vbPlan2])).id);
+await asUser(A, () => q(`delete from public.fee_plans where id=$1`, [vbPlan2]));
+ok("vekalet belgesi: plan doğrudan silinirse dosyası da silinir", (await one(`select count(*)::int c from public.attachments where id=$1`, [vbAtt3])).c === 0);
+
 console.log(R.join("\n"));
 console.log(`\nPASS: ${R.filter((x) => x.startsWith("PASS")).length}  FAIL: ${R.filter((x) => x.startsWith("FAIL")).length}`);
 process.exit(R.some((x) => x.startsWith("FAIL")) ? 1 : 0);

@@ -9,6 +9,7 @@ function collectAttachmentRefs(state: ErpState): AttachmentRef[] {
   const refs: AttachmentRef[] = [];
   for (const e of state.expenses) refs.push(...e.receipts);
   for (const d of state.documents) refs.push(d.attachment);
+  for (const p of state.plans) refs.push(...(p.files ?? []));
   if (state.settings.firm.logo) refs.push(state.settings.firm.logo);
   return refs;
 }

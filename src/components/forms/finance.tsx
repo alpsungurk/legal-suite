@@ -378,11 +378,18 @@ export function PlanForm({ open, onOpenChange, record, preset, onSaved }: FormPr
       visible: (v) => v.mode === "installment",
       onChange: regenOn("period"),
     },
+    {
+      name: "agreement",
+      label: "Anlaşma bilgisi",
+      type: "textarea",
+      placeholder: "Sözleşme tarihi, oran, ödeme koşulları…",
+      visible: () => Boolean(record?.adminOnly ?? preset?.adminOnly),
+    },
     { name: "note", label: "Not", type: "textarea" },
   ];
 
   const initialRows: Row[] = record?.installments.map((i) => ({ ...i })) ?? [];
-  // Vekalet bölümünden açılan plan yalnızca yöneticiye görünür
+  // Vekalet bölümünden açılan plan yalnızca vekalet izni olanlara görünür
   const adminOnly = record?.adminOnly ?? Boolean(preset?.adminOnly);
   const base: FormValues = {
     kind: o.feeKinds.includes("Vekalet ücreti") ? "Vekalet ücreti" : o.feeKinds[0],
@@ -488,6 +495,8 @@ export function PlanForm({ open, onOpenChange, record, preset, onSaved }: FormPr
           cancelled: record?.cancelled ?? false,
           note: v.note || undefined,
           adminOnly,
+          // Anlaşma bilgisi ve belgeler yalnızca vekalet planlarında
+          ...(adminOnly ? { agreement: v.agreement || undefined, files: v.files ?? [] } : {}),
         });
         toast.success(editing ? "Plan güncellendi" : "Tahsilat planı oluşturuldu");
         onSaved?.(item);
@@ -643,6 +652,12 @@ export function PlanForm({ open, onOpenChange, record, preset, onSaved }: FormPr
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+            {adminOnly && (
+              <div>
+                <p className="mb-2 text-[14px] font-medium">Belgeler (sözleşme, vekaletname…)</p>
+                <AttachmentList files={v.files ?? []} onChange={(files) => set({ files })} />
               </div>
             )}
           </div>

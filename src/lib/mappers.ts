@@ -777,7 +777,11 @@ export function installmentFromRow(
   };
 }
 
-export function planFromRow(r: Record<string, unknown>, installments: Installment[] = []): FeePlan {
+export function planFromRow(
+  r: Record<string, unknown>,
+  installments: Installment[] = [],
+  files: AttachmentRef[] = [],
+): FeePlan {
   return {
     id: String(r.id),
     firmId: String(r.org_id),
@@ -793,6 +797,8 @@ export function planFromRow(r: Record<string, unknown>, installments: Installmen
     cancelled: Boolean(r.cancelled),
     note: optStr(r.note),
     adminOnly: Boolean(r.admin_only),
+    agreement: optStr(r.agreement),
+    files,
     installments,
   };
 }
@@ -809,6 +815,7 @@ export function planToRow(p: Partial<FeePlan>) {
   if (p.cancelled != null) row.cancelled = p.cancelled;
   if (p.note !== undefined) row.note = p.note || null;
   if (p.adminOnly != null) row.admin_only = p.adminOnly;
+  if (p.agreement !== undefined) row.agreement = p.agreement || null;
   return row;
 }
 
