@@ -42,6 +42,7 @@ import {
   ReminderTable,
 } from "@/components/lists/tables";
 import { PlanSheet } from "@/components/lists/PlanSheet";
+import { VekaletCard } from "@/components/fees/VekaletCard";
 import { EmptyState } from "@/components/EmptyState";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -92,7 +93,11 @@ function Page() {
       (e.clientId === client.id || (e.caseId && caseIds.has(e.caseId))) &&
       (permissions.can("expenses") || e.createdBy === currentUser.id),
   );
-  const plans = permissions.can("fees") ? state.plans.filter((p) => p.clientId === client.id) : [];
+  const plans = permissions.can("fees")
+    ? state.plans.filter((p) => p.clientId === client.id && !p.adminOnly)
+    : [];
+  // Vekalet planları (yalnızca izinlilere görünür) ayrı kartta
+  const vekaletPlans = state.plans.filter((p) => p.clientId === client.id && p.adminOnly);
   const docs = state.documents.filter(
     (d) => d.clientId === client.id || (d.caseId && caseIds.has(d.caseId)),
   );
@@ -281,8 +286,11 @@ function Page() {
             <TabsTrigger value="genel">Genel</TabsTrigger>
             <TabsTrigger value="dosyalar">Dosyalar ({cases.length})</TabsTrigger>
             <TabsTrigger value="masraflar">Masraflar ({expenses.length})</TabsTrigger>
-            {permissions.can("fees") && (
-              <TabsTrigger value="tahsilatlar">Tahsilatlar ({plans.length})</TabsTrigger>
+            {(permissions.can("fees") || permissions.can("vekalet")) && (
+              <TabsTrigger value="tahsilatlar">
+                Tahsilatlar ({plans.length + (permissions.can("vekalet") ? vekaletPlans.length : 0)}
+                )
+              </TabsTrigger>
             )}
             {permissions.can("ledger") && <TabsTrigger value="ekstre">Cari ekstre</TabsTrigger>}
             <TabsTrigger value="belgeler">Belgeler ({docs.length})</TabsTrigger>
@@ -373,8 +381,15 @@ function Page() {
             exportName={`${client.name} masraflar`}
           />
         </TabsContent>
-        <TabsContent value="tahsilatlar" className="mt-4">
-          <PlanTable rows={plans} hide={{ client: true }} onOpen={(p) => setPlanId(p.id)} />
+        <TabsContent value="tahsilatlar" className="mt-4 space-y-4">
+          <VekaletCard
+            plans={vekaletPlans}
+            preset={{ clientId: client.id }}
+            onOpenPlan={setPlanId}
+          />
+          {permissions.can("fees") && (
+            <PlanTable rows={plans} hide={{ client: true }} onOpen={(p) => setPlanId(p.id)} />
+          )}
         </TabsContent>
         <TabsContent value="ekstre" className="mt-4 space-y-3">
           <div className="flex flex-wrap items-center gap-2">

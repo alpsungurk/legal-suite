@@ -14,6 +14,7 @@ import {
   Archive,
   ArchiveRestore,
   Trash2,
+  Lock,
   Clock,
   CircleDot,
 } from "lucide-react";
@@ -46,6 +47,7 @@ import { useQuick } from "@/components/forms/quick";
 import { casePurgeDate, useCloseCase, usePurgeCase } from "@/components/forms/close-case";
 import { DocumentTable, ExpenseTable, PlanTable, ReminderTable } from "@/components/lists/tables";
 import { PlanSheet } from "@/components/lists/PlanSheet";
+import { VekaletCard } from "@/components/fees/VekaletCard";
 import { EmptyState } from "@/components/EmptyState";
 import { cn } from "@/lib/utils";
 
@@ -103,7 +105,9 @@ function Page() {
   const chargedShown = expenses
     .filter((e) => e.chargeTo === "Müvekkil" && e.paidBy === "Büro")
     .reduce((t, e) => t + e.amount, 0);
-  const plans = state.plans.filter((p) => p.caseId === c.id);
+  // Vekalet planları (yalnızca izinlilere görünür) ayrı kartta; Tahsilatlar sekmesine girmez
+  const plans = state.plans.filter((p) => p.caseId === c.id && !p.adminOnly);
+  const vekaletPlans = state.plans.filter((p) => p.caseId === c.id && p.adminOnly);
   const reminders = state.reminders.filter((r) => r.caseId === c.id);
   const docs = state.documents.filter((d) => d.caseId === c.id);
   const enfs = state.enforcements.filter((e) => e.caseId === c.id);
@@ -183,12 +187,13 @@ function Page() {
           <>
             <StatusBadge status={c.status} />
             <StatusBadge status={c.type} tone="slate" dot={false} />
-            {c.status === "Kapalı" && casePurgeDate(c, state.settings.closedCaseRetentionMonths) && (
-              <span className="text-sm font-medium text-amber-600 dark:text-amber-400">
-                {formatDate(casePurgeDate(c, state.settings.closedCaseRetentionMonths))} tarihinde
-                kayıtları silinecek (müvekkilde toplamlar kalır)
-              </span>
-            )}
+            {c.status === "Kapalı" &&
+              casePurgeDate(c, state.settings.closedCaseRetentionMonths) && (
+                <span className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                  {formatDate(casePurgeDate(c, state.settings.closedCaseRetentionMonths))} tarihinde
+                  kayıtları silinecek (müvekkilde toplamlar kalır)
+                </span>
+              )}
             {client && (
               <Link
                 to="/muvekkiller/$id"
@@ -241,6 +246,7 @@ function Page() {
             )}
             {(permissions.can("expenses", "create") ||
               permissions.can("fees", "create") ||
+              permissions.can("vekalet", "create") ||
               permissions.can("reminders", "create") ||
               permissions.can("documents", "create") ||
               permissions.can("enforcements", "create")) && (
@@ -272,6 +278,24 @@ function Page() {
                         <Wallet /> Tahsilat planı
                       </DropdownMenuItem>
                     </>
+                  )}
+                  {permissions.can("vekalet", "create") && client && (
+                    <DropdownMenuItem
+                      onClick={() =>
+                        quick.open("plan", {
+                          preset: {
+                            clientId: client.id,
+                            caseId: c.id,
+                            total: c.agreedFee,
+                            adminOnly: true,
+                            kind: "Vekalet ücreti",
+                          },
+                          onSaved: (p) => setPlanId(p.id),
+                        })
+                      }
+                    >
+                      <Lock /> Vekalet ücreti planı
+                    </DropdownMenuItem>
                   )}
                   {permissions.can("reminders", "create") && (
                     <DropdownMenuItem
@@ -396,6 +420,11 @@ function Page() {
                   </p>
                 )}
               </Section>
+              <VekaletCard
+                plans={vekaletPlans}
+                preset={{ clientId: c.clientId, caseId: c.id, total: c.agreedFee }}
+                onOpenPlan={setPlanId}
+              />
               {permissions.can("fees") && fin.feeTotal > 0 && (
                 <Section title="Ücret tahsilatı">
                   <div className="mb-2 flex justify-between text-sm">

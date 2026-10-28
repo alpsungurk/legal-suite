@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   Gavel,
   HandCoins,
+  BarChart3,
   ListChecks,
   Lock,
   type LucideIcon,
@@ -19,6 +20,7 @@ import {
   Repeat,
   TrendingUp,
   Undo2,
+  Users,
   Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -54,9 +56,12 @@ import { PlanSheet } from "@/components/lists/PlanSheet";
 import { useQuick } from "@/components/forms/quick";
 import { useConfirm } from "@/components/app/confirm";
 import { DateChip } from "@/components/dashboard/widgets";
+import { VekaletByClientTab, VekaletIncomeTab } from "@/components/fees/VekaletReports";
 import { cn } from "@/lib/utils";
 
 const FEE_TABS = ["bekleyen", "tahsil-edilen", "borclu", "planlar"] as const;
+/** Vekalet bölümünde ek sekmeler: müvekkil bazında toplam ve gelir raporu */
+const VEKALET_TABS = ["bekleyen", "tahsil-edilen", "planlar", "muvekkil", "gelir"] as const;
 export type FeesSearch = { sekme?: string };
 export const validateFeesSearch = (s: Record<string, unknown>): FeesSearch => ({
   sekme: typeof s.sekme === "string" ? s.sekme : undefined,
@@ -76,7 +81,7 @@ export function FeesWorkspace({
 }) {
   const { state: fullState, permissions, accrueMonthlyFees } = useErp();
   const perm = permissions;
-  const tabs = adminOnly ? FEE_TABS.filter((x) => x !== "borclu") : FEE_TABS;
+  const tabs: readonly string[] = adminOnly ? VEKALET_TABS : FEE_TABS;
   const tab = (tabs as readonly string[]).includes(sekme ?? "") ? sekme! : "bekleyen";
   const quick = useQuick();
   const confirm = useConfirm();
@@ -209,6 +214,16 @@ export function FeesWorkspace({
             <TabsTrigger value="planlar">
               <ListChecks className="mr-1.5 h-4 w-4" /> Planlar ({state.plans.length})
             </TabsTrigger>
+            {adminOnly && (
+              <>
+                <TabsTrigger value="muvekkil">
+                  <Users className="mr-1.5 h-4 w-4" /> Müvekkil bazında
+                </TabsTrigger>
+                <TabsTrigger value="gelir">
+                  <BarChart3 className="mr-1.5 h-4 w-4" /> Gelir
+                </TabsTrigger>
+              </>
+            )}
           </TabsList>
         </div>
         <TabsContent value="bekleyen" className="mt-4 space-y-3">
@@ -225,6 +240,16 @@ export function FeesWorkspace({
         <TabsContent value="planlar" className="mt-4">
           <PlanTable rows={state.plans} onOpen={(p) => setPlanId(p.id)} />
         </TabsContent>
+        {adminOnly && (
+          <>
+            <TabsContent value="muvekkil" className="mt-4">
+              <VekaletByClientTab plans={plans} />
+            </TabsContent>
+            <TabsContent value="gelir" className="mt-4">
+              <VekaletIncomeTab plans={plans} />
+            </TabsContent>
+          </>
+        )}
       </Tabs>
       <PlanSheet planId={planId} onOpenChange={(o) => !o && setPlanId(null)} />
     </PageShell>

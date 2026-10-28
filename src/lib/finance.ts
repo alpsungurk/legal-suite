@@ -173,6 +173,77 @@ export function applyPaymentToPlan(
   return { ...plan, installments: plan.installments.map((i) => byId.get(i.id)!) };
 }
 
+/* ───────────── Vekalet ücreti raporları ───────────── */
+
+/** Vekalet planlarının müvekkil bazında özeti (iptal edilenler hariç) */
+export function vekaletByClient(plans: FeePlan[]) {
+  const map = new Map<
+    string,
+    {
+      clientId: string;
+      plans: number;
+      total: number;
+      paid: number;
+      remaining: number;
+      overdue: number;
+    }
+  >();
+  for (const p of plans.filter((p) => p.adminOnly && !p.cancelled)) {
+    const s = planSummary(p);
+    const r = map.get(p.clientId) ?? {
+      clientId: p.clientId,
+      plans: 0,
+      total: 0,
+      paid: 0,
+      remaining: 0,
+      overdue: 0,
+    };
+    r.plans += 1;
+    r.total += p.total;
+    r.paid += s.paid;
+    r.remaining += s.remaining;
+    r.overdue += s.overdueAmount;
+    map.set(p.clientId, r);
+  }
+  return [...map.values()].map((r) => ({
+    ...r,
+    total: round2(r.total),
+    paid: round2(r.paid),
+    remaining: round2(r.remaining),
+    overdue: round2(r.overdue),
+  }));
+}
+
+/** Vekalet tahsilatlarının aylık toplamı (son `months` ay, bu ay dahil) */
+export function vekaletIncome(plans: FeePlan[], months = 12) {
+  const now = new Date();
+  const keys: string[] = [];
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  }
+  const rows = new Map(keys.map((k) => [k, { key: k, income: 0 }]));
+  for (const p of plans.filter((p) => p.adminOnly))
+    for (const i of p.installments)
+      for (const pay of i.payments) {
+        const r = rows.get(monthKey(pay.date));
+        if (r) r.income += pay.amount;
+      }
+  return [...rows.values()].map((r) => ({ ...r, income: round2(r.income) }));
+}
+
+/** Vekalet tahsilatlarının yıllık toplamı (yeni yıl üstte) */
+export function vekaletYearly(plans: FeePlan[]) {
+  const years = new Map<string, number>();
+  for (const p of plans.filter((p) => p.adminOnly))
+    for (const i of p.installments)
+      for (const pay of i.payments)
+        years.set(pay.date.slice(0, 4), (years.get(pay.date.slice(0, 4)) ?? 0) + pay.amount);
+  return [...years.entries()]
+    .map(([year, income]) => ({ year, income: round2(income) }))
+    .sort((a, b) => b.year.localeCompare(a.year));
+}
+
 /** Planın izin modülü: vekalet planı "vekalet", diğerleri "fees" iznine bağlıdır */
 export function planModule(p: { adminOnly?: boolean }) {
   return p.adminOnly ? ("vekalet" as const) : ("fees" as const);
@@ -347,7 +418,7 @@ export function clientLedger(
 }
 
 export function clientFinance(state: ErpState, clientId: string) {
-  const plans = state.plans.filter((p) => p.clientId === clientId && !p.cancelled);
+  const plans = state.plans.filter((p) => p.clientId === clientId && !p.cancelled && !p.adminOnly);
   const summaries = plans.map(planSummary);
   const feeTotal = sumBy(plans, (p) => p.total);
   const feePaid = sumBy(summaries, (s) => s.paid);
@@ -372,7 +443,8 @@ export type AccountEntry = {
   id: string;
   date: ISODate;
   description: string;
-  source: "Açılış" | "Masraf" | "Tahsilat" | "İcra" | "Virman" | "Diğer" | "Aktarım" | "Kalan ödeme";
+  source:
+    "Açılış" | "Masraf" | "Tahsilat" | "İcra" | "Virman" | "Diğer" | "Aktarım" | "Kalan ödeme";
   amount: number;
   balance: number;
   clientId?: string;
@@ -490,7 +562,8 @@ export function accountBalances(state: ErpState) {
 
 export function caseFinance(state: ErpState, caseId: string) {
   const expenses = state.expenses.filter((e) => e.caseId === caseId);
-  const plans = state.plans.filter((p) => p.caseId === caseId && !p.cancelled);
+  // Vekalet planları (yalnızca izinli kullanıcıya özel) genel ücret rakamlarına girmez
+  const plans = state.plans.filter((p) => p.caseId === caseId && !p.cancelled && !p.adminOnly);
   const summaries = plans.map(planSummary);
   return {
     expenseTotal: sumBy(expenses, (e) => e.amount),
@@ -820,7 +893,12 @@ export function icraDeadlines(state: ErpState): IcraDeadline[] {
         remindFrom: due,
         resolved:
           done ||
-          later(en.id, ev.date, ev.id, kind === "Tahliye" ? EVENT_TYPE_EVICTION : EVENT_TYPE_FINALIZED),
+          later(
+            en.id,
+            ev.date,
+            ev.id,
+            kind === "Tahliye" ? EVENT_TYPE_EVICTION : EVENT_TYPE_FINALIZED,
+          ),
       });
     } else if (en.side === "Borçlu") {
       continue;
