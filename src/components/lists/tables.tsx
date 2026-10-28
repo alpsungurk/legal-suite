@@ -1,4 +1,5 @@
 /** Hem liste sayfalarında hem detay sekmelerinde kullanılan tablolar. */
+import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   ArrowRight,
@@ -12,6 +13,7 @@ import {
   RotateCcw,
   Trash2,
   Undo2,
+  UserCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useErp } from "@/lib/erp-store";
@@ -33,6 +35,9 @@ import { useQuick } from "@/components/forms/quick";
 import { useConfirm } from "@/components/app/confirm";
 import { downloadAttachment, openAttachment } from "@/lib/attachments";
 import { cn } from "@/lib/utils";
+import { Combobox } from "@/components/app/fields";
+import { Button } from "@/components/ui/button";
+import { useOptions } from "@/lib/options";
 
 type Hide = { client?: boolean; case?: boolean };
 
@@ -687,6 +692,7 @@ export function CaseTable({
 
 export function ReminderTable({ rows }: { rows: Reminder[] }) {
   const { patch, remove, permissions } = useErp();
+  const canAssign = permissions.can("reminders", "edit");
   const n = useNames();
   const quick = useQuick();
   const confirm = useConfirm();
@@ -762,6 +768,13 @@ export function ReminderTable({ rows }: { rows: Reminder[] }) {
       initialSort={{ id: "date" }}
       onRowClick={(r) => quick.open("reminder", { record: r })}
       exportName="Ajanda"
+      selectable={canAssign}
+      bulkActions={(sel, clear) => (
+        <BulkAssign
+          ids={sel.map((r) => r.id)}
+          onDone={clear}
+        />
+      )}
       rowActions={(r) => (
         <>
           {r.status === "Bekliyor" && (
@@ -1142,5 +1155,36 @@ export function LedgerTable({
         </tr>
       )}
     />
+  );
+}
+
+/** Ajanda: seçili kayıtlara (ör. aktarılan duruşma listesi) sorumlu avukatı tek seferde atar */
+function BulkAssign({ ids, onDone }: { ids: string[]; onDone: () => void }) {
+  const { patchMany } = useErp();
+  const o = useOptions();
+  const [assigneeId, setAssigneeId] = useState("");
+  return (
+    <div className="flex items-center gap-2">
+      <div className="w-56">
+        <Combobox
+          value={assigneeId || undefined}
+          onChange={setAssigneeId}
+          options={o.staff}
+          placeholder="Sorumlu avukat seçin"
+        />
+      </div>
+      <Button
+        size="sm"
+        disabled={!assigneeId}
+        onClick={() => {
+          patchMany("reminders", ids, { assigneeId });
+          toast.success(`${ids.length} kaydın sorumlusu ${o.staff.find((x) => x.value === assigneeId)?.label} yapıldı`);
+          setAssigneeId("");
+          onDone();
+        }}
+      >
+        <UserCheck /> Sorumlu ata
+      </Button>
+    </div>
   );
 }

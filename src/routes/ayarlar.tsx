@@ -705,7 +705,8 @@ function CategoriesTab({ access }: { access: SectionAccess }) {
       {CAT_GROUPS.map((g) => (
         <div key={g.title} className="space-y-3">
           <h3 className="text-sm font-semibold text-muted-foreground">{g.title}</h3>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {/* items-start: kısa listeli kart, yanındaki uzun kart kadar uzayıp boş kalmaz */}
+          <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
             {g.items.map((c) => (
               <CategoryEditor
                 key={c.key}
@@ -782,19 +783,20 @@ function CategoryEditor({
           return (
             <span
               key={i}
-              title={isLocked ? "Program bu değeri kullanıyor, silinemez" : undefined}
-              className="group inline-flex h-7 items-center gap-1 rounded-full border border-border/80 bg-secondary/50 pl-3 pr-1.5 text-xs font-medium animate-pop"
+              title={isLocked ? `${i} — program bu değeri kullanıyor, silinemez` : i}
+              className="group inline-flex h-7 max-w-full items-center gap-1 rounded-full border border-border/80 bg-secondary/50 pl-3 pr-1.5 text-xs font-medium animate-pop"
             >
-              {i}
+              {/* Uzun değer (ör. senet açıklaması) tek satırda kesilir; tamamı üzerine gelince görünür */}
+              <span className="min-w-0 truncate">{i}</span>
               {isLocked ? (
-                <Lock className="mx-0.5 h-3 w-3 text-muted-foreground" />
+                <Lock className="mx-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
               ) : !canRemove ? (
                 <span className="w-1.5" />
               ) : (
                 <button
                   type="button"
                   onClick={() => removeItem(i)}
-                  className="grid h-4 w-4 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/15 hover:text-destructive"
+                  className="grid h-4 w-4 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/15 hover:text-destructive"
                   aria-label={`${i} sil`}
                 >
                   <X className="h-3 w-3" />

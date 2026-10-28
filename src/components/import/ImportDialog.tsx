@@ -104,7 +104,10 @@ function BulkApply({
 }) {
   const columns = spec.columns.filter((c) => c.key !== "no");
   const [key, setKey] = useState(
-    columns.find((c) => c.key === "responsible")?.key ?? columns[0]?.key ?? "",
+    // İcrada "Sorumlu", ajandada "Sorumlu avukat" varsayılan: duruşma listesi tek seferde atanır
+    columns.find((c) => c.key === "responsible" || c.key === "assignee")?.key ??
+      columns[0]?.key ??
+      "",
   );
   const [value, setValue] = useState("");
   const [onlyEmpty, setOnlyEmpty] = useState(false);

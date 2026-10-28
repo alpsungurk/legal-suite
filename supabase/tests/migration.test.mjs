@@ -788,6 +788,19 @@ ok("import_batch ajanda: izinsiz kullanıcı aktaramaz", await fails(() => asUse
 )), /yetkiniz yok|42501/i));
 await setAs(U, {});
 
+// ── Ajanda: duruşma bilgileri (dosya no, müvekkil / sıfat, mazeret)
+let dbErr = null;
+try { const sql = readFileSync(fileURLToPath(new URL("../migrations/20261028140000_ajanda_durusma_bilgileri.sql", import.meta.url)), "utf8"); await db.exec(sql); await db.exec(sql); } catch (e) { dbErr = e; }
+ok("ajanda duruşma bilgileri migration'ı çalıştı (iki kez)", !dbErr, dbErr ? dbErr.message : "");
+await asUser(A, () => one(`select public.import_batch($1::jsonb) r`, [JSON.stringify({ reminders: [{
+  ...ajRows[0], case_no: "2026/1", parties: "Birgül Aktay (Davacı)", excuse: "Başka duruşma",
+}] })]));
+const dbRow = await one(`select case_no, parties, excuse from public.reminders where id=$1`, [ajRows[0].id]);
+ok("ajanda: aktarım dosya no, müvekkil / sıfat ve mazereti yazar",
+  dbRow.case_no === "2026/1" && dbRow.parties === "Birgül Aktay (Davacı)" && dbRow.excuse === "Başka duruşma", JSON.stringify(dbRow));
+await asUser(U, () => q(`update public.reminders set excuse = null where id=$1`, [ajRows[0].id]));
+ok("ajanda: katılacak avukat mazereti kaldırabilir", (await one(`select excuse from public.reminders where id=$1`, [ajRows[0].id])).excuse === null);
+
 console.log(R.join("\n"));
 console.log(`\nPASS: ${R.filter((x) => x.startsWith("PASS")).length}  FAIL: ${R.filter((x) => x.startsWith("FAIL")).length}`);
 process.exit(R.some((x) => x.startsWith("FAIL")) ? 1 : 0);

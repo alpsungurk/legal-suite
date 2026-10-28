@@ -1,6 +1,13 @@
 import { useMemo, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { CalendarDays, ChevronLeft, ChevronRight, FileSpreadsheet, Plus } from "lucide-react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import {
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  FileSpreadsheet,
+  Plus,
+  Printer,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useErp } from "@/lib/erp-store";
 import { allInstallments, seizureDueDate } from "@/lib/finance";
@@ -184,6 +191,12 @@ function Page() {
                 <FileSpreadsheet /> Excel ile aktar
               </Button>
             )}
+            {/* Haftalık duruşma listesi: katılacak avukat / mazeret, yazdır ve PDF indir */}
+            <Button variant="outline" asChild>
+              <Link to="/yazdir/durusmalar" target="_blank">
+                <Printer /> Haftalık duruşma listesi
+              </Link>
+            </Button>
             <Button onClick={() => quick.open("reminder", { preset: { date: selected } })}>
               <Plus /> Yeni kayıt
             </Button>

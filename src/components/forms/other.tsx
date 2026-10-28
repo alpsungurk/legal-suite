@@ -31,6 +31,7 @@ import {
   type PaymentPromise,
   type Reminder,
   type AttachmentRef,
+  isHearingType,
 } from "@/lib/erp-types";
 import {
   addDays,
@@ -288,12 +289,37 @@ export function ReminderForm({ open, onOpenChange, record, preset, onSaved }: Fo
         },
         {
           name: "assigneeId",
-          label: "Sorumlu",
+          label: (v) => (isHearingType(v.type) ? "Katılacak avukat" : "Sorumlu"),
           type: "combobox",
           options: o.staff,
           required: true,
         },
-        { name: "location", label: "Yer", placeholder: "Örn. Çağlayan Adliyesi B Blok" },
+        {
+          name: "location",
+          label: (v) => (isHearingType(v.type) ? "Mahkeme" : "Yer"),
+          placeholder: "Örn. Ankara 5. Asliye Hukuk Mahkemesi",
+        },
+        // Duruşma listesinde ayrı sütunlar: dosya no, müvekkil ve sıfatı, mazeret
+        {
+          name: "caseNo",
+          label: "Dosya no",
+          placeholder: "Örn. 2026/220",
+          section: "Duruşma bilgileri",
+          visible: (v) => isHearingType(v.type),
+        },
+        {
+          name: "parties",
+          label: "Müvekkil ve sıfatı",
+          placeholder: "Örn. Birgül Aktay (Davacı)",
+          visible: (v) => isHearingType(v.type),
+        },
+        {
+          name: "excuse",
+          label: "Mazeret",
+          placeholder: "Boşsa avukat katılacak; doluysa mazeret verilecek",
+          span: 2,
+          visible: (v) => isHearingType(v.type),
+        },
         {
           name: "status",
           label: "Durum",
@@ -328,6 +354,14 @@ export function ReminderForm({ open, onOpenChange, record, preset, onSaved }: Fo
             assigneeId: v.assigneeId,
             status: v.status ?? "Bekliyor",
             note: v.note || undefined,
+            // Duruşmada boşaltılan alan "" ile silinir; diğer türlerde bu alanlara dokunulmaz
+            ...(isHearingType(v.type)
+              ? {
+                  caseNo: v.caseNo?.trim() ?? "",
+                  parties: v.parties?.trim() ?? "",
+                  excuse: v.excuse?.trim() ?? "",
+                }
+              : {}),
           },
           assigneeChanged
             ? {

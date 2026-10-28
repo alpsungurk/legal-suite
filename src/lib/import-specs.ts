@@ -25,7 +25,7 @@ import { caseCourtLabel } from "@/lib/finance";
 import { fileNoKey, formatDate, normalizeFileNo, round2, today } from "@/lib/format";
 import { newId } from "@/lib/mappers";
 import { excelSerialToISO, type RawCell } from "@/lib/excel-read";
-import { matchClients, parseUyapParties, roleLabel } from "@/lib/uyap";
+import { clientPartiesText, matchClients, parseUyapParties, roleLabel } from "@/lib/uyap";
 
 export type ImportKind =
   | "clients"
@@ -904,6 +904,8 @@ type ReminderResolved = {
   clientId?: string;
   assigneeId: string;
   note?: string;
+  caseNo?: string;
+  parties?: string;
 };
 
 /**
@@ -954,6 +956,12 @@ function resolveReminder(
   if (cl.error) warnings.push(`Müvekkil "${v.client?.trim()}" bulunamadı; bağlanmadan eklenir`);
   if (parties.length && !ours.length && !cl.client && !kase)
     warnings.push("Taraflarda müvekkil listesindeki kimse bulunamadı");
+  // Listede olmayan sıfat: sonraki tarafın adı kaymış olabilir, büro hücreyi kontrol etsin
+  const unknownRoles = [...new Set(parties.filter((p) => !p.known).map((p) => p.role))];
+  if (unknownRoles.length)
+    warnings.push(
+      `Tanınmayan sıfat: ${unknownRoles.join(", ")}. Taraf Bilgisi'ni kontrol edin (ad ile sıfat arasında " - " olmalı)`,
+    );
   const clientId = cl.client?.id ?? ours[0]?.client.id ?? kase?.clientId;
 
   let assigneeId = ctx.user.id;
@@ -963,7 +971,7 @@ function resolveReminder(
     else if (u.ids[0]) assigneeId = u.ids[0];
   }
 
-  const side = ours.map((o) => `${o.client.name} (${roleLabel(o.role)})`).join(", ");
+  const side = clientPartiesText(ours);
   const title =
     v.title?.trim() ||
     [activity || type, kase?.no ?? caseRaw, side].filter(Boolean).join(" · ");
@@ -986,6 +994,12 @@ function resolveReminder(
     clientId,
     assigneeId,
     note: note || undefined,
+    caseNo: kase?.no ?? (caseRaw || undefined),
+    // Taraflardan eşleşen yoksa Müvekkil sütunundaki / dosyadaki müvekkil (sıfat bilinmeden)
+    parties:
+      side ||
+      (clientId ? s.clients.find((c) => c.id === clientId)?.name : undefined) ||
+      undefined,
   };
 }
 
@@ -1081,11 +1095,11 @@ const reminders: ImportSpec = {
     },
     {
       key: "assignee",
-      header: "Sorumlu",
+      header: "Sorumlu avukat",
       type: "lookup",
       options: lists.lawyers,
-      hint: "Boşsa aktaran kişi",
-      aliases: ["Avukat", "Sorumlu avukat"],
+      hint: "Boşsa aktaran kişi. Ekrandaki “Toplu uygula” ile bütün satırlara tek seferde atanabilir",
+      aliases: ["Sorumlu", "Avukat"],
     },
     { key: "note", header: "Not", hint: "Serbest not", width: 28 },
   ],
@@ -1128,6 +1142,8 @@ const reminders: ImportSpec = {
         assigneeId: r.assigneeId,
         status: "Bekliyor",
         note: r.note,
+        caseNo: r.caseNo,
+        parties: r.parties,
       };
     });
     return { reminders: out };

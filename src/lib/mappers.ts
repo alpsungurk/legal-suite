@@ -799,6 +799,9 @@ export function reminderFromRow(r: Record<string, unknown>): Reminder {
     assigneeId: String(r.assignee_id),
     status: r.status as Reminder["status"],
     note: optStr(r.note),
+    caseNo: optStr(r.case_no),
+    parties: optStr(r.parties),
+    excuse: optStr(r.excuse),
   };
 }
 
@@ -815,6 +818,9 @@ export function reminderToRow(r: Partial<Reminder>) {
   if (r.assigneeId != null) row.assignee_id = r.assigneeId;
   if (r.status != null) row.status = r.status;
   if (r.note !== undefined) row.note = r.note || null;
+  if (r.caseNo !== undefined) row.case_no = r.caseNo || null;
+  if (r.parties !== undefined) row.parties = r.parties || null;
+  if (r.excuse !== undefined) row.excuse = r.excuse || null;
   return row;
 }
 

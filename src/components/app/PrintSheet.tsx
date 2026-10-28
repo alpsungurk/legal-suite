@@ -11,11 +11,23 @@ export function PrintSheet({
   subtitle,
   children,
   footerNote,
+  toolbar,
+  plainFooter,
+  showLogo = true,
+  actions,
 }: {
   title: string;
   subtitle?: ReactNode;
   children: ReactNode;
   footerNote?: string;
+  /** Ekranda sayfanın üstünde görünen, çıktıya girmeyen ayarlar (filtreler) */
+  toolbar?: ReactNode;
+  /** Ödeme bilgisi ve kaşe / imza alanı olmadan (ör. duruşma listesi) */
+  plainFooter?: boolean;
+  /** false: başlıkta logo olmadan (yalnızca büro adı ve iletişim) */
+  showLogo?: boolean;
+  /** "Yazdır / PDF" yanında ek düğmeler (ör. doğrudan PDF indir) */
+  actions?: ReactNode;
 }) {
   const { state } = useErp();
   const firm = state.settings.firm;
@@ -33,15 +45,17 @@ export function PrintSheet({
           <Button variant="outline" onClick={() => window.close()}>
             <X /> Kapat
           </Button>
+          {actions}
           <Button onClick={() => window.print()}>
             <Printer /> Yazdır / PDF
           </Button>
         </div>
       </div>
+      {toolbar && <div className="no-print mx-auto mb-4 max-w-[210mm] px-4">{toolbar}</div>}
       <article className="print-sheet mx-auto min-h-[297mm] max-w-[210mm] bg-white p-[14mm] text-[12px] leading-relaxed text-slate-900 shadow-elevated animate-fade-up">
         <header className="flex items-start justify-between gap-6 border-b-2 border-[#143064] pb-5">
           <div className="flex items-center gap-3">
-            {logo ? (
+            {!showLogo ? null : logo ? (
               <img src={logo} alt="" className="h-14 max-w-[160px] object-contain" />
             ) : (
               <BrandImg variant="horizontal" className="h-12 max-w-[180px]" />
@@ -66,25 +80,27 @@ export function PrintSheet({
         </header>
         {subtitle && <div className="mt-5">{subtitle}</div>}
         <div className="mt-5">{children}</div>
-        <footer className="avoid-break mt-10 grid grid-cols-2 gap-8 border-t border-slate-200 pt-5 text-[12.5px] text-slate-600">
-          <div>
-            {firm.iban && (
-              <>
-                <p className="font-semibold text-slate-800">Ödeme bilgileri</p>
-                <p>{firm.bankName}</p>
-                <p className="font-mono">{formatIban(firm.iban)}</p>
-                <p>Alıcı: {firm.legalName || firm.name}</p>
-              </>
-            )}
-            {footerNote && <p className="mt-3 italic">{footerNote}</p>}
-          </div>
-          <div className="text-right">
-            <p className="font-semibold text-slate-800">{firm.legalName || firm.name}</p>
-            <div className="ml-auto mt-10 w-48 border-t border-slate-400 pt-1 text-center">
-              Kaşe / İmza
+        {!plainFooter && (
+          <footer className="avoid-break mt-10 grid grid-cols-2 gap-8 border-t border-slate-200 pt-5 text-[12.5px] text-slate-600">
+            <div>
+              {firm.iban && (
+                <>
+                  <p className="font-semibold text-slate-800">Ödeme bilgileri</p>
+                  <p>{firm.bankName}</p>
+                  <p className="font-mono">{formatIban(firm.iban)}</p>
+                  <p>Alıcı: {firm.legalName || firm.name}</p>
+                </>
+              )}
+              {footerNote && <p className="mt-3 italic">{footerNote}</p>}
             </div>
-          </div>
-        </footer>
+            <div className="text-right">
+              <p className="font-semibold text-slate-800">{firm.legalName || firm.name}</p>
+              <div className="ml-auto mt-10 w-48 border-t border-slate-400 pt-1 text-center">
+                Kaşe / İmza
+              </div>
+            </div>
+          </footer>
+        )}
       </article>
     </div>
   );

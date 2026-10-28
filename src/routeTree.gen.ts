@@ -34,6 +34,7 @@ import { Route as IcraMaasHacziRouteImport } from './routes/icra/maas-haczi'
 import { Route as IcraSurelerRouteImport } from './routes/icra/sureler'
 import { Route as MuvekkillerIndexRouteImport } from './routes/muvekkiller/index'
 import { Route as MuvekkillerIdRouteImport } from './routes/muvekkiller/$id'
+import { Route as YazdirDurusmalarRouteImport } from './routes/yazdir/durusmalar'
 import { Route as IcraListeListIdRouteImport } from './routes/icra/liste.$listId'
 import { Route as YazdirDosyaIdRouteImport } from './routes/yazdir/dosya.$id'
 import { Route as YazdirEkstreIdRouteImport } from './routes/yazdir/ekstre.$id'
@@ -163,6 +164,11 @@ const MuvekkillerIdRoute = MuvekkillerIdRouteImport.update({
   path: '/muvekkiller/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const YazdirDurusmalarRoute = YazdirDurusmalarRouteImport.update({
+  id: '/yazdir/durusmalar',
+  path: '/yazdir/durusmalar',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IcraListeListIdRoute = IcraListeListIdRouteImport.update({
   id: '/icra/liste/$listId',
   path: '/icra/liste/$listId',
@@ -201,6 +207,7 @@ export interface FileRoutesByFullPath {
   '/icra/maas-haczi': typeof IcraMaasHacziRoute
   '/icra/sureler': typeof IcraSurelerRoute
   '/muvekkiller/$id': typeof MuvekkillerIdRoute
+  '/yazdir/durusmalar': typeof YazdirDurusmalarRoute
   '/borclular/': typeof BorclularIndexRoute
   '/dosyalar/': typeof DosyalarIndexRoute
   '/icra/': typeof IcraIndexRoute
@@ -231,6 +238,7 @@ export interface FileRoutesByTo {
   '/icra/maas-haczi': typeof IcraMaasHacziRoute
   '/icra/sureler': typeof IcraSurelerRoute
   '/muvekkiller/$id': typeof MuvekkillerIdRoute
+  '/yazdir/durusmalar': typeof YazdirDurusmalarRoute
   '/borclular': typeof BorclularIndexRoute
   '/dosyalar': typeof DosyalarIndexRoute
   '/icra': typeof IcraIndexRoute
@@ -262,6 +270,7 @@ export interface FileRoutesById {
   '/icra/maas-haczi': typeof IcraMaasHacziRoute
   '/icra/sureler': typeof IcraSurelerRoute
   '/muvekkiller/$id': typeof MuvekkillerIdRoute
+  '/yazdir/durusmalar': typeof YazdirDurusmalarRoute
   '/borclular/': typeof BorclularIndexRoute
   '/dosyalar/': typeof DosyalarIndexRoute
   '/icra/': typeof IcraIndexRoute
@@ -294,6 +303,7 @@ export interface FileRouteTypes {
     | '/icra/maas-haczi'
     | '/icra/sureler'
     | '/muvekkiller/$id'
+    | '/yazdir/durusmalar'
     | '/borclular/'
     | '/dosyalar/'
     | '/icra/'
@@ -324,6 +334,7 @@ export interface FileRouteTypes {
     | '/icra/maas-haczi'
     | '/icra/sureler'
     | '/muvekkiller/$id'
+    | '/yazdir/durusmalar'
     | '/borclular'
     | '/dosyalar'
     | '/icra'
@@ -354,6 +365,7 @@ export interface FileRouteTypes {
     | '/icra/maas-haczi'
     | '/icra/sureler'
     | '/muvekkiller/$id'
+    | '/yazdir/durusmalar'
     | '/borclular/'
     | '/dosyalar/'
     | '/icra/'
@@ -385,6 +397,7 @@ export interface RootRouteChildren {
   IcraMaasHacziRoute: typeof IcraMaasHacziRoute
   IcraSurelerRoute: typeof IcraSurelerRoute
   MuvekkillerIdRoute: typeof MuvekkillerIdRoute
+  YazdirDurusmalarRoute: typeof YazdirDurusmalarRoute
   BorclularIndexRoute: typeof BorclularIndexRoute
   DosyalarIndexRoute: typeof DosyalarIndexRoute
   IcraIndexRoute: typeof IcraIndexRoute
@@ -571,6 +584,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MuvekkillerIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/yazdir/durusmalar': {
+      id: '/yazdir/durusmalar'
+      path: '/yazdir/durusmalar'
+      fullPath: '/yazdir/durusmalar'
+      preLoaderRoute: typeof YazdirDurusmalarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/icra/liste/$listId': {
       id: '/icra/liste/$listId'
       path: '/icra/liste/$listId'
@@ -617,6 +637,7 @@ const rootRouteChildren: RootRouteChildren = {
   IcraMaasHacziRoute: IcraMaasHacziRoute,
   IcraSurelerRoute: IcraSurelerRoute,
   MuvekkillerIdRoute: MuvekkillerIdRoute,
+  YazdirDurusmalarRoute: YazdirDurusmalarRoute,
   BorclularIndexRoute: BorclularIndexRoute,
   DosyalarIndexRoute: DosyalarIndexRoute,
   IcraIndexRoute: IcraIndexRoute,

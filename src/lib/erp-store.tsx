@@ -231,6 +231,8 @@ type ErpContextValue = {
   /** reload: veritabanında bağlı kayıtlar da silindiyse (cascade) ekran yeniden yüklenir */
   remove: <K extends CollectionKey>(key: K, id: string, opts?: { reload?: boolean }) => void;
   removeMany: <K extends CollectionKey>(key: K, ids: string[]) => void;
+  /** Aynı değişikliği birden çok kayda uygular; sunucuya tek istekle (toplu upsert) yazılır */
+  patchMany: <K extends CollectionKey>(key: K, ids: string[], changes: Partial<Collections[K]>) => void;
   updateSettings: (patch: Partial<Settings>) => void;
   rememberOption: (key: CategoryKey, value?: string) => void;
   /** Toplu aktarımda yeni değerleri tek ayar yazımıyla listelere ekler */
@@ -554,6 +556,31 @@ export function ErpProvider({ children }: { children: ReactNode }) {
           void reloadFromServer();
         }
       })();
+    },
+    [reloadFromServer],
+  );
+
+  const patchMany = useCallback(
+    <K extends CollectionKey>(key: K, ids: string[], changes: Partial<Collections[K]>) => {
+      const idSet = new Set(ids);
+      const now = new Date().toISOString();
+      const items = (stateRef.current[key] as Collections[K][])
+        .filter((r) => idSet.has(r.id))
+        .map((r) => ({ ...r, ...changes, updatedAt: now }) as Collections[K]);
+      if (!items.length) return;
+      const byId = new Map(items.map((r) => [r.id, r]));
+      setState((prev) => {
+        const list = prev[key] as Collections[K][];
+        return { ...prev, [key]: list.map((r) => byId.get(r.id) ?? r) } as ErpState;
+      });
+      persistQueue.current = persistQueue.current.then(async () => {
+        try {
+          await persistSaveMany(key, items);
+        } catch (err) {
+          toast.error(sbError(err));
+          void reloadFromServer();
+        }
+      });
     },
     [reloadFromServer],
   );
@@ -1135,6 +1162,7 @@ export function ErpProvider({ children }: { children: ReactNode }) {
     patch,
     remove,
     removeMany,
+    patchMany,
     updateSettings,
     rememberOption,
     rememberOptions,

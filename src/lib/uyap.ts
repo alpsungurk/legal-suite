@@ -2,55 +2,66 @@
  * UYAP "Duruşma Sorgulama" çıktısındaki "Taraf Bilgisi" hücresi:
  *   "BİRGÜL AKTAY - DAVACI HATİCE ATAYSİN - TANIK "
  * Ad ve rol " - " ile ayrılır; rolün hemen arkasından sonraki tarafın adı gelir.
- * Rol çok kelimeli olabilir (İHBAR OLUNAN, DAHİLİ DAVALI); bilinenler en uzun eşleşmeyle ayrılır,
- * bilinmeyen rolde ilk kelime rol sayılır.
+ * Rol çok kelimeli olabilir (MÜŞTEKİ SANIK, MÜDAHİL DAVACI); bilinenler en uzun eşleşmeyle ayrılır.
+ * Listede olmayan rolde ilk kelime rol sayılır ve "known: false" döner: aktarım ekranında uyarı
+ * çıkar, büro hücreyi düzeltir (yoksa sonraki tarafın adı kayabilir).
  */
 
-export type UyapParty = { name: string; role: string };
+export type UyapParty = { name: string; role: string; known: boolean };
 
+/** Büronun verdiği liste + UYAP'ta görülen diğer sıfatlar (kesme işareti farkı yok sayılır) */
 const ROLES = [
+  "DAVACI",
+  "DAVALI",
+  "TANIK",
+  "MÜŞTEKİ",
+  "SANIK",
+  "MÜŞTEKİ SANIK",
+  "KATILAN",
+  "MÜŞTEKİ KATILAN",
+  "MÜDAHİL DAVACI",
+  "MÜDAHİL",
+  "ŞÜPHELİ",
+  "MAĞDUR",
+  "MALEN SORUMLU",
+  "VASİ",
+  "VELİ",
   "DAHİLİ DAVALI",
   "DAHİLİ DAVACI",
+  "FER'İ MÜDAHİL",
+  "FERİ'İ MÜDAHİL",
   "KARŞI DAVALI",
   "KARŞI DAVACI",
-  "İHBAR OLUNAN",
-  "FER'İ MÜDAHİL",
-  "FERİ MÜDAHİL",
-  "SUÇTAN ZARAR GÖREN",
   "KARŞI TARAF",
+  "İHBAR OLUNAN",
+  "SUÇTAN ZARAR GÖREN",
   "TALEP EDEN",
   "İTİRAZ EDEN",
   "İSTİNAF EDEN",
   "TEMYİZ EDEN",
-  "DAVACI",
-  "DAVALI",
-  "KATILAN",
-  "SANIK",
-  "ŞÜPHELİ",
-  "MÜŞTEKİ",
-  "MAĞDUR",
-  "TANIK",
   "MİRASÇI",
   "MÜTEVEFFA",
-  "MÜDAHİL",
   "BİLİRKİŞİ",
   "ALACAKLI",
   "BORÇLU",
   "KAYYUM",
-  "VASİ",
   "HASIM",
 ];
 
 const squash = (s: string) => s.replace(/\s+/g, " ").trim();
+/** Karşılaştırma için: büyük harf, kesme işaretleri yok ("FER'İ" = "FERİ") */
+const roleWord = (w: string) => w.toLocaleUpperCase("tr").replace(/['’`´]/g, "");
+const ROLE_KEYS = new Map(ROLES.map((r) => [r.split(" ").map(roleWord).join(" "), r]));
+const MAX_ROLE_WORDS = Math.max(...ROLES.map((r) => r.split(" ").length));
 
-/** "DAVACI HATİCE ATAYSİN" → { role: "DAVACI", rest: "HATİCE ATAYSİN" } */
-function splitRole(segment: string): { role: string; rest: string } {
-  const s = squash(segment);
-  const up = s.toLocaleUpperCase("tr");
-  const known = ROLES.find((r) => up === r || up.startsWith(r + " "));
-  if (known) return { role: known, rest: s.slice(known.length).trim() };
-  const i = s.indexOf(" ");
-  return i < 0 ? { role: s, rest: "" } : { role: s.slice(0, i), rest: s.slice(i + 1).trim() };
+/** "MÜŞTEKİ SANIK HATİCE ATAYSİN" → { role: "MÜŞTEKİ SANIK", rest: "HATİCE ATAYSİN", known } */
+function splitRole(segment: string): { role: string; rest: string; known: boolean } {
+  const words = squash(segment).split(" ").filter(Boolean);
+  for (let n = Math.min(MAX_ROLE_WORDS, words.length); n >= 1; n--) {
+    const role = ROLE_KEYS.get(words.slice(0, n).map(roleWord).join(" "));
+    if (role) return { role, rest: words.slice(n).join(" "), known: true };
+  }
+  return { role: words[0] ?? "", rest: words.slice(1).join(" "), known: false };
 }
 
 export function parseUyapParties(cell: string): UyapParty[] {
@@ -59,8 +70,8 @@ export function parseUyapParties(cell: string): UyapParty[] {
   const out: UyapParty[] = [];
   let name = parts[0];
   for (let i = 1; i < parts.length; i++) {
-    const { role, rest } = splitRole(parts[i]);
-    if (name && role) out.push({ name, role });
+    const { role, rest, known } = splitRole(parts[i]);
+    if (name && role) out.push({ name, role, known });
     name = rest;
   }
   return out;
@@ -90,13 +101,14 @@ export function partyKey(name: string) {
 /**
  * Taraflardan büronun müvekkili olanlar. Kişilerde ad tam eşleşmeli; şirketlerde kısa yazılmış
  * ünvan da tutar (müvekkil "Metaloks Metal" ↔ UYAP "METALOKS METAL SANAYİ VE TİCARET A.Ş.").
+ * Müvekkil dosyada birden çok sıfatla geçiyorsa hepsi yazılır ("Davacı / Tanık").
  */
 export function matchClients<C extends { id: string; name: string; kind?: string }>(
   parties: UyapParty[],
   clients: C[],
 ): Array<{ client: C; role: string }> {
   const keyed = clients.map((c) => ({ c, k: partyKey(c.name) })).filter((x) => x.k.length >= 3);
-  const out: Array<{ client: C; role: string }> = [];
+  const out: Array<{ client: C; roles: string[] }> = [];
   for (const p of parties) {
     const pk = partyKey(p.name);
     if (!pk) continue;
@@ -104,11 +116,17 @@ export function matchClients<C extends { id: string; name: string; kind?: string
       keyed.find((x) => x.k === pk) ??
       keyed.find(
         (x) =>
-          x.c.kind === "Kurumsal" &&
-          x.k.length >= 8 &&
-          (pk.startsWith(x.k) || x.k.startsWith(pk)),
+          x.c.kind === "Kurumsal" && x.k.length >= 8 && (pk.startsWith(x.k) || x.k.startsWith(pk)),
       );
-    if (hit && !out.some((o) => o.client.id === hit.c.id)) out.push({ client: hit.c, role: p.role });
+    if (!hit) continue;
+    const seen = out.find((o) => o.client.id === hit.c.id);
+    if (!seen) out.push({ client: hit.c, roles: [p.role] });
+    else if (!seen.roles.includes(p.role)) seen.roles.push(p.role);
   }
-  return out;
+  return out.map((o) => ({ client: o.client, role: o.roles.join(" / ") }));
+}
+
+/** Eşleşen müvekkiller sıfatlarıyla: "Birgül Aktay (Davacı), Metaloks A.Ş. (Davalı)" */
+export function clientPartiesText(matches: Array<{ client: { name: string }; role: string }>) {
+  return matches.map((m) => `${m.client.name} (${roleLabel(m.role)})`).join(", ");
 }

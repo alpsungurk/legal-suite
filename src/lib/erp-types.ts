@@ -231,10 +231,21 @@ export type Reminder = BaseEntity & {
   caseId?: string;
   clientId?: string;
   enforcementId?: string;
+  /** Duruşmada: katılacak avukat */
   assigneeId: string;
   status: "Bekliyor" | "Tamamlandı" | "İptal";
   note?: string;
+  /** Duruşma: dosya numarası (dava dosyası sistemde olmasa da) */
+  caseNo?: string;
+  /** Duruşma: müvekkil(ler) ve dosyadaki sıfatı, ör. "Birgül Aktay (Davacı)" */
+  parties?: string;
+  /** Duruşma: mazeret; doluysa katılınmayacak */
+  excuse?: string;
 };
+
+/** Duruşma listesine giren ajanda türleri: dosya no, müvekkil / sıfat, katılacak avukat, mazeret */
+export const HEARING_REMINDER_TYPES = ["Duruşma", "Keşif"];
+export const isHearingType = (type?: string) => !!type && HEARING_REMINDER_TYPES.includes(type);
 
 /* ───────────────────────── İcra ───────────────────────── */
 

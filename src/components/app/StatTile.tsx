@@ -28,7 +28,7 @@ export function StatTile({
       className={cn(
         "stat-card group @container relative flex h-full min-h-[8.25rem] min-w-0 flex-col",
         "rounded-2xl border border-border/80 bg-card p-3.5 shadow-soft sm:p-4",
-        to && "cursor-pointer",
+        to && "stat-card-link cursor-pointer",
         className,
       )}
     >
