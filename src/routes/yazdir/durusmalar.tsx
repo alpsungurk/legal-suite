@@ -42,7 +42,7 @@ function Page() {
   const [assignee, setAssignee] = useState(seeAll ? "" : currentUser.id);
   const [onlyHearings, setOnlyHearings] = useState(true);
   const [showNotes, setShowNotes] = useState(false);
-  const [withLogo, setWithLogo] = useState(true);
+  const [withLogo, setWithLogo] = useState(false);
   const [busy, setBusy] = useState(false);
   const firmLogo = useFirmLogoUrl();
   const weekEnd = addDays(week, 6);
@@ -173,7 +173,7 @@ function Page() {
         // Logolu: büro logosu, yoksa uygulamanın logosu (yazdırma sayfasıyla aynı)
         logoUrl: withLogo ? (firmLogo ?? BRAND.horizontal) : undefined,
         days: pdfDays,
-        filename: `Duruşma listesi ${formatDate(week)}-${formatDate(weekEnd)}${withLogo ? "" : " (logosuz)"}.pdf`,
+        filename: `Duruşma listesi ${formatDate(week)}-${formatDate(weekEnd)}${withLogo ? " (logolu)" : ""}.pdf`,
       });
     } catch (e) {
       toast.error(`PDF oluşturulamadı: ${(e as Error).message}`);
@@ -285,11 +285,18 @@ function Page() {
                 ) : (
                   d.rows.map((r) => (
                     <div key={r.id} className="border-b border-slate-200 px-1 py-1 text-[7.5px] leading-snug">
-                      <p className="font-bold text-[#143064]">{r.time ?? "—"}</p>
-                      <p>{r.location ?? "—"}</p>
+                      {/* Mahkeme solda, dosya no sağa yaslı; müvekkil solda, saat sağa yaslı */}
+                      <p className="flex justify-between gap-1">
+                        <span>{r.location ?? "—"}</span>
+                        {caseNoOf(r) !== "—" && <span className="shrink-0">{caseNoOf(r)}</span>}
+                      </p>
                       {activityOf(r) && <p className="text-slate-500">{activityOf(r)}</p>}
-                      <p>{caseNoOf(r)}</p>
-                      <p>{partiesOf(r)}</p>
+                      <p className="flex justify-between gap-1">
+                        <span>{partiesOf(r)}</span>
+                        {r.time && (
+                          <span className="shrink-0 font-bold text-[#143064]">{r.time}</span>
+                        )}
+                      </p>
                       {showNotes && r.note && (
                         <p className="whitespace-pre-line text-slate-500">{r.note}</p>
                       )}

@@ -130,11 +130,19 @@ export async function downloadHearingsPdf(opts: {
   const inner = colW - 2.2;
   const lineGap = (size: number) => size * 0.36;
 
-  type Seg = { text: string; kind: "time" | "body" | "muted" | "excuse" };
-  const wrap = (text: string, size: number) => {
-    doc.setFont("Inter", "normal").setFontSize(size);
-    return doc.splitTextToSize(text, inner) as string[];
+  type Seg = {
+    text: string;
+    kind: "body" | "muted" | "excuse";
+    /** Aynı satırda sağa yaslı yazılan metin (dosya no / saat) */
+    right?: string;
+    rightKind?: "time" | "body";
   };
+  const wrap = (text: string, size: number, width = inner) => {
+    doc.setFont("Inter", "normal").setFontSize(size);
+    return doc.splitTextToSize(text, Math.max(width, 10)) as string[];
+  };
+  // Boş değer "—" olarak gelir; sağa yaslı alanlarda ve satırda yer kaplamasın
+  const real = (v?: string) => (v?.trim() && v.trim() !== "—" ? v.trim() : "");
   const segments = (row: HearingPdfRow, size: number): Seg[] => {
     const out: Seg[] = [];
     const add = (text: string | undefined, kind: Seg["kind"], limit?: number) => {
@@ -142,11 +150,19 @@ export async function downloadHearingsPdf(opts: {
       const lines = wrap(text, kind === "muted" ? size - 0.3 : size);
       for (const line of limit ? lines.slice(0, limit) : lines) out.push({ text: line, kind });
     };
-    add(row.time, "time");
-    add(row.court, "body");
+    // Sol metin + aynı satırda sağa yaslı metin (mahkeme | dosya no, müvekkil | saat)
+    const pair = (left: string, right: string, rightKind: "time" | "body") => {
+      if (!left && !right) return;
+      doc.setFont("Inter", rightKind === "time" ? "bold" : "normal").setFontSize(size);
+      const reserve = right ? doc.getTextWidth(right) + 1.5 : 0;
+      const lines = left ? wrap(left, size, inner - reserve) : [""];
+      lines.forEach((line, i) =>
+        out.push({ text: line, kind: "body", right: i === 0 ? right : undefined, rightKind }),
+      );
+    };
+    pair(real(row.court), real(row.caseNo), "body");
     add(row.activity, "muted");
-    add(row.caseNo, "body");
-    add(row.parties, "body");
+    pair(real(row.parties), real(row.time), "time");
     add(row.detail, "muted", 4);
     add(row.attendee, row.excuse ? "excuse" : "body");
     return out;
@@ -183,12 +199,17 @@ export async function downloadHearingsPdf(opts: {
     for (const row of day.rows) {
       for (const seg of segments(row, size)) {
         const fs = seg.kind === "muted" ? size - 0.3 : size;
-        doc.setFont("Inter", seg.kind === "time" ? "bold" : "normal").setFontSize(fs);
+        doc.setFont("Inter", "normal").setFontSize(fs);
         if (seg.kind === "excuse") doc.setTextColor(...EXCUSE_RED);
         else if (seg.kind === "muted") doc.setTextColor(110);
-        else if (seg.kind === "time") doc.setTextColor(...NAVY);
         else doc.setTextColor(30);
         doc.text(seg.text, colX + 1.1, y);
+        if (seg.right) {
+          const isTime = seg.rightKind === "time";
+          doc.setFont("Inter", isTime ? "bold" : "normal").setFontSize(fs);
+          if (isTime) doc.setTextColor(...NAVY);
+          doc.text(seg.right, colX + colW - 1.1, y, { align: "right" });
+        }
         y += lineGap(fs);
       }
       y += 0.4;

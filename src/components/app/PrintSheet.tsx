@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Printer, X } from "lucide-react";
 import { useErp } from "@/lib/erp-store";
 import { formatDateLong, formatIban, today } from "@/lib/format";
@@ -13,7 +13,7 @@ export function PrintSheet({
   footerNote,
   toolbar,
   plainFooter,
-  showLogo = true,
+  showLogo,
   actions,
   landscape = false,
 }: {
@@ -25,7 +25,10 @@ export function PrintSheet({
   toolbar?: ReactNode;
   /** Ödeme bilgisi ve kaşe / imza alanı olmadan (ör. duruşma listesi) */
   plainFooter?: boolean;
-  /** false: başlıkta logo olmadan (yalnızca büro adı ve iletişim) */
+  /**
+   * Başlıkta logo. Verilmezse varsayılan logosuzdur ve çubukta "Logolu" kutusu çıkar;
+   * sayfa kendi kutusunu yönetiyorsa true / false verir.
+   */
   showLogo?: boolean;
   /** "Yazdır / PDF" yanında ek düğmeler (ör. doğrudan PDF indir) */
   actions?: ReactNode;
@@ -35,6 +38,8 @@ export function PrintSheet({
   const { state } = useErp();
   const firm = state.settings.firm;
   const logo = useFirmLogoUrl();
+  const [logoOn, setLogoOn] = useState(false);
+  const withLogo = showLogo ?? logoOn;
   useEffect(() => {
     document.title = `${title} — ${firm.name}`;
   }, [title, firm.name]);
@@ -48,7 +53,18 @@ export function PrintSheet({
         <p className="text-sm text-muted-foreground">
           Yazdır penceresinde “PDF olarak kaydet” seçerek PDF alabilirsiniz.
         </p>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          {showLogo === undefined && (
+            <label className="flex h-9 cursor-pointer items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-[var(--primary)]"
+                checked={logoOn}
+                onChange={(e) => setLogoOn(e.target.checked)}
+              />
+              Logolu
+            </label>
+          )}
           <Button variant="outline" onClick={() => window.close()}>
             <X /> Kapat
           </Button>
@@ -66,7 +82,7 @@ export function PrintSheet({
       >
         <header className="flex items-start justify-between gap-6 border-b-2 border-[#143064] pb-5">
           <div className="flex items-center gap-3">
-            {!showLogo ? null : logo ? (
+            {!withLogo ? null : logo ? (
               <img src={logo} alt="" className="h-14 max-w-[160px] object-contain" />
             ) : (
               <BrandImg variant="horizontal" className="h-12 max-w-[180px]" />
