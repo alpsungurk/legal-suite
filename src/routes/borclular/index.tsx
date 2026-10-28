@@ -10,6 +10,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { useDeleteDebtor } from "@/components/forms/delete-actions";
+import { BulkTrash } from "@/components/lists/tables";
 import { useErp } from "@/lib/erp-store";
 import { debtorSummary } from "@/lib/finance";
 import { formatMoney, sumBy } from "@/lib/format";
@@ -184,6 +185,10 @@ function Page() {
         initialSort={{ id: "remaining", desc: true }}
         exportName="Borçlular"
         onRowClick={(r) => navigate({ to: "/borclular/$id", params: { id: r.d.id } })}
+        selectable={permissions.can("enforcements", "delete")}
+        bulkActions={(sel, clear) => (
+          <BulkTrash entity="debtors" ids={sel.map((r) => r.d.id)} onDone={clear} />
+        )}
         rowActions={
           permissions.can("enforcements", "edit") || permissions.can("enforcements", "delete")
             ? (r) => (

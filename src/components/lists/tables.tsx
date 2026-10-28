@@ -40,6 +40,8 @@ import { cn } from "@/lib/utils";
 import { Combobox } from "@/components/app/fields";
 import { Button } from "@/components/ui/button";
 import { useOptions } from "@/lib/options";
+import type { TrashEntity } from "@/lib/trash";
+import { useTrashDelete } from "@/components/forms/delete-actions";
 
 type Hide = { client?: boolean; case?: boolean };
 
@@ -75,10 +77,11 @@ export function ExpenseTable({
   exportName?: string;
   toolbar?: React.ReactNode;
 }) {
-  const { state, permissions, remove, removeMany, patchMany, currentUser } = useErp();
+  const { state, permissions, patchMany, currentUser } = useErp();
   const n = useNames();
   const quick = useQuick();
   const confirm = useConfirm();
+  const trash = useTrashDelete();
   const canEdit = (e: Expense) =>
     permissions.can("expenses", "edit") || e.createdBy === currentUser.id;
   const undoReimburse = async (list: Expense[]) => {
@@ -262,18 +265,7 @@ export function ExpenseTable({
               </Button>
             )}
             {permissions.can("expenses", "delete") && (
-              <DropdownLikeButton
-                onClick={async () => {
-                  if (await confirm({ title: `${sel.length} masraf silinsin mi?` })) {
-                    removeMany(
-                      "expenses",
-                      sel.map((s) => s.id),
-                    );
-                    clear();
-                    toast.success("Masraflar silindi");
-                  }
-                }}
-              />
+              <BulkTrash entity="expenses" ids={sel.map((s) => s.id)} onDone={clear} />
             )}
           </>
         );
@@ -318,17 +310,7 @@ export function ExpenseTable({
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"
-                  onClick={async () => {
-                    if (
-                      await confirm({
-                        title: "Masraf silinsin mi?",
-                        description: `${e.title} · ${formatDate(e.date)}`,
-                      })
-                    ) {
-                      remove("expenses", e.id);
-                      toast.success("Masraf silindi");
-                    }
-                  }}
+                  onClick={() => trash("expenses", [e.id], `${e.title} çöp kutusuna taşınsın mı?`)}
                 >
                   <Trash2 /> Sil
                 </DropdownMenuItem>
@@ -351,6 +333,20 @@ export function ExpenseTable({
       )}
     />
   );
+}
+
+/** Seçili kayıtları bağlılarıyla birlikte çöp kutusuna taşıyan toplu eylem düğmesi */
+export function BulkTrash({
+  entity,
+  ids,
+  onDone,
+}: {
+  entity: TrashEntity;
+  ids: string[];
+  onDone: () => void;
+}) {
+  const trash = useTrashDelete();
+  return <DropdownLikeButton onClick={async () => (await trash(entity, ids)) && onDone()} />;
 }
 
 function DropdownLikeButton({ onClick }: { onClick: () => void }) {
@@ -379,7 +375,7 @@ export function PlanTable({
   const { state, permissions, remove, patch } = useErp();
   const n = useNames();
   const quick = useQuick();
-  const confirm = useConfirm();
+  const trash = useTrashDelete();
   const data = rows.map((p) => ({ plan: p, s: planSummary(p) }));
   type R = (typeof data)[number];
   const columns: Column<R>[] = [];
@@ -516,6 +512,10 @@ export function PlanTable({
       initialSort={{ id: "next" }}
       exportName="Tahsilat planları"
       onRowClick={(r) => onOpen?.(r.plan)}
+      selectable={permissions.can("fees", "delete")}
+      bulkActions={(sel, clear) => (
+        <BulkTrash entity="fee_plans" ids={sel.map((r) => r.plan.id)} onDone={clear} />
+      )}
       rowActions={
         permissions.can("fees", "edit")
           ? (r) => (
@@ -539,16 +539,9 @@ export function PlanTable({
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       className="text-destructive focus:text-destructive"
-                      onClick={async () => {
-                        if (r.s.paid > 0) {
-                          toast.error("Ödeme alınmış plan silinemez; iptal edebilirsiniz.");
-                          return;
-                        }
-                        if (await confirm({ title: "Tahsilat planı silinsin mi?" })) {
-                          remove("plans", r.plan.id);
-                          toast.success("Plan silindi");
-                        }
-                      }}
+                      onClick={() =>
+                        trash("fee_plans", [r.plan.id], `${r.plan.title} çöp kutusuna taşınsın mı?`)
+                      }
                     >
                       <Trash2 /> Sil
                     </DropdownMenuItem>
@@ -592,7 +585,7 @@ export function CaseTable({
   const n = useNames();
   const navigate = useNavigate();
   const quick = useQuick();
-  const confirm = useConfirm();
+  const trash = useTrashDelete();
   const nextEvent = (id: string) =>
     state.reminders
       .filter((r) => r.caseId === id && r.status === "Bekliyor" && r.date >= today())
@@ -749,6 +742,10 @@ export function CaseTable({
         { header: "Not", get: (c) => c.note ?? "", width: 40 },
       ]}
       onRowClick={(c) => navigate({ to: "/dosyalar/$id", params: { id: c.id } })}
+      selectable={permissions.can("cases", "delete")}
+      bulkActions={(sel, clear) => (
+        <BulkTrash entity="cases" ids={sel.map((c) => c.id)} onDone={clear} />
+      )}
       rowActions={
         permissions.can("cases", "edit") || permissions.can("cases", "delete")
           ? (c) => (
@@ -763,21 +760,7 @@ export function CaseTable({
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       className="text-destructive focus:text-destructive"
-                      onClick={async () => {
-                        const used =
-                          state.expenses.some((e) => e.caseId === c.id) ||
-                          state.plans.some((p) => p.caseId === c.id);
-                        if (used) {
-                          toast.error(
-                            "Dosyaya bağlı masraf/tahsilat var. Silmek yerine 'Kapalı' yapın.",
-                          );
-                          return;
-                        }
-                        if (await confirm({ title: `${c.no} silinsin mi?` })) {
-                          remove("cases", c.id);
-                          toast.success("Dosya silindi");
-                        }
-                      }}
+                      onClick={() => trash("cases", [c.id], `${c.no} çöp kutusuna taşınsın mı?`)}
                     >
                       <Trash2 /> Sil
                     </DropdownMenuItem>
@@ -808,7 +791,7 @@ export function ReminderTable({ rows }: { rows: Reminder[] }) {
   const canAssign = permissions.can("reminders", "edit");
   const n = useNames();
   const quick = useQuick();
-  const confirm = useConfirm();
+  const trash = useTrashDelete();
   const t = today();
   const columns: Column<Reminder>[] = [
     {
@@ -881,12 +864,14 @@ export function ReminderTable({ rows }: { rows: Reminder[] }) {
       initialSort={{ id: "date" }}
       onRowClick={(r) => quick.open("reminder", { record: r })}
       exportName="Ajanda"
-      selectable={canAssign}
+      selectable={canAssign || permissions.can("reminders", "delete")}
       bulkActions={(sel, clear) => (
-        <BulkAssign
-          ids={sel.map((r) => r.id)}
-          onDone={clear}
-        />
+        <>
+          {canAssign && <BulkAssign ids={sel.map((r) => r.id)} onDone={clear} />}
+          {permissions.can("reminders", "delete") && (
+            <BulkTrash entity="reminders" ids={sel.map((r) => r.id)} onDone={clear} />
+          )}
+        </>
       )}
       rowActions={(r) => (
         <>
@@ -905,9 +890,7 @@ export function ReminderTable({ rows }: { rows: Reminder[] }) {
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
-                onClick={async () => {
-                  if (await confirm({ title: "Kayıt silinsin mi?" })) remove("reminders", r.id);
-                }}
+                onClick={() => trash("reminders", [r.id], `${r.title} çöp kutusuna taşınsın mı?`)}
               >
                 <Trash2 /> Sil
               </DropdownMenuItem>
@@ -936,7 +919,7 @@ export function DocumentTable({ rows, hide = {} }: { rows: DocumentFile[]; hide?
   const { state, permissions, remove, patch } = useErp();
   const n = useNames();
   const quick = useQuick();
-  const confirm = useConfirm();
+  const trash = useTrashDelete();
   const run = (fn: () => Promise<void>) => fn().catch((e: Error) => toast.error(e.message));
   const columns: Column<DocumentFile>[] = [
     {
@@ -1004,6 +987,10 @@ export function DocumentTable({ rows, hide = {} }: { rows: DocumentFile[]; hide?
       initialSort={{ id: "date", desc: true }}
       exportName="Belgeler"
       onRowClick={(d) => run(() => openAttachment(d.attachment))}
+      selectable={permissions.can("documents", "delete")}
+      bulkActions={(sel, clear) => (
+        <BulkTrash entity="documents" ids={sel.map((d) => d.id)} onDone={clear} />
+      )}
       rowActions={(d) => (
         <>
           <DropdownMenuItem onClick={() => run(() => openAttachment(d.attachment))}>
@@ -1022,12 +1009,7 @@ export function DocumentTable({ rows, hide = {} }: { rows: DocumentFile[]; hide?
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
-                onClick={async () => {
-                  if (await confirm({ title: "Belge silinsin mi?", description: d.name })) {
-                    remove("documents", d.id);
-                    toast.success("Belge silindi");
-                  }
-                }}
+                onClick={() => trash("documents", [d.id], `${d.name} çöp kutusuna taşınsın mı?`)}
               >
                 <Trash2 /> Sil
               </DropdownMenuItem>
@@ -1059,6 +1041,7 @@ export function LedgerTable({
   to?: string;
 }) {
   const { state, permissions, currentUser, remove, patch, removeInstallmentPayment } = useErp();
+  const trash = useTrashDelete();
   const n = useNames();
   const confirm = useConfirm();
   const navigate = useNavigate();
@@ -1100,15 +1083,18 @@ export function LedgerTable({
     else if (e.kind === "Ücret tahakkuku" || e.kind === "Ücret tahsilatı") navigate({ to: "/tahsilatlar" });
   };
   const deleteEntry = async (e: LedgerEntry) => {
-    if (e.kind === "Ücret tahakkuku") {
-      const plan = state.plans.find((p) => p.id === e.id);
-      const paid = plan?.installments.reduce((s, i) => s + i.payments.length, 0) ?? 0;
-      if (paid) {
-        toast.error(
-          `Bu planda ${paid} tahsilat var; plan silinirse kasa ve cari bakiye değişir. Önce tahsilatları geri alın.`,
-        );
-        return;
-      }
+    // Ana kayıtlar (masraf, plan, aktarım) bağlılarıyla çöp kutusuna gider
+    const root =
+      e.kind === "Masraf"
+        ? "expenses"
+        : e.kind === "Ücret tahakkuku"
+          ? "fee_plans"
+          : e.kind === "Müvekkile aktarım"
+            ? "account_transactions"
+            : undefined;
+    if (root) {
+      await trash(root, [e.id], `${e.kind} çöp kutusuna taşınsın mı?`);
+      return;
     }
     const ok = await confirm({
       title: `${e.kind} silinsin mi?`,
@@ -1120,17 +1106,11 @@ export function LedgerTable({
             {(e.debit || e.credit).toLocaleString("tr-TR", { style: "currency", currency: "TRY" })}
           </span>
           <span className="block">
-            {e.kind === "Masraf"
-              ? "Masraf kaydı makbuzlarıyla silinir; kasadan çıkış da geri alınır."
-              : e.kind === "Masraf iadesi"
-                ? "Müvekkilin ödemesi geri alınır; masraf yeniden müvekkilden alınacak görünür."
+            {e.kind === "Masraf iadesi"
+              ? "Müvekkilin ödemesi geri alınır; masraf yeniden müvekkilden alınacak görünür."
               : e.kind === "Ücret tahsilatı"
                 ? "Tahsilat geri alınır; taksit yeniden ödenmemiş görünür, kasa girişi de silinir."
-                : e.kind === "İcra tahsilatı"
-                  ? "İcra tahsilatı silinir; bağlı ödeme sözü yeniden bekliyor olur."
-                  : e.kind === "Müvekkile aktarım"
-                    ? "Aktarım hareketi silinir; hesap bakiyesi geri döner."
-                    : "Tahsilat planı taksitleriyle silinir."}{" "}
+                : "İcra tahsilatı silinir; bağlı ödeme sözü yeniden bekliyor olur."}{" "}
             Müvekkilin cari bakiyesi buna göre değişir. Bu işlem geri alınamaz.
           </span>
         </span>
@@ -1138,17 +1118,11 @@ export function LedgerTable({
     });
     if (!ok) return;
     switch (e.kind) {
-      case "Masraf":
-        remove("expenses", e.id);
-        break;
       case "Masraf iadesi":
         patch("expenses", e.id.slice(0, -REIMBURSE_SUFFIX.length), {
           reimbursedOn: "",
           reimbursedAccountId: "",
         });
-        break;
-      case "Ücret tahakkuku":
-        remove("plans", e.id, { reload: true });
         break;
       case "Ücret tahsilatı": {
         const plan = planOfPayment(e.id);
@@ -1161,9 +1135,6 @@ export function LedgerTable({
         if (c?.promiseId) patch("promises", c.promiseId, { status: "Bekliyor" });
         break;
       }
-      case "Müvekkile aktarım":
-        remove("transactions", e.id);
-        break;
     }
     toast.success(`${e.kind} silindi`);
   };

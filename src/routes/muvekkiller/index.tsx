@@ -1,6 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Building2, FileSpreadsheet, Pencil, Plus, Receipt, Trash2, Users, Wallet } from "lucide-react";
-import { toast } from "sonner";
 import { useErp } from "@/lib/erp-store";
 import { clientFinance } from "@/lib/finance";
 import { PageHeader } from "@/components/app/PageHeader";
@@ -11,7 +10,8 @@ import { StatGrid, StatTile } from "@/components/app/StatTile";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { useQuick } from "@/components/forms/quick";
-import { useConfirm } from "@/components/app/confirm";
+import { useTrashDelete } from "@/components/forms/delete-actions";
+import { BulkTrash } from "@/components/lists/tables";
 import type { Client } from "@/lib/erp-types";
 import { formatMoney, sumBy } from "@/lib/format";
 
@@ -21,9 +21,9 @@ export const Route = createFileRoute("/muvekkiller/")({
 });
 
 function Page() {
-  const { state, permissions, remove } = useErp();
+  const { state, permissions } = useErp();
   const quick = useQuick();
-  const confirm = useConfirm();
+  const trash = useTrashDelete();
   const navigate = useNavigate();
 
   const rows = state.clients.map((c) => ({
@@ -108,24 +108,8 @@ function Page() {
     cell: (r) => <StatusBadge status={r.client.status} />,
   });
 
-  const del = async (c: Client) => {
-    const used =
-      state.cases.some((x) => x.clientId === c.id) ||
-      state.plans.some((x) => x.clientId === c.id) ||
-      state.expenses.some((x) => x.clientId === c.id);
-    if (used) {
-      toast.error(
-        "Bu müvekkile bağlı dosya veya finans kaydı var. Silmek yerine 'Pasif' yapabilirsiniz.",
-      );
-      return;
-    }
-    if (
-      await confirm({ title: `${c.name} silinsin mi?`, description: "Bu işlem geri alınamaz." })
-    ) {
-      remove("clients", c.id);
-      toast.success("Müvekkil silindi");
-    }
-  };
+  // Müvekkil dosyaları, icraları ve finans kayıtlarıyla birlikte çöp kutusuna gider
+  const del = (c: Client) => trash("clients", [c.id], `${c.name} çöp kutusuna taşınsın mı?`);
 
   const active = state.clients.filter((c) => c.status === "Aktif");
   const fins = rows.filter((r) => r.fin).map((r) => r.fin!);
@@ -214,6 +198,10 @@ function Page() {
         initialSort={{ id: "name" }}
         exportName="Müvekkiller"
         onRowClick={(r) => navigate({ to: "/muvekkiller/$id", params: { id: r.client.id } })}
+        selectable={permissions.can("clients", "delete")}
+        bulkActions={(sel, clear) => (
+          <BulkTrash entity="clients" ids={sel.map((r) => r.client.id)} onDone={clear} />
+        )}
         rowActions={
           permissions.can("clients", "edit") || permissions.can("clients", "delete")
             ? (r) => (

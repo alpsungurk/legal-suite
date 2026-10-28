@@ -46,6 +46,7 @@ import { StatusBadge } from "@/components/app/StatusBadge";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { useQuick } from "@/components/forms/quick";
 import { useDeleteEnforcement } from "@/components/forms/delete-actions";
+import { BulkTrash } from "@/components/lists/tables";
 import { cn } from "@/lib/utils";
 
 export function EnforcementList({
@@ -426,6 +427,10 @@ export function EnforcementList({
         exportName={exportName}
         exportColumns={exportColumns}
         onRowClick={(r) => navigate({ to: "/icra/$id", params: { id: r.e.id } })}
+        selectable={canDelete}
+        bulkActions={(sel, clear) => (
+          <BulkTrash entity="enforcements" ids={sel.map((r) => r.e.id)} onDone={clear} />
+        )}
         // Büronun Excel'deki işaretleri: kapalı dosyalar sarı, işlem yapılmayacaklar koyu lacivert
         rowClassName={(r) =>
           r.e.status === NO_ACTION_ENFORCEMENT_STATUS

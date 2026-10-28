@@ -1,94 +1,110 @@
 /**
- * Kalıcı silme işlemleri: önce bağlı kayıtlar denetlenir, parayı (kasa / cari) etkileyecek silmeler
- * engellenir, sonra ne silineceği açıkça yazılan bir onay sorulur.
+ * Silme işlemleri. Ana kayıtlar (müvekkil, dosya, icra, borçlu, masraf…) çöp kutusuna taşınır:
+ * önce sunucudan birlikte gidecek kayıtlar sayılıp onay sorulur, kayıt bağlılarıyla birlikte
+ * 30 gün saklanır ve tek tıkla geri yüklenir. Küçük alt kayıtlar (ödeme sözü, görüşme notu) doğrudan silinir.
  */
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/app/confirm";
 import { useErp } from "@/lib/erp-store";
 import type { ContactLog, Debtor, EnforcementFile, PaymentPromise } from "@/lib/erp-types";
+import {
+  describeCounts,
+  MODULE_LABELS,
+  TRASH_DAYS,
+  TRASH_LABELS,
+  trashDelete,
+  trashPreview,
+  type TrashEntity,
+} from "@/lib/trash";
 
-/** İcra dosyasını siler. Tahsilatı olan dosya silinemez (kasa ve cari bakiye bozulur). */
-export function useDeleteEnforcement() {
-  const { state, remove } = useErp();
+const errorText = (e: unknown) =>
+  e && typeof e === "object" && "message" in e ? String((e as Error).message) : String(e);
+
+/**
+ * Kayıtları bağlılarıyla birlikte çöp kutusuna taşır. title verilmezse "N <tür>" yazılır.
+ * Döner: silindiyse true.
+ */
+export function useTrashDelete() {
+  const { reloadFromServer } = useErp();
   const confirm = useConfirm();
   const navigate = useNavigate();
-  return async (e: EnforcementFile) => {
-    const collections = state.collections.filter((c) => c.enforcementId === e.id).length;
-    if (collections) {
+  return async (entity: TrashEntity, ids: string[], title?: string) => {
+    if (!ids.length) return false;
+    let preview;
+    try {
+      preview = await trashPreview(entity, ids);
+    } catch (e) {
+      toast.error(errorText(e));
+      return false;
+    }
+    if (!preview.found) {
+      toast.error("Kayıt bulunamadı; liste yenileniyor");
+      void reloadFromServer();
+      return false;
+    }
+    if (preview.missing) {
       toast.error(
-        `Bu dosyada ${collections} tahsilat var; silmek kasa ve cari bakiyeleri değiştirir. Önce tahsilatları silin ya da dosyayı "Kapalı" yapın.`,
+        `Bu silme için "${MODULE_LABELS[preview.missing] ?? preview.missing}" silme yetkiniz yok`,
       );
       return false;
     }
-    const n = {
-      promises: state.promises.filter((p) => p.enforcementId === e.id).length,
-      events: state.events.filter((x) => x.enforcementId === e.id).length,
-      contacts: state.contacts.filter((c) => c.enforcementId === e.id).length,
-      documents: state.documents.filter((d) => d.enforcementId === e.id).length,
-      reminders: state.reminders.filter((r) => r.enforcementId === e.id).length,
-      expenses: state.expenses.filter((x) => x.enforcementId === e.id).length,
-    };
+    const others = describeCounts(preview.counts, entity);
     const ok = await confirm({
-      title: `${e.no} kalıcı olarak silinsin mi?`,
-      confirmLabel: "Kalıcı sil",
+      title: title ?? `${preview.found} ${TRASH_LABELS[entity]} çöp kutusuna taşınsın mı?`,
+      confirmLabel: "Çöpe at",
       description: (
         <span className="space-y-2">
-          <span className="block">
-            Dosyayla birlikte {n.promises} ödeme sözü / taksit, {n.events} işlem kaydı,{" "}
-            {n.contacts} görüşme notu, {n.documents} belge ve {n.reminders} ajanda kaydı silinir.
-          </span>
-          {n.expenses > 0 && (
+          {others && (
             <span className="block">
-              {n.expenses} masraf silinmez; yalnızca bu dosyayla bağı kalkar.
+              Birlikte gidecekler: <b className="text-foreground">{others}</b>.
+            </span>
+          )}
+          {preview.balances && (
+            <span className="block">
+              Kasa / banka ve müvekkil cari bakiyeleri buna göre değişir.
             </span>
           )}
           <span className="block">
-            Borçlu kartları silinmez. Bu işlem geri alınamaz; takip bittiyse silmek yerine dosyayı
-            "Kapalı" yapmanız önerilir.
+            Çöp kutusundan {TRASH_DAYS} gün içinde hepsi birlikte geri yüklenebilir; sonra kalıcı
+            silinir.
           </span>
         </span>
       ),
     });
     if (!ok) return false;
-    remove("enforcements", e.id, { reload: true });
-    toast.success("İcra dosyası silindi");
+    try {
+      const n = await trashDelete(entity, ids);
+      await reloadFromServer();
+      toast.success(`${n} kayıt çöp kutusuna taşındı`, {
+        action: { label: "Çöp kutusu", onClick: () => void navigate({ to: "/cop-kutusu" }) },
+      });
+      return true;
+    } catch (e) {
+      toast.error(errorText(e));
+      void reloadFromServer();
+      return false;
+    }
+  };
+}
+
+/** İcra dosyasını işlemleri, tahsilatları, belgeleri ve ajandasıyla çöpe atar. */
+export function useDeleteEnforcement() {
+  const trash = useTrashDelete();
+  const navigate = useNavigate();
+  return async (e: EnforcementFile) => {
+    if (!(await trash("enforcements", [e.id], `${e.no} çöp kutusuna taşınsın mı?`))) return false;
     void navigate({ to: e.side === "Borçlu" ? "/icra/borclu" : "/icra" });
     return true;
   };
 }
 
-/** Borçlu kartını siler. Bir icra dosyasında, ödeme sözünde ya da tahsilatta geçiyorsa silinemez. */
+/** Borçlu kartını; dosyalardaki bağı, ödeme sözleri, tahsilatları ve görüşme notlarıyla çöpe atar. */
 export function useDeleteDebtor() {
-  const { state, remove } = useErp();
-  const confirm = useConfirm();
+  const trash = useTrashDelete();
   const navigate = useNavigate();
   return async (d: Debtor) => {
-    const files = state.enforcements.filter((e) => e.debtorIds.includes(d.id));
-    if (files.length) {
-      toast.error(
-        `Bu kart ${files.length} icra dosyasında geçiyor (${files
-          .slice(0, 3)
-          .map((e) => e.no)
-          .join(", ")}${files.length > 3 ? "…" : ""}). Önce dosyalardan çıkarın.`,
-      );
-      return false;
-    }
-    if (state.collections.some((c) => c.debtorId === d.id) || state.promises.some((p) => p.debtorId === d.id)) {
-      toast.error("Bu borçlunun ödeme sözü ya da tahsilat kaydı var; önce onları silin.");
-      return false;
-    }
-    const contacts = state.contacts.filter((c) => c.debtorId === d.id).length;
-    const ok = await confirm({
-      title: `${d.name} silinsin mi?`,
-      confirmLabel: "Sil",
-      description: contacts
-        ? `Kartla birlikte ${contacts} görüşme notu da silinir. Bu işlem geri alınamaz.`
-        : "Bu işlem geri alınamaz.",
-    });
-    if (!ok) return false;
-    remove("debtors", d.id, { reload: contacts > 0 });
-    toast.success("Borçlu silindi");
+    if (!(await trash("debtors", [d.id], `${d.name} çöp kutusuna taşınsın mı?`))) return false;
     if (window.location.pathname.includes(d.id)) void navigate({ to: "/borclular" });
     return true;
   };

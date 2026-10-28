@@ -12,7 +12,6 @@ import {
   Send,
   Trash2,
 } from "lucide-react";
-import { toast } from "sonner";
 import { useErp } from "@/lib/erp-store";
 import { accountBalances, accountLedger, type AccountEntry } from "@/lib/finance";
 import { formatDate, formatIban, formatMoney, sumBy } from "@/lib/format";
@@ -23,6 +22,7 @@ import { StatusBadge } from "@/components/app/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { useQuick } from "@/components/forms/quick";
+import { useTrashDelete } from "@/components/forms/delete-actions";
 import { useConfirm } from "@/components/app/confirm";
 import { cn } from "@/lib/utils";
 
@@ -32,9 +32,10 @@ export const Route = createFileRoute("/banka-kasa")({
 });
 
 function Page() {
-  const { state, permissions, removeMany, patch } = useErp();
+  const { state, permissions, patch } = useErp();
   const quick = useQuick();
   const confirm = useConfirm();
+  const trash = useTrashDelete();
   const balances = accountBalances(state);
   const [selected, setSelected] = useState<string>(balances[0]?.account.id ?? "");
   if (!permissions.can("accounts")) return <NoAccess />;
@@ -245,24 +246,16 @@ function Page() {
                   )}
                   <DropdownMenuItem
                     className="text-destructive focus:text-destructive"
-                    onClick={async () => {
-                      if (
-                        await confirm({
-                          title: "Hareket silinsin mi?",
-                          description: tx.transferId
-                            ? "Virmanın her iki bacağı da silinir."
-                            : undefined,
-                        })
-                      ) {
-                        const ids = tx.transferId
-                          ? state.transactions
-                              .filter((t) => t.transferId === tx.transferId)
-                              .map((t) => t.id)
-                          : [tx.id];
-                        removeMany("transactions", ids);
-                        toast.success("Hareket silindi");
-                      }
-                    }}
+                    onClick={() =>
+                      // Virmanın iki bacağı birlikte çöpe gider
+                      trash(
+                        "account_transactions",
+                        [tx.id],
+                        tx.transferId
+                          ? "Virman (iki bacağı) çöp kutusuna taşınsın mı?"
+                          : "Hareket çöp kutusuna taşınsın mı?",
+                      )
+                    }
                   >
                     <Trash2 /> Sil
                   </DropdownMenuItem>

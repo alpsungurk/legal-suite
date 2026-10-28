@@ -15,6 +15,7 @@ import { Route as BankaKasaRouteImport } from './routes/banka-kasa'
 import { Route as BelgelerRouteImport } from './routes/belgeler'
 import { Route as BildirimlerRouteImport } from './routes/bildirimler'
 import { Route as CariHesapRouteImport } from './routes/cari-hesap'
+import { Route as CopKutusuRouteImport } from './routes/cop-kutusu'
 import { Route as GirisRouteImport } from './routes/giris'
 import { Route as MasraflarRouteImport } from './routes/masraflar'
 import { Route as RaporlarRouteImport } from './routes/raporlar'
@@ -67,6 +68,11 @@ const BildirimlerRoute = BildirimlerRouteImport.update({
 const CariHesapRoute = CariHesapRouteImport.update({
   id: '/cari-hesap',
   path: '/cari-hesap',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CopKutusuRoute = CopKutusuRouteImport.update({
+  id: '/cop-kutusu',
+  path: '/cop-kutusu',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GirisRoute = GirisRouteImport.update({
@@ -192,6 +198,7 @@ export interface FileRoutesByFullPath {
   '/belgeler': typeof BelgelerRoute
   '/bildirimler': typeof BildirimlerRoute
   '/cari-hesap': typeof CariHesapRoute
+  '/cop-kutusu': typeof CopKutusuRoute
   '/giris': typeof GirisRoute
   '/masraflar': typeof MasraflarRoute
   '/raporlar': typeof RaporlarRoute
@@ -223,6 +230,7 @@ export interface FileRoutesByTo {
   '/belgeler': typeof BelgelerRoute
   '/bildirimler': typeof BildirimlerRoute
   '/cari-hesap': typeof CariHesapRoute
+  '/cop-kutusu': typeof CopKutusuRoute
   '/giris': typeof GirisRoute
   '/masraflar': typeof MasraflarRoute
   '/raporlar': typeof RaporlarRoute
@@ -255,6 +263,7 @@ export interface FileRoutesById {
   '/belgeler': typeof BelgelerRoute
   '/bildirimler': typeof BildirimlerRoute
   '/cari-hesap': typeof CariHesapRoute
+  '/cop-kutusu': typeof CopKutusuRoute
   '/giris': typeof GirisRoute
   '/masraflar': typeof MasraflarRoute
   '/raporlar': typeof RaporlarRoute
@@ -288,6 +297,7 @@ export interface FileRouteTypes {
     | '/belgeler'
     | '/bildirimler'
     | '/cari-hesap'
+    | '/cop-kutusu'
     | '/giris'
     | '/masraflar'
     | '/raporlar'
@@ -319,6 +329,7 @@ export interface FileRouteTypes {
     | '/belgeler'
     | '/bildirimler'
     | '/cari-hesap'
+    | '/cop-kutusu'
     | '/giris'
     | '/masraflar'
     | '/raporlar'
@@ -350,6 +361,7 @@ export interface FileRouteTypes {
     | '/belgeler'
     | '/bildirimler'
     | '/cari-hesap'
+    | '/cop-kutusu'
     | '/giris'
     | '/masraflar'
     | '/raporlar'
@@ -382,6 +394,7 @@ export interface RootRouteChildren {
   BelgelerRoute: typeof BelgelerRoute
   BildirimlerRoute: typeof BildirimlerRoute
   CariHesapRoute: typeof CariHesapRoute
+  CopKutusuRoute: typeof CopKutusuRoute
   GirisRoute: typeof GirisRoute
   MasraflarRoute: typeof MasraflarRoute
   RaporlarRoute: typeof RaporlarRoute
@@ -449,6 +462,13 @@ declare module '@tanstack/react-router' {
       path: '/cari-hesap'
       fullPath: '/cari-hesap'
       preLoaderRoute: typeof CariHesapRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cop-kutusu': {
+      id: '/cop-kutusu'
+      path: '/cop-kutusu'
+      fullPath: '/cop-kutusu'
+      preLoaderRoute: typeof CopKutusuRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/giris': {
@@ -622,6 +642,7 @@ const rootRouteChildren: RootRouteChildren = {
   BelgelerRoute: BelgelerRoute,
   BildirimlerRoute: BildirimlerRoute,
   CariHesapRoute: CariHesapRoute,
+  CopKutusuRoute: CopKutusuRoute,
   GirisRoute: GirisRoute,
   MasraflarRoute: MasraflarRoute,
   RaporlarRoute: RaporlarRoute,

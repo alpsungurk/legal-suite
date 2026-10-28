@@ -13,12 +13,14 @@ import {
   Scale,
   Settings,
   Timer,
+  Trash2,
   Users,
   UserX,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
 import type { Permissions } from "@/lib/erp-types";
+import { canUseTrash } from "@/lib/trash";
 
 export type NavPage = {
   title: string;
@@ -70,6 +72,7 @@ export const NAV_PAGES: NavPage[] = [
   { title: "Bildirimler", url: "/bildirimler", icon: Bell },
   { title: "Dikkat gerektirenler", url: "/uyarilar", icon: Bell },
   { title: "Raporlar", url: "/raporlar", icon: BarChart3, allow: (p) => p.can("reports") },
+  { title: "Çöp kutusu", url: "/cop-kutusu", icon: Trash2, allow: canUseTrash },
   { title: "Ayarlar", url: "/ayarlar", icon: Settings, allow: (p) => p.canOpenSettings },
 ];
 

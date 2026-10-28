@@ -10,7 +10,7 @@ import { PageHeader } from "@/components/app/PageHeader";
 import { NoAccess, PageShell } from "@/components/app/bits";
 import { DataTable, type Column } from "@/components/app/DataTable";
 import { StatusBadge } from "@/components/app/StatusBadge";
-import { useConfirm } from "@/components/app/confirm";
+import { useTrashDelete } from "@/components/forms/delete-actions";
 import { EmptyState } from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,8 +43,8 @@ function sortEntries(entries: SalaryGarnishmentEntry[]): SalaryGarnishmentEntry[
 }
 
 function Page() {
-  const { state, permissions, save, remove } = useErp();
-  const confirm = useConfirm();
+  const { state, permissions, save } = useErp();
+  const trash = useTrashDelete();
   const [form, setForm] = useState<{ open: boolean; record?: SalaryGarnishment }>({ open: false });
 
   const rows = useMemo(
@@ -163,17 +163,13 @@ function Page() {
               {permissions.can("enforcements", "delete") && (
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"
-                  onClick={async () => {
-                    if (
-                      await confirm({
-                        title: `"${r.employeeName}" silinsin mi?`,
-                        description: "Sıradaki tüm dosya satırları da silinir.",
-                      })
-                    ) {
-                      remove("salaryGarnishments", r.id);
-                      toast.success("Kayıt silindi");
-                    }
-                  }}
+                  onClick={() =>
+                    trash(
+                      "salary_garnishments",
+                      [r.id],
+                      `"${r.employeeName}" sırası çöp kutusuna taşınsın mı?`,
+                    )
+                  }
                 >
                   <Trash2 /> Sil
                 </DropdownMenuItem>

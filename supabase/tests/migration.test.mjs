@@ -886,6 +886,69 @@ const miPre = await balOf();
 await asUser(A, () => one(`select public.close_case('${miCase}') r`));
 ok("masraf iadesi: dosya kapatınca cari ve kasa bakiyesi aynı kalır", JSON.stringify(await balOf()) === JSON.stringify(miPre), `${JSON.stringify(miPre)} → ${JSON.stringify(await balOf())}`);
 
+// ── Çöp kutusu: bağlılarıyla silinir, birlikte geri gelir
+let ckErr = null;
+try { const sql = readFileSync(fileURLToPath(new URL("../migrations/20261029130000_cop_kutusu.sql", import.meta.url)), "utf8"); await db.exec(sql); await db.exec(sql); } catch (e) { ckErr = e; }
+ok("çöp kutusu migration'ı çalıştı (iki kez)", !ckErr, ckErr ? ckErr.message : "");
+const ins = (sql, p = []) => asUser(A, async () => (await one(`${sql} returning id`, p)).id);
+const tcCli = await ins(`insert into public.clients (name) values ('Çöp Müvekkil')`);
+const tcCase = await ins(`insert into public.cases (no, title, client_id) values ('2026/ÇK1','Çöp dosya',$1)`, [tcCli]);
+const tcEnf = await ins(`insert into public.enforcements (no, office, client_id, case_id) values ('2026/ÇK E.','Ankara 1. İcra',$1,$2)`, [tcCli, tcCase]);
+const tcOtherEnf = await ins(`insert into public.enforcements (no, office, client_id, case_id) values ('2026/ÇK2 E.','Ankara 2. İcra',$1,$2)`, [client2, tcCase]);
+const tcDeb = await ins(`insert into public.debtors (name) values ('Çöp Borçlu')`);
+await asUser(A, () => q(`insert into public.enforcement_debtors (enforcement_id, debtor_id) values ($1,$2)`, [tcEnf, tcDeb]));
+await ins(`insert into public.collections (enforcement_id, debtor_id, amount, account_id) values ($1,$2,150,$3)`, [tcEnf, tcDeb, kasa]);
+const tcExp = await ins(`insert into public.expenses (title,type,amount,case_id,charge_to,paid_by,account_id) values ('Harç','Harç',90,$1,'Müvekkil','Büro',$2)`, [tcCase, kasa]);
+const tcAtt = await ins(`insert into public.attachments (name, storage_path, entity, entity_id) values ('makbuz.pdf','${orgA}/ck1','expense',$1)`, [tcExp]);
+const tcPlan = await ins(`insert into public.fee_plans (title, client_id, case_id, total) values ('Vekalet',$1,$2,1000)`, [tcCli, tcCase]);
+const tcInst = await ins(`insert into public.installments (plan_id, position, due_date, amount) values ($1,1,current_date,1000)`, [tcPlan]);
+await ins(`insert into public.installment_payments (installment_id, amount, method, account_id) values ($1,200,'Nakit',$2)`, [tcInst, kasa]);
+await ins(`insert into public.reminders (title,type,date,case_id) values ('Duruşma','Duruşma',current_date + 5,$1)`, [tcCase]);
+await ins(`insert into public.account_transactions (account_id, amount, category, client_id) values ($1,-50,'Müvekkile aktarım',$2)`, [kasa, tcCli]);
+const tcCount = async () => (await one(`select
+  (select count(*) from public.clients where id='${tcCli}') + (select count(*) from public.cases where client_id='${tcCli}')
+  + (select count(*) from public.enforcements where client_id='${tcCli}') + (select count(*) from public.enforcement_debtors where enforcement_id='${tcEnf}')
+  + (select count(*) from public.collections where enforcement_id='${tcEnf}') + (select count(*) from public.expenses where case_id='${tcCase}')
+  + (select count(*) from public.fee_plans where client_id='${tcCli}') + (select count(*) from public.installments where plan_id='${tcPlan}')
+  + (select count(*) from public.installment_payments where installment_id='${tcInst}') + (select count(*) from public.reminders where case_id='${tcCase}')
+  + (select count(*) from public.account_transactions where client_id='${tcCli}') as n`)).n;
+const tcBefore = Number(await tcCount());
+const tcKasa = Number((await asUser(A, () => one(`select balance from public.v_account_balances where id=$1`, [kasa]))).balance);
+const pv = await asUser(A, async () => (await one(`select public.trash_preview('clients', array[$1]::uuid[]) p`, [tcCli])).p);
+ok("çöp: önizleme birlikte gidenleri sayar, bakiye uyarısı verir",
+  pv.found === 1 && pv.counts.cases === 1 && pv.counts.enforcements === 1 && pv.counts.collections === 1 && pv.counts.expenses === 1
+  && pv.counts.installment_payments === 1 && pv.counts.account_transactions === 1 && pv.balances === true && pv.missing === null, JSON.stringify(pv));
+ok("çöp: silme izni olmayan avukat müvekkili çöpe atamaz",
+  await fails(() => asUser(U, () => q(`select public.trash_delete('clients', array[$1]::uuid[])`, [tcCli])), /yetkiniz yok/));
+ok("çöp: müvekkil bağlılarıyla silinir",
+  (await asUser(A, async () => (await one(`select public.trash_delete('clients', array[$1]::uuid[]) n`, [tcCli])).n)) === 1
+  && Number(await tcCount()) === 0 && tcBefore === 11, String(tcBefore));
+ok("çöp: başka dosyanın dava bağı boşaltılır, borçlu kartı kalır",
+  (await one(`select case_id from public.enforcements where id=$1`, [tcOtherEnf])).case_id === null
+  && (await one(`select count(*)::int c from public.debtors where id=$1`, [tcDeb])).c === 1);
+ok("çöp: makbuz çöpteyken silinmez", (await one(`select count(*)::int c from public.attachments where id=$1`, [tcAtt])).c === 1);
+const tcTrash = await asUser(A, () => one(`select id, entity, label, counts from public.trash where label='Çöp Müvekkil'`));
+ok("çöp: kayıt çöp kutusunda görünür", tcTrash?.entity === "clients" && tcTrash.counts.cases === 1, JSON.stringify(tcTrash));
+ok("çöp: başka büro göremez", (await asUser(B, () => q(`select * from public.trash`))).length === 0);
+await asUser(A, () => q(`select public.trash_restore($1)`, [tcTrash.id]));
+ok("çöp: geri yükleyince bütün satırlar döner", Number(await tcCount()) === tcBefore, `${tcBefore} → ${await tcCount()}`);
+ok("çöp: dava bağı geri kurulur", (await one(`select case_id from public.enforcements where id=$1`, [tcOtherEnf])).case_id === tcCase);
+ok("çöp: kasa bakiyesi geri yüklemede aynı",
+  Number((await asUser(A, () => one(`select balance from public.v_account_balances where id=$1`, [kasa]))).balance) === tcKasa);
+ok("çöp: trash satırı silinir", (await q(`select 1 from public.trash where id=$1`, [tcTrash.id])).length === 0);
+await asUser(A, () => q(`select public.trash_delete('expenses', array[$1]::uuid[])`, [tcExp]));
+const tcExpTrash = (await one(`select id from public.trash where entity='expenses' and label='Harç'`)).id;
+ok("çöp: kalıcı silme yalnızca yönetici", await fails(() => asUser(S, () => q(`select public.trash_purge($1)`, [tcExpTrash])), /yönetici/));
+const scBefore = (await one(`select count(*)::int c from public.storage_cleanup`)).c;
+await asUser(A, () => q(`select public.trash_purge($1)`, [tcExpTrash]));
+ok("çöp: kalıcı silince makbuz silinir, Storage sırasına girer",
+  (await one(`select count(*)::int c from public.attachments where id=$1`, [tcAtt])).c === 0
+  && (await one(`select count(*)::int c from public.storage_cleanup`)).c === scBefore + 1);
+await asUser(A, () => q(`select public.trash_delete('reminders', array(select id from public.reminders where case_id=$1))`, [tcCase]));
+await db.exec(`update public.trash set deleted_at = now() - interval '31 days'`);
+const ckRet = await one(`select app.cron_retention() r`);
+ok("çöp: 30 günden eski çöp temizlenir", ckRet.r.trash >= 1 && (await one(`select count(*)::int c from public.trash`)).c === 0, JSON.stringify(ckRet.r));
+
 console.log(R.join("\n"));
 console.log(`\nPASS: ${R.filter((x) => x.startsWith("PASS")).length}  FAIL: ${R.filter((x) => x.startsWith("FAIL")).length}`);
 process.exit(R.some((x) => x.startsWith("FAIL")) ? 1 : 0);
