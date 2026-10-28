@@ -21,6 +21,14 @@ import { StatusBadge } from "@/components/app/StatusBadge";
 import { useConfirm } from "@/components/app/confirm";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { describeMoney, TrashDetails } from "@/components/app/TrashDetails";
 
 export const Route = createFileRoute("/cop-kutusu")({
   head: () => ({ meta: [{ title: "Çöp Kutusu — Avukat Yönetim Paneli" }] }),
@@ -40,6 +48,7 @@ function Page() {
   const confirm = useConfirm();
   const [rows, setRows] = useState<TrashItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [detail, setDetail] = useState<TrashItem | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -119,6 +128,17 @@ function Page() {
       ),
     },
     {
+      id: "money",
+      header: "Tutarlar",
+      hideBelow: "md",
+      export: (t) => describeMoney(t.amounts),
+      cell: (t) => (
+        <span className="text-sm">
+          {describeMoney(t.amounts) || <span className="text-muted-foreground">—</span>}
+        </span>
+      ),
+    },
+    {
       id: "by",
       header: "Silen",
       hideBelow: "lg",
@@ -172,6 +192,7 @@ function Page() {
           },
         ]}
         initialSort={{ id: "at", desc: true }}
+        onRowClick={(t) => setDetail(t)}
         exportName="Çöp kutusu"
         empty={
           <EmptyState
@@ -206,6 +227,7 @@ function Page() {
         )}
         rowActions={(t) => (
           <>
+            <DropdownMenuItem onClick={() => setDetail(t)}>Ayrıntıyı gör</DropdownMenuItem>
             <DropdownMenuItem onClick={() => restore([t])}>
               <Undo2 /> Geri yükle
             </DropdownMenuItem>
@@ -234,6 +256,32 @@ function Page() {
           </div>
         )}
       />
+      <Dialog open={!!detail} onOpenChange={(o) => !o && setDetail(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{detail?.label || (detail && TRASH_LABELS[detail.entity])}</DialogTitle>
+            <DialogDescription>
+              {detail &&
+                `${formatDateTime(detail.deletedAt)} · ${daysLeft(detail.deletedAt)} gün sonra kalıcı silinir`}
+            </DialogDescription>
+          </DialogHeader>
+          {detail && <TrashDetails money={detail.amounts} items={detail.items} />}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setDetail(null)}>
+              Kapat
+            </Button>
+            {detail && (
+              <Button
+                onClick={async () => {
+                  if (await restore([detail])) setDetail(null);
+                }}
+              >
+                <Undo2 /> Geri yükle
+              </Button>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </PageShell>
   );
 }

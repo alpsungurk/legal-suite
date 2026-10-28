@@ -21,6 +21,9 @@ create table if not exists public.trash (
   deleted_by uuid default auth.uid(),
   deleted_at timestamptz not null default now()
 );
+-- amounts: para taşıyan kayıtların tablo bazında tutar toplamı; items: silinenlerin tek tek dökümü (en çok 200)
+alter table public.trash add column if not exists amounts jsonb not null default '{}'::jsonb;
+alter table public.trash add column if not exists items jsonb not null default '[]'::jsonb;
 create index if not exists trash_org_idx on public.trash (org_id, deleted_at desc);
 
 -- Kök türü → izin modülü
@@ -76,6 +79,7 @@ declare
   v_exp uuid[] := '{}'; v_plan uuid[] := '{}'; v_rem uuid[] := '{}'; v_doc uuid[] := '{}';
   v_tx uuid[] := '{}'; v_sg uuid[] := '{}'; v_prom uuid[] := '{}'; v_inst uuid[] := '{}';
   v_rows jsonb := '[]'::jsonb; v_rel jsonb := '[]'::jsonb; v_counts jsonb := '{}'::jsonb;
+  v_items jsonb := '[]'::jsonb; v_money jsonb := '{}'::jsonb;
   v_att jsonb; n int;
 begin
   case p_entity
@@ -166,6 +170,33 @@ begin
     into v_rows, v_counts
   from src;
 
+  -- Tek tek döküm (para taşıyanlar önce) ve tablo bazında tutar toplamı: silmeden önce gösterilir,
+  -- çöp kutusunda saklanır
+  select coalesce(jsonb_agg(q.item), '[]'::jsonb) into v_items from (
+    select jsonb_build_object(
+             't', x.e ->> 't',
+             'label', left(coalesce(x.e -> 'r' ->> 'name', x.e -> 'r' ->> 'title', x.e -> 'r' ->> 'no',
+                                    x.e -> 'r' ->> 'employee_name', x.e -> 'r' ->> 'description', ''), 120),
+             'amount', coalesce(x.e -> 'r' ->> 'amount', x.e -> 'r' ->> 'total'),
+             'date', coalesce(x.e -> 'r' ->> 'date', x.e -> 'r' ->> 'due_date')
+           ) as item
+    from jsonb_array_elements(v_rows) with ordinality as x(e, o)
+    where x.e ->> 't' in ('clients', 'cases', 'debtors', 'enforcements', 'payment_promises', 'collections',
+                          'expenses', 'fee_plans', 'installment_payments', 'reminders', 'documents',
+                          'account_transactions', 'salary_garnishments')
+    order by (x.e ->> 't' in ('collections', 'installment_payments', 'expenses', 'fee_plans',
+                              'account_transactions', 'payment_promises')) desc, x.o
+    limit 200
+  ) q;
+  select coalesce(jsonb_object_agg(g.t, g.s), '{}'::jsonb) into v_money from (
+    select e ->> 't' as t,
+           round(sum(abs((coalesce(e -> 'r' ->> 'amount', e -> 'r' ->> 'total'))::numeric)), 2) as s
+    from jsonb_array_elements(v_rows) e
+    where e ->> 't' in ('collections', 'installment_payments', 'expenses', 'fee_plans',
+                        'account_transactions', 'payment_promises')
+    group by 1
+  ) g;
+
   -- Silmede boşaltılan (set null) bağlar: geri yüklemede yeniden kurulur
   with rel(t, id, c, v) as (
               select 'enforcements', e.id, 'case_id', e.case_id from public.enforcements e
@@ -186,7 +217,8 @@ begin
     and ((a.entity = 'expense' and a.entity_id = any(v_exp))
          or a.id in (select d.attachment_id from public.documents d where d.org_id = p_org and d.id = any(v_doc)));
 
-  return jsonb_build_object('rows', v_rows, 'relinks', v_rel, 'attachments', v_att, 'counts', v_counts);
+  return jsonb_build_object('rows', v_rows, 'relinks', v_rel, 'attachments', v_att, 'counts', v_counts,
+                            'items', v_items, 'money', v_money);
 end $$;
 revoke all on function app.trash_collect(uuid, text, uuid) from public, anon, authenticated;
 
@@ -235,8 +267,9 @@ revoke all on function app.trash_root(uuid, text, uuid) from public, anon, authe
 create or replace function public.trash_preview(p_entity text, p_ids uuid[]) returns jsonb
 language plpgsql stable security definer set search_path = '' as $$
 declare
-  v_org uuid := app.current_org_id(); v_id uuid; v_root jsonb; v_c jsonb;
+  v_org uuid := app.current_org_id(); v_id uuid; v_root jsonb; v_c jsonb; v_p jsonb;
   v_counts jsonb := '{}'::jsonb; v_missing text; v_found int := 0; k text;
+  v_items jsonb := '[]'::jsonb; v_money jsonb := '{}'::jsonb;
 begin
   if app.trash_module(p_entity) is null then
     raise exception 'Bu kayıt türü çöp kutusuna atılamaz' using errcode = '22023';
@@ -245,14 +278,21 @@ begin
     v_root := app.trash_root(v_org, p_entity, v_id);
     continue when v_root is null;
     v_found := v_found + 1;
-    v_c := (app.trash_collect(v_org, p_entity, v_id)) -> 'counts';
+    v_p := app.trash_collect(v_org, p_entity, v_id);
+    v_c := v_p -> 'counts';
     v_missing := coalesce(v_missing, app.trash_missing_permission(p_entity, v_root, v_c));
     for k in select jsonb_object_keys(v_c) loop
       v_counts := jsonb_set(v_counts, array[k], to_jsonb(coalesce((v_counts ->> k)::int, 0) + (v_c ->> k)::int));
     end loop;
+    for k in select jsonb_object_keys(v_p -> 'money') loop
+      v_money := jsonb_set(v_money, array[k], to_jsonb(coalesce((v_money ->> k)::numeric, 0) + (v_p -> 'money' ->> k)::numeric));
+    end loop;
+    v_items := v_items || (v_p -> 'items');
   end loop;
   return jsonb_build_object(
     'counts', v_counts,
+    'money', v_money,
+    'items', (select coalesce(jsonb_agg(i), '[]'::jsonb) from (select i from jsonb_array_elements(v_items) i limit 200) q),
     'found', v_found,
     'missing', v_missing,
     -- Kasa / cari bakiyesini değiştiren kayıtlar da gidiyor mu?
@@ -289,10 +329,10 @@ begin
     end if;
     v_label := left(coalesce(v_root ->> 'name', v_root ->> 'title', v_root ->> 'no', v_root ->> 'description', ''), 200);
 
-    insert into public.trash (org_id, entity, label, payload, counts, deleted_by)
+    insert into public.trash (org_id, entity, label, payload, counts, amounts, items, deleted_by)
     values (v_org, p_entity, v_label,
             jsonb_build_object('rows', v_p -> 'rows', 'relinks', v_p -> 'relinks', 'attachments', v_p -> 'attachments'),
-            v_p -> 'counts', auth.uid());
+            v_p -> 'counts', v_p -> 'money', v_p -> 'items', auth.uid());
 
     -- Çocuktan ebeveyne sil
     select coalesce(jsonb_agg(e order by o desc), '[]'::jsonb) into v_rows

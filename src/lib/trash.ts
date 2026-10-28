@@ -64,8 +64,27 @@ export const MODULE_LABELS: Record<string, string> = {
 
 export type TrashCounts = Record<string, number>;
 
+/** Para taşıyan kayıt türleri: silinince tutarları ayrıca gösterilir ve çöp kutusunda saklanır */
+export const MONEY_LABELS: Record<string, string> = {
+  collections: "İcra tahsilatı",
+  installment_payments: "Ücret tahsilatı",
+  payment_promises: "Ödeme sözü / taksit",
+  expenses: "Masraf",
+  fee_plans: "Tahsilat planı",
+  account_transactions: "Kasa / banka hareketi",
+};
+
+/** Silinenlerin tek tek dökümündeki bir satır */
+export type TrashLine = { t: string; label: string; amount?: string | null; date?: string | null };
+
+export type TrashMoney = Record<string, number>;
+
 export type TrashPreview = {
   counts: TrashCounts;
+  /** Para taşıyan kayıtların tür bazında tutar toplamı */
+  money: TrashMoney;
+  /** Birlikte silinecek kayıtların tek tek dökümü (en çok 200) */
+  items: TrashLine[];
   found: number;
   /** Eksik "sil" izni olan modül; null ise silinebilir */
   missing: string | null;
@@ -78,6 +97,8 @@ export type TrashItem = {
   entity: TrashEntity;
   label: string;
   counts: TrashCounts;
+  amounts: TrashMoney;
+  items: TrashLine[];
   deletedBy?: string;
   deletedAt: string;
 };
@@ -127,7 +148,7 @@ export async function trashPurge(id: string) {
 export async function listTrash(): Promise<TrashItem[]> {
   const { data, error } = await supabase
     .from("trash")
-    .select("id, entity, label, counts, deleted_by, deleted_at")
+    .select("id, entity, label, counts, amounts, items, deleted_by, deleted_at")
     .order("deleted_at", { ascending: false });
   if (error) throw error;
   return (data ?? []).map((r) => ({
@@ -135,6 +156,8 @@ export async function listTrash(): Promise<TrashItem[]> {
     entity: r.entity as TrashEntity,
     label: String(r.label ?? ""),
     counts: (r.counts ?? {}) as TrashCounts,
+    amounts: (r.amounts ?? {}) as TrashMoney,
+    items: (r.items ?? []) as TrashLine[],
     deletedBy: r.deleted_by ? String(r.deleted_by) : undefined,
     deletedAt: String(r.deleted_at),
   }));

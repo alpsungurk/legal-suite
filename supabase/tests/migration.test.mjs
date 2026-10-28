@@ -918,6 +918,11 @@ const pv = await asUser(A, async () => (await one(`select public.trash_preview('
 ok("çöp: önizleme birlikte gidenleri sayar, bakiye uyarısı verir",
   pv.found === 1 && pv.counts.cases === 1 && pv.counts.enforcements === 1 && pv.counts.collections === 1 && pv.counts.expenses === 1
   && pv.counts.installment_payments === 1 && pv.counts.account_transactions === 1 && pv.balances === true && pv.missing === null, JSON.stringify(pv));
+ok("çöp: önizleme tutarları ve kayıtları tek tek verir",
+  pv.money.collections === 150 && pv.money.installment_payments === 200 && pv.money.expenses === 90
+  && pv.money.fee_plans === 1000 && pv.money.account_transactions === 50
+  && pv.items.some((i) => i.t === "collections" && Number(i.amount) === 150)
+  && pv.items.some((i) => i.t === "cases" && i.label === "Çöp dosya"), JSON.stringify(pv.money));
 ok("çöp: silme izni olmayan avukat müvekkili çöpe atamaz",
   await fails(() => asUser(U, () => q(`select public.trash_delete('clients', array[$1]::uuid[])`, [tcCli])), /yetkiniz yok/));
 ok("çöp: müvekkil bağlılarıyla silinir",
@@ -928,6 +933,8 @@ ok("çöp: başka dosyanın dava bağı boşaltılır, borçlu kartı kalır",
   && (await one(`select count(*)::int c from public.debtors where id=$1`, [tcDeb])).c === 1);
 ok("çöp: makbuz çöpteyken silinmez", (await one(`select count(*)::int c from public.attachments where id=$1`, [tcAtt])).c === 1);
 const tcTrash = await asUser(A, () => one(`select id, entity, label, counts from public.trash where label='Çöp Müvekkil'`));
+const tcAmt = await one(`select amounts, jsonb_array_length(items) n from public.trash where id=$1`, [tcTrash.id]);
+ok("çöp: tutarlar ve döküm çöp satırında saklanır", Number(tcAmt.amounts.collections) === 150 && Number(tcAmt.amounts.fee_plans) === 1000 && tcAmt.n >= 8, JSON.stringify(tcAmt));
 ok("çöp: kayıt çöp kutusunda görünür", tcTrash?.entity === "clients" && tcTrash.counts.cases === 1, JSON.stringify(tcTrash));
 ok("çöp: başka büro göremez", (await asUser(B, () => q(`select * from public.trash`))).length === 0);
 await asUser(A, () => q(`select public.trash_restore($1)`, [tcTrash.id]));

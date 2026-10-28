@@ -6,6 +6,7 @@
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/app/confirm";
+import { TrashDetails } from "@/components/app/TrashDetails";
 import { useErp } from "@/lib/erp-store";
 import type { ContactLog, Debtor, EnforcementFile, PaymentPromise } from "@/lib/erp-types";
 import {
@@ -60,14 +61,15 @@ export function useTrashDelete() {
               Birlikte gidecekler: <b className="text-foreground">{others}</b>.
             </span>
           )}
+          <TrashDetails money={preview.money} items={preview.items} />
           {preview.balances && (
             <span className="block">
               Kasa / banka ve müvekkil cari bakiyeleri buna göre değişir.
             </span>
           )}
           <span className="block">
-            Çöp kutusundan {TRASH_DAYS} gün içinde hepsi birlikte geri yüklenebilir; sonra kalıcı
-            silinir.
+            Tutarlar ve kayıtlar çöp kutusunda saklanır; {TRASH_DAYS} gün içinde hepsi aynen geri
+            yüklenebilir, sonra kalıcı silinir.
           </span>
         </span>
       ),
